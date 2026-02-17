@@ -1,0 +1,62 @@
+#cloud-config
+package_update: true
+package_upgrade: true
+
+packages:
+  - python3.10
+  - python3.10-venv
+  - python3-pip
+  - git
+  - libpq-dev
+  - build-essential
+  - redis-tools
+
+write_files:
+  - path: /etc/systemd/system/cashflip-celery.service
+    content: |
+      [Unit]
+      Description=Cashflip Celery Worker
+      After=network.target
+      
+      [Service]
+      User=cashflip
+      Group=cashflip
+      WorkingDirectory=/opt/cashflip/app
+      Environment="PATH=/opt/cashflip/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+      EnvironmentFile=/opt/cashflip/.env
+      ExecStart=/opt/cashflip/venv/bin/celery -A config worker -l info -c 4 -Q default,game --without-heartbeat
+      Restart=always
+      RestartSec=10
+      StandardOutput=append:/opt/cashflip/logs/celery_worker.log
+      StandardError=append:/opt/cashflip/logs/celery_worker.log
+      
+      [Install]
+      WantedBy=multi-user.target
+
+  - path: /opt/cashflip/deploy.sh
+    permissions: '0755'
+    content: |
+      #!/bin/bash
+      set -e
+      
+      APP_DIR="/opt/cashflip/app"
+      VENV_DIR="/opt/cashflip/venv"
+      
+      if [ ! -d "$APP_DIR/.git" ]; then
+        git clone https://github.com/YOUR_ORG/cashflip.git "$APP_DIR"
+      else
+        cd "$APP_DIR" && git pull origin master
+      fi
+      
+      python3 -m venv "$VENV_DIR"
+      "$VENV_DIR/bin/pip" install -r "$APP_DIR/requirements.txt"
+      
+      systemctl restart cashflip-celery.service
+      echo "Celery deploy complete!"
+
+runcmd:
+  - useradd -r -s /bin/false cashflip || true
+  - mkdir -p /opt/cashflip/app /opt/cashflip/logs
+  - chown -R cashflip:cashflip /opt/cashflip
+  - systemctl daemon-reload
+  - systemctl enable cashflip-celery.service

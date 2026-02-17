@@ -1,0 +1,11 @@
+# Copy this file to terraform.tfvars and fill in values
+
+admin_ssh_public_key = "ssh-rsa AAAA..."
+db_admin_password    = "YourSecurePassword123!"
+
+# Optional overrides
+# location           = "West Europe"
+# app_vm_count       = 5
+# celery_vm_count    = 3
+# vm_size_app        = "Standard_D2s_v3"
+# vm_size_celery     = "Standard_D2s_v3"
