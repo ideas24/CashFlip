@@ -41,6 +41,14 @@ celerybeat-schedule.db
 gunicorn.sock
 gunicorn.pid
 
+# Stray directories
+home/
+
+# Admin Dashboard (React/Vite)
+admin-dashboard/node_modules/
+admin-dashboard/dist/
+admin-dashboard/.vite/
+
 # Terraform
 terraform/.terraform/
 terraform/*.tfstate

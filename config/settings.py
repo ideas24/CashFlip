@@ -42,6 +42,7 @@ INSTALLED_APPS = [
     'referrals',
     'analytics',
     'partner',
+    'dashboard',
 ]
 
 MIDDLEWARE = [

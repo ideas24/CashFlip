@@ -276,6 +276,44 @@
 
     // ==================== AUTH ====================
     function initAuth() {
+        // Fetch auth methods config from admin
+        fetch(API.base + '/accounts/auth/methods/')
+            .then(r => r.json())
+            .then(methods => {
+                // OTP channels
+                const smsBtn = document.querySelector('.channel-btn[data-channel="sms"]');
+                const waBtn = document.querySelector('.channel-btn[data-channel="whatsapp"]');
+                if (smsBtn && !methods.sms_otp) smsBtn.style.display = 'none';
+                if (waBtn && !methods.whatsapp_otp) waBtn.style.display = 'none';
+                // If only one channel available, auto-select it
+                if (methods.sms_otp && !methods.whatsapp_otp && smsBtn) {
+                    smsBtn.classList.add('active');
+                    state.otpChannel = 'sms';
+                } else if (!methods.sms_otp && methods.whatsapp_otp && waBtn) {
+                    waBtn.classList.add('active');
+                    state.otpChannel = 'whatsapp';
+                }
+                // Social login buttons
+                let anySocial = false;
+                if (methods.google) {
+                    const g = document.getElementById('btn-google');
+                    if (g) g.style.display = '';
+                    anySocial = true;
+                }
+                if (methods.facebook) {
+                    const f = document.getElementById('btn-facebook');
+                    if (f) f.style.display = '';
+                    anySocial = true;
+                }
+                if (anySocial) {
+                    const div = document.getElementById('social-divider');
+                    const btns = document.getElementById('social-buttons');
+                    if (div) div.style.display = '';
+                    if (btns) btns.style.display = '';
+                }
+            })
+            .catch(() => {}); // Fail silently — buttons stay hidden
+
         // Channel buttons
         document.querySelectorAll('.channel-btn').forEach(btn => {
             btn.addEventListener('click', () => {

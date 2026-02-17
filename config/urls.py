@@ -23,6 +23,7 @@ urlpatterns = [
     path('api/game/', include('game.urls')),
     path('api/payments/', include('payments.urls')),
     path('api/partner/v1/', include('partner.urls')),
+    path('api/admin/v1/', include('dashboard.urls')),
 
     # API Documentation
     path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
