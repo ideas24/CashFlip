@@ -22,13 +22,15 @@
     const API = {
         base: '/api',
 
+        _refreshing: null,
+
         async request(url, options = {}) {
             const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
             if (state.token) headers['Authorization'] = `Bearer ${state.token}`;
 
             const resp = await fetch(this.base + url, { ...options, headers });
 
-            if (resp.status === 401 && state.refreshToken) {
+            if ((resp.status === 401 || resp.status === 403) && state.refreshToken) {
                 const refreshed = await this.refreshToken();
                 if (refreshed) {
                     headers['Authorization'] = `Bearer ${state.token}`;
@@ -49,23 +51,46 @@
         },
 
         async refreshToken() {
-            try {
-                const resp = await fetch(this.base + '/accounts/auth/refresh/', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ refresh_token: state.refreshToken }),
-                });
-                if (resp.ok) {
-                    const data = await resp.json();
-                    state.token = data.access_token;
-                    localStorage.setItem('cf_access_token', data.access_token);
-                    return true;
-                }
-            } catch (e) { console.error('Refresh failed:', e); }
-            logout();
-            return false;
+            if (this._refreshing) return this._refreshing;
+            this._refreshing = (async () => {
+                try {
+                    const resp = await fetch(this.base + '/accounts/auth/refresh/', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ refresh_token: state.refreshToken }),
+                    });
+                    if (resp.ok) {
+                        const data = await resp.json();
+                        state.token = data.access_token;
+                        localStorage.setItem('cf_access_token', data.access_token);
+                        scheduleTokenRefresh();
+                        return true;
+                    }
+                } catch (e) { console.error('Refresh failed:', e); }
+                logout();
+                return false;
+            })();
+            const result = await this._refreshing;
+            this._refreshing = null;
+            return result;
         },
     };
+
+    // ==================== PROACTIVE TOKEN REFRESH ====================
+    let refreshTimer = null;
+    function scheduleTokenRefresh() {
+        if (refreshTimer) clearTimeout(refreshTimer);
+        if (!state.token) return;
+        try {
+            const payload = JSON.parse(atob(state.token.split('.')[1]));
+            const expiresAt = payload.exp * 1000;
+            const refreshAt = expiresAt - 2 * 60 * 1000;
+            const delay = Math.max(refreshAt - Date.now(), 10000);
+            refreshTimer = setTimeout(() => {
+                if (state.refreshToken) API.refreshToken();
+            }, delay);
+        } catch (e) { /* invalid token format, ignore */ }
+    }
 
     // ==================== THREE.JS SCENE ====================
     let scene, camera, renderer, banknote, particles;
@@ -571,6 +596,7 @@
                 state.player = data.player;
                 localStorage.setItem('cf_access_token', data.access_token);
                 localStorage.setItem('cf_refresh_token', data.refresh_token);
+                scheduleTokenRefresh();
                 showError('');
                 enterLobby();
             } else {
@@ -594,6 +620,7 @@
         state.refreshToken = null;
         state.player = null;
         state.session = null;
+        if (refreshTimer) clearTimeout(refreshTimer);
         localStorage.removeItem('cf_access_token');
         localStorage.removeItem('cf_refresh_token');
         showScreen('auth-screen');
@@ -1183,6 +1210,8 @@
         // Loading screen
         setTimeout(() => {
             if (state.token) {
+                // Schedule proactive refresh for returning user
+                scheduleTokenRefresh();
                 // Try to resume session
                 enterLobby();
             } else {

@@ -14,6 +14,9 @@ logger = logging.getLogger(__name__)
 
 
 class JWTAuthentication(BaseAuthentication):
+    def authenticate_header(self, request):
+        return 'Bearer'
+
     def authenticate(self, request):
         auth_header = request.headers.get('Authorization', '')
         
