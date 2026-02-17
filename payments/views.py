@@ -1,57 +1,295 @@
 """
 Payment API Views & Webhook Handlers
+
+Security:
+- Mobile money name verification via Orchard AII before any deposit/withdrawal
+- Strict name matching: deposit momo name = payout account
+- All Orchard API calls go through whitelisted ky3mp3 proxy
 """
 
 import json
 import hmac
 import hashlib
 import logging
+import uuid
 
 from django.conf import settings
+from django.db import transaction as db_transaction
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 from rest_framework import status
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, permission_classes, throttle_classes
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
+from rest_framework.throttling import UserRateThrottle
 
+from payments.models import MobileMoneyAccount
 from payments.services import (
     initiate_mobile_money_deposit, initiate_card_deposit, initiate_withdrawal,
     process_orchard_callback, process_paystack_webhook, validate_mobile_number,
-    detect_network,
+    detect_network, normalize_phone, verify_mobile_money_name,
+    check_deposit_status, check_payout_status,
 )
 
 logger = logging.getLogger(__name__)
 
 
+class VerificationThrottle(UserRateThrottle):
+    rate = '5/min'
+
+
+# ==================== Mobile Money Verification ====================
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+@throttle_classes([VerificationThrottle])
+def verify_momo(request):
+    """
+    Verify a mobile money account name via Orchard AII.
+    Players must verify before deposit or adding a payment method.
+    Returns the verified account holder name.
+    """
+    mobile_number = request.data.get('mobile_number')
+    if not mobile_number:
+        return Response({'error': 'Mobile number required'}, status=status.HTTP_400_BAD_REQUEST)
+
+    if not validate_mobile_number(mobile_number):
+        return Response({'error': 'Invalid Ghanaian mobile number'}, status=status.HTTP_400_BAD_REQUEST)
+
+    result = verify_mobile_money_name(mobile_number)
+    if result['success']:
+        return Response({
+            'success': True,
+            'name': result['name'],
+            'network': result['network'],
+            'mobile_number': normalize_phone(mobile_number),
+        })
+    return Response({'error': result['message']}, status=status.HTTP_400_BAD_REQUEST)
+
+
+# ==================== Payment Method Management ====================
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def list_momo_accounts(request):
+    """List player's verified mobile money accounts."""
+    accounts = MobileMoneyAccount.objects.filter(player=request.user, is_active=True)
+    data = [{
+        'id': str(a.id),
+        'mobile_number': a.mobile_number,
+        'network': a.network,
+        'verified_name': a.verified_name,
+        'is_primary': a.is_primary,
+    } for a in accounts]
+    return Response(data)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+@throttle_classes([VerificationThrottle])
+def add_momo_account(request):
+    """
+    Add a verified mobile money payment method.
+    Step 1: Caller provides mobile_number.
+    Step 2: We verify the name via Orchard AII.
+    Step 3: If player already has accounts, the new account name must STRICTLY
+            match existing verified names to prevent impersonation.
+    """
+    mobile_number = request.data.get('mobile_number')
+    if not mobile_number:
+        return Response({'error': 'Mobile number required'}, status=status.HTTP_400_BAD_REQUEST)
+
+    if not validate_mobile_number(mobile_number):
+        return Response({'error': 'Invalid Ghanaian mobile number'}, status=status.HTTP_400_BAD_REQUEST)
+
+    normalized = normalize_phone(mobile_number)
+
+    # Check if already added
+    existing = MobileMoneyAccount.objects.filter(
+        player=request.user, mobile_number=normalized, is_active=True
+    ).first()
+    if existing:
+        return Response({
+            'success': True,
+            'message': 'Account already registered',
+            'account': {
+                'id': str(existing.id),
+                'mobile_number': existing.mobile_number,
+                'network': existing.network,
+                'verified_name': existing.verified_name,
+                'is_primary': existing.is_primary,
+            }
+        })
+
+    # Verify name via Orchard AII
+    result = verify_mobile_money_name(mobile_number)
+    if not result['success']:
+        return Response({'error': result['message']}, status=status.HTTP_400_BAD_REQUEST)
+
+    verified_name = result['name'].strip().upper()
+    network = result['network']
+
+    # SECURITY: Strict name matching against existing accounts
+    existing_accounts = MobileMoneyAccount.objects.filter(
+        player=request.user, is_active=True
+    )
+    if existing_accounts.exists():
+        first_name = existing_accounts.first().verified_name.strip().upper()
+        if verified_name != first_name:
+            logger.warning(
+                f'Name mismatch for player {request.user.id}: '
+                f'existing="{first_name}", new="{verified_name}" ({normalized})'
+            )
+            return Response({
+                'error': f'Account name "{result["name"]}" does not match your '
+                         f'registered name "{existing_accounts.first().verified_name}". '
+                         f'All payment accounts must be in the same name for security.'
+            }, status=status.HTTP_403_FORBIDDEN)
+
+    # Create the account
+    is_primary = not existing_accounts.exists()
+    account = MobileMoneyAccount.objects.create(
+        player=request.user,
+        mobile_number=normalized,
+        network=network,
+        verified_name=result['name'],
+        is_primary=is_primary,
+    )
+
+    return Response({
+        'success': True,
+        'message': 'Payment method added successfully',
+        'account': {
+            'id': str(account.id),
+            'mobile_number': account.mobile_number,
+            'network': account.network,
+            'verified_name': account.verified_name,
+            'is_primary': account.is_primary,
+        }
+    }, status=status.HTTP_201_CREATED)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def set_primary_momo(request):
+    """Set a mobile money account as primary."""
+    account_id = request.data.get('account_id')
+    if not account_id:
+        return Response({'error': 'account_id required'}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        account = MobileMoneyAccount.objects.get(
+            id=account_id, player=request.user, is_active=True
+        )
+    except MobileMoneyAccount.DoesNotExist:
+        return Response({'error': 'Account not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    account.is_primary = True
+    account.save()
+    return Response({'success': True, 'message': 'Primary account updated'})
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def remove_momo_account(request):
+    """Deactivate a mobile money account (soft delete). Cannot remove the only account."""
+    account_id = request.data.get('account_id')
+    if not account_id:
+        return Response({'error': 'account_id required'}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        account = MobileMoneyAccount.objects.get(
+            id=account_id, player=request.user, is_active=True
+        )
+    except MobileMoneyAccount.DoesNotExist:
+        return Response({'error': 'Account not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    active_count = MobileMoneyAccount.objects.filter(player=request.user, is_active=True).count()
+    if active_count <= 1:
+        return Response({'error': 'Cannot remove your only payment method'}, status=status.HTTP_400_BAD_REQUEST)
+
+    account.is_active = False
+    account.save(update_fields=['is_active'])
+
+    # If primary was removed, promote another
+    if account.is_primary:
+        next_account = MobileMoneyAccount.objects.filter(player=request.user, is_active=True).first()
+        if next_account:
+            next_account.is_primary = True
+            next_account.save(update_fields=['is_primary'])
+
+    return Response({'success': True, 'message': 'Account removed'})
+
+
+# ==================== Deposits ====================
+
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def deposit_mobile_money(request):
-    """Initiate mobile money deposit."""
+    """
+    Initiate mobile money deposit.
+    The mobile number must be a verified MobileMoneyAccount.
+    Players see the verified name before confirming.
+    """
     amount = request.data.get('amount')
+    account_id = request.data.get('account_id')
     mobile_number = request.data.get('mobile_number')
-    network = request.data.get('network')
 
-    if not amount or not mobile_number:
-        return Response({'error': 'Amount and mobile number required'}, status=status.HTTP_400_BAD_REQUEST)
+    if not amount:
+        return Response({'error': 'Amount required'}, status=status.HTTP_400_BAD_REQUEST)
 
     try:
         amount = float(amount)
     except (ValueError, TypeError):
         return Response({'error': 'Invalid amount'}, status=status.HTTP_400_BAD_REQUEST)
 
-    if not validate_mobile_number(mobile_number):
-        return Response({'error': 'Invalid mobile number'}, status=status.HTTP_400_BAD_REQUEST)
+    # Resolve the momo account
+    if account_id:
+        try:
+            account = MobileMoneyAccount.objects.get(
+                id=account_id, player=request.user, is_active=True
+            )
+        except MobileMoneyAccount.DoesNotExist:
+            return Response({'error': 'Payment method not found'}, status=status.HTTP_404_NOT_FOUND)
+        mobile_number = account.mobile_number
+        network = account.network
+    elif mobile_number:
+        if not validate_mobile_number(mobile_number):
+            return Response({'error': 'Invalid mobile number'}, status=status.HTTP_400_BAD_REQUEST)
+        normalized = normalize_phone(mobile_number)
+        account = MobileMoneyAccount.objects.filter(
+            player=request.user, mobile_number=normalized, is_active=True
+        ).first()
+        if not account:
+            return Response(
+                {'error': 'This number is not a verified payment method. Please verify it first.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        mobile_number = account.mobile_number
+        network = account.network
+    else:
+        # Use primary account
+        account = MobileMoneyAccount.objects.filter(
+            player=request.user, is_primary=True, is_active=True
+        ).first()
+        if not account:
+            return Response(
+                {'error': 'No payment method found. Please add a mobile money account first.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        mobile_number = account.mobile_number
+        network = account.network
 
     success, result = initiate_mobile_money_deposit(request.user, amount, mobile_number, network)
 
     if success:
         return Response({
             'success': True,
-            'message': 'Payment prompt sent to your phone',
+            'message': f'Payment prompt sent to {mobile_number} ({account.verified_name})',
             'reference': result.orchard_reference,
             'deposit_id': str(result.id),
+            'verified_name': account.verified_name,
         })
     return Response({'error': result}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -77,27 +315,47 @@ def deposit_card(request):
     return Response({'error': result}, status=status.HTTP_400_BAD_REQUEST)
 
 
+# ==================== Withdrawals ====================
+
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def withdraw(request):
-    """Initiate withdrawal to mobile money."""
+    """
+    Initiate withdrawal to mobile money.
+    MUST use a verified MobileMoneyAccount — same name as deposit account.
+    """
     amount = request.data.get('amount')
-    mobile_number = request.data.get('mobile_number')
-    network = request.data.get('network')
+    account_id = request.data.get('account_id')
 
-    if not amount or not mobile_number:
-        return Response({'error': 'Amount and mobile number required'}, status=status.HTTP_400_BAD_REQUEST)
+    if not amount:
+        return Response({'error': 'Amount required'}, status=status.HTTP_400_BAD_REQUEST)
 
     try:
         amount = float(amount)
     except (ValueError, TypeError):
         return Response({'error': 'Invalid amount'}, status=status.HTTP_400_BAD_REQUEST)
 
-    if not validate_mobile_number(mobile_number):
-        return Response({'error': 'Invalid mobile number'}, status=status.HTTP_400_BAD_REQUEST)
+    # Resolve the payout account
+    if account_id:
+        try:
+            account = MobileMoneyAccount.objects.get(
+                id=account_id, player=request.user, is_active=True
+            )
+        except MobileMoneyAccount.DoesNotExist:
+            return Response({'error': 'Payment method not found'}, status=status.HTTP_404_NOT_FOUND)
+    else:
+        # Use primary account
+        account = MobileMoneyAccount.objects.filter(
+            player=request.user, is_primary=True, is_active=True
+        ).first()
+        if not account:
+            return Response(
+                {'error': 'No payout account found. Please add a mobile money account first.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
     # Check wallet balance
-    from wallet.models import Wallet
+    from wallet.models import Wallet, WalletTransaction
     try:
         wallet = Wallet.objects.get(player=request.user)
     except Wallet.DoesNotExist:
@@ -107,10 +365,6 @@ def withdraw(request):
         return Response({'error': 'Insufficient balance'}, status=status.HTTP_400_BAD_REQUEST)
 
     # Deduct from wallet first
-    from django.db import transaction as db_transaction
-    from wallet.models import WalletTransaction
-    import uuid
-
     with db_transaction.atomic():
         wallet = Wallet.objects.select_for_update().get(player=request.user)
         balance_before = wallet.balance
@@ -127,16 +381,21 @@ def withdraw(request):
             balance_after=wallet.balance,
         )
 
-    success, result = initiate_withdrawal(request.user, amount, mobile_number, network)
+    success, result = initiate_withdrawal(
+        request.user, amount, account.mobile_number, account.network
+    )
 
     if success:
         return Response({
             'success': True,
-            'message': 'Withdrawal processing',
+            'message': f'Withdrawal processing to {account.mobile_number} ({account.verified_name})',
             'reference': result.payout_reference,
+            'verified_name': account.verified_name,
         })
     return Response({'error': result}, status=status.HTTP_400_BAD_REQUEST)
 
+
+# ==================== Wallet & History ====================
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
@@ -181,6 +440,53 @@ def transaction_history(request):
         return Response(data)
     except Wallet.DoesNotExist:
         return Response([])
+
+
+# ==================== Payment Status ====================
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def deposit_status(request, reference):
+    """Check deposit payment status via Orchard verification proxy."""
+    from payments.models import Deposit
+    deposit = Deposit.objects.filter(
+        orchard_reference=reference, player=request.user
+    ).first()
+    if not deposit:
+        return Response({'error': 'Deposit not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    if deposit.status in ['completed', 'failed']:
+        return Response({'status': deposit.status, 'message': deposit.failure_reason or 'Done'})
+
+    result = check_deposit_status(reference)
+    return Response({
+        'status': result.get('status', 'UNKNOWN'),
+        'message': result.get('message', ''),
+    })
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def withdrawal_status(request, reference):
+    """Check withdrawal payout status via Orchard verification proxy."""
+    from django.db.models import Q
+    from payments.models import Withdrawal
+    withdrawal = Withdrawal.objects.filter(
+        player=request.user
+    ).filter(
+        Q(payout_reference=reference) | Q(payout_ext_trid=reference)
+    ).first()
+    if not withdrawal:
+        return Response({'error': 'Withdrawal not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    if withdrawal.status in ['completed', 'failed']:
+        return Response({'status': withdrawal.status, 'message': withdrawal.failure_reason or 'Done'})
+
+    result = check_payout_status(withdrawal.payout_ext_trid)
+    return Response({
+        'status': result.get('status', 'UNKNOWN'),
+        'message': result.get('message', ''),
+    })
 
 
 # ==================== Webhooks ====================

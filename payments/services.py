@@ -61,6 +61,173 @@ def normalize_phone(phone):
     return cleaned
 
 
+# ==================== Mobile Money Name Verification ====================
+
+def verify_mobile_money_name(mobile_number):
+    """
+    Verify mobile money account name via Orchard AII through ky3mp3 proxy.
+    Critical for fraud prevention: ensures users see verified names before confirming.
+    """
+    cleaned = re.sub(r'\D', '', mobile_number)
+    if cleaned.startswith('233'):
+        cleaned = cleaned[3:]
+    if cleaned.startswith('0'):
+        cleaned = cleaned[1:]
+
+    network = detect_network(mobile_number)
+    bank_code = {'MTN': 'MTN', 'VOD': 'VOD', 'AIR': 'AIR'}.get(network, 'UNK')
+
+    if bank_code == 'UNK':
+        return {'success': False, 'name': None, 'network': network, 'message': 'Unable to detect network'}
+
+    api_number = '0' + cleaned
+    timestamp = datetime.now(dt_timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+
+    payload = {
+        "customer_number": api_number,
+        "exttrid": f"CFV{int(time.time())}",
+        "service_id": settings.ORCHARD_SERVICE_ID,
+        "nw": "BNK",
+        "bank_code": bank_code,
+        "trans_type": "AII",
+        "ts": timestamp,
+    }
+
+    signature = generate_signature(payload)
+    headers = {
+        'Authorization': f'{settings.ORCHARD_CLIENT_ID}:{signature}',
+        'Content-Type': 'application/json',
+    }
+
+    try:
+        proxy_body = {"headers": headers, "payload": payload}
+        response = requests.post(
+            settings.ORCHARD_API_URL,
+            json=proxy_body,
+            headers={'Content-Type': 'application/json'},
+            timeout=30,
+        )
+        response.raise_for_status()
+        data = response.json()
+
+        logger.info(f'Momo verification response: {data}')
+
+        if data.get('resp_code') == '027':
+            return {
+                'success': True,
+                'name': data.get('name', 'Unknown'),
+                'network': network,
+                'message': 'Verification successful',
+            }
+        return {
+            'success': False,
+            'name': None,
+            'network': network,
+            'message': data.get('resp_desc', 'Verification failed'),
+        }
+
+    except requests.exceptions.RequestException as e:
+        logger.error(f'Momo verification error: {e}')
+        return {'success': False, 'name': None, 'network': network, 'message': 'Verification service unavailable.'}
+    except Exception as e:
+        logger.error(f'Unexpected momo verification error: {e}')
+        return {'success': False, 'name': None, 'network': network, 'message': 'Verification failed'}
+
+
+# ==================== Payment Status Checks (via proxy) ====================
+
+def check_deposit_status(reference):
+    """Check CTM deposit status via Orchard verification proxy."""
+    payload = {
+        "exttrid": reference,
+        "service_id": settings.ORCHARD_SERVICE_ID,
+        "trans_type": "CTM",
+    }
+    signature = generate_signature(payload)
+    headers = {
+        'Authorization': f'{settings.ORCHARD_CLIENT_ID}:{signature}',
+        'Content-Type': 'application/json',
+    }
+    proxy_data = {"headers": headers, "payload": payload, "endpoint": "checkTransaction"}
+    verification_url = settings.ORCHARD_PROXY_URL
+
+    try:
+        response = requests.post(verification_url, json=proxy_data, timeout=30)
+        data = response.json()
+        logger.info(f'CTM status check for {reference}: {data}')
+
+        trans_status = data.get('trans_status', '').upper()
+        resp_code = data.get('resp_code', '')
+        resp_desc = data.get('resp_desc', data.get('message', ''))
+        main_code = trans_status.split('/')[0] if trans_status else ''
+
+        if main_code == '000' or resp_code == '000' or resp_desc.upper() == 'SUCCESSFUL':
+            return {'success': True, 'status': 'SUCCESSFUL', 'message': resp_desc or 'Payment successful', 'data': data}
+        elif resp_code in ['034', '099', '100', '101', '102', '103', '104', '105']:
+            return {'success': True, 'status': 'FAILED', 'message': resp_desc or 'Payment failed', 'data': data}
+        elif resp_code == '084' or main_code == '001':
+            return {'success': True, 'status': 'PENDING', 'message': resp_desc or 'Still processing', 'data': data}
+        return {'success': True, 'status': 'UNKNOWN', 'message': resp_desc or f'Unknown: {trans_status or resp_code}', 'data': data}
+
+    except Exception as e:
+        logger.error(f'CTM status check error for {reference}: {e}')
+        return {'success': False, 'status': 'ERROR', 'message': str(e), 'data': {}}
+
+
+def check_payout_status(reference, use_wanaown=True):
+    """Check MTC payout status via Orchard verification proxy."""
+    if use_wanaown:
+        service_id = getattr(settings, 'ORCHARD_SERVICE_ID_WANAOWN', '') or settings.ORCHARD_SERVICE_ID
+        client_id = getattr(settings, 'ORCHARD_CLIENT_ID_WANAOWN', '') or settings.ORCHARD_CLIENT_ID
+        secret_key = getattr(settings, 'ORCHARD_SECRET_KEY_WANAOWN', '') or settings.ORCHARD_SECRET_KEY
+    else:
+        service_id = settings.ORCHARD_SERVICE_ID
+        client_id = settings.ORCHARD_CLIENT_ID
+        secret_key = settings.ORCHARD_SECRET_KEY
+
+    payload = {
+        "exttrid": reference,
+        "service_id": service_id,
+        "trans_type": "MTC",
+    }
+    signature = generate_signature(payload, secret_key)
+    headers = {
+        'Authorization': f'{client_id}:{signature}',
+        'Content-Type': 'application/json',
+    }
+    proxy_data = {"headers": headers, "payload": payload, "endpoint": "checkTransaction"}
+    verification_url = settings.ORCHARD_PROXY_URL
+
+    try:
+        response = requests.post(verification_url, json=proxy_data, timeout=30)
+        data = response.json()
+        logger.info(f'MTC status check for {reference}: {data}')
+
+        trans_status = data.get('trans_status', '').upper()
+        resp_code = data.get('resp_code', '')
+        resp_desc = data.get('resp_desc', data.get('message', ''))
+        main_code = trans_status.split('/')[0] if trans_status else ''
+        sub_code = trans_status.split('/')[1] if '/' in trans_status else ''
+
+        failure_sub_codes = ['034', '035', '036', '037', '039', '040', '041', '042']
+
+        if main_code == '000' or resp_code == '000' or resp_desc.upper() == 'SUCCESSFUL':
+            return {'success': True, 'status': 'SUCCESSFUL', 'message': resp_desc or 'Payout successful', 'data': data}
+        elif resp_code in ['034', '099', '100', '101', '102', '103', '104', '105']:
+            return {'success': True, 'status': 'FAILED', 'message': resp_desc or 'Payout failed', 'data': data}
+        elif main_code == '001' and sub_code in failure_sub_codes:
+            return {'success': True, 'status': 'FAILED', 'message': resp_desc or f'Failed: {trans_status}', 'data': data}
+        elif main_code == '001' and sub_code == '038':
+            return {'success': True, 'status': 'DELAYED', 'message': resp_desc or 'Temporarily delayed', 'data': data}
+        elif resp_code == '084' or main_code == '001':
+            return {'success': True, 'status': 'PENDING', 'message': resp_desc or 'Still processing', 'data': data}
+        return {'success': True, 'status': 'UNKNOWN', 'message': resp_desc or f'Unknown: {trans_status or resp_code}', 'data': data}
+
+    except Exception as e:
+        logger.error(f'MTC status check error for {reference}: {e}')
+        return {'success': False, 'status': 'ERROR', 'message': str(e), 'data': {}}
+
+
 # ==================== Deposit: Mobile Money (CTM) ====================
 
 def initiate_mobile_money_deposit(player, amount, mobile_number, network=None):

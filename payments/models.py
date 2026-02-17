@@ -4,6 +4,50 @@ from django.conf import settings
 from django.db import models
 
 
+class MobileMoneyAccount(models.Model):
+    """
+    Verified mobile money payment method.
+    The verified_name from Orchard AII is the source of truth.
+    Same momo name used for deposit MUST be the payout account.
+    """
+    NETWORK_CHOICES = [
+        ('MTN', 'MTN'),
+        ('VOD', 'Telecel (Vodafone)'),
+        ('AIR', 'AirtelTigo'),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    player = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='momo_accounts')
+    mobile_number = models.CharField(max_length=20, db_index=True)
+    network = models.CharField(max_length=5, choices=NETWORK_CHOICES)
+    verified_name = models.CharField(max_length=200, help_text='Name returned by Orchard AII verification')
+    is_primary = models.BooleanField(default=False)
+    is_active = models.BooleanField(default=True)
+    verified_at = models.DateTimeField(auto_now_add=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-is_primary', '-created_at']
+        unique_together = ['player', 'mobile_number']
+        indexes = [
+            models.Index(fields=['player', 'is_active']),
+        ]
+
+    def __str__(self):
+        return f'{self.verified_name} - {self.mobile_number} ({self.network})'
+
+    def save(self, *args, **kwargs):
+        # If this is the first account or marked primary, ensure only one primary
+        if self.is_primary:
+            MobileMoneyAccount.objects.filter(
+                player=self.player, is_primary=True
+            ).exclude(pk=self.pk).update(is_primary=False)
+        # If no primary exists, make this one primary
+        if not MobileMoneyAccount.objects.filter(player=self.player, is_primary=True).exclude(pk=self.pk).exists():
+            self.is_primary = True
+        super().save(*args, **kwargs)
+
+
 class Deposit(models.Model):
     METHOD_CHOICES = [
         ('mobile_money', 'Mobile Money'),

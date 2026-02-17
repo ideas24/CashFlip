@@ -1,5 +1,13 @@
 from django.contrib import admin
-from payments.models import Deposit, Withdrawal
+from payments.models import MobileMoneyAccount, Deposit, Withdrawal
+
+
+@admin.register(MobileMoneyAccount)
+class MobileMoneyAccountAdmin(admin.ModelAdmin):
+    list_display = ['player', 'mobile_number', 'network', 'verified_name', 'is_primary', 'is_active', 'created_at']
+    list_filter = ['network', 'is_primary', 'is_active']
+    search_fields = ['player__phone', 'mobile_number', 'verified_name']
+    readonly_fields = ['id', 'verified_at', 'created_at']
 
 
 @admin.register(Deposit)

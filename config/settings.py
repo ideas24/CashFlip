@@ -139,8 +139,8 @@ REST_FRAMEWORK = {
 }
 
 # ============ Celery ============
-CELERY_BROKER_URL = os.getenv('CELERY_BROKER_URL', 'redis://localhost:6379/2')
-CELERY_RESULT_BACKEND = os.getenv('CELERY_RESULT_BACKEND', 'redis://localhost:6379/2')
+CELERY_BROKER_URL = os.getenv('CELERY_BROKER_URL', 'redis://localhost:6379/3')
+CELERY_RESULT_BACKEND = os.getenv('CELERY_RESULT_BACKEND', 'redis://localhost:6379/8')
 CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
@@ -173,6 +173,9 @@ ORCHARD_SERVICE_ID_WANAOWN = os.getenv('ORCHARD_SERVICE_ID_WANAOWN')
 ORCHARD_CLIENT_ID_WANAOWN = os.getenv('ORCHARD_CLIENT_ID_WANAOWN')
 ORCHARD_SECRET_KEY_WANAOWN = os.getenv('ORCHARD_SECRET_KEY_WANAOWN')
 ORCHARD_CALLBACK_URL_WANAOWN = os.getenv('ORCHARD_CALLBACK_URL_WANAOWN')
+
+# ============ Orchard Proxy for Verification ============
+ORCHARD_PROXY_URL = os.getenv('ORCHARD_PROXY_URL')
 
 # ============ Payment: Paystack ============
 PAYSTACK_SECRET_KEY = os.getenv('PAYSTACK_SECRET_KEY')
