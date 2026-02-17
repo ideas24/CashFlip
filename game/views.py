@@ -8,6 +8,7 @@ from decimal import Decimal
 
 from django.db import transaction
 from django.utils import timezone
+from drf_spectacular.utils import extend_schema
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated, AllowAny
@@ -498,6 +499,7 @@ def live_feed(request):
 
 # ==================== FEATURE CONFIG ====================
 
+@extend_schema(tags=['Game: Features'], summary='Get Feature Config', description='Returns all global feature toggles (badges, wheel, sounds, haptics, etc.) for the frontend UI.')
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def feature_config(request):
@@ -518,6 +520,7 @@ def feature_config(request):
 
 # ==================== BADGES ====================
 
+@extend_schema(tags=['Game: Features'], summary='Get Player Badges', description='Returns all achievement badges with the current player\'s earned/locked status, total XP, and earned count.')
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def player_badges(request):
@@ -610,6 +613,7 @@ def check_and_award_badges(player, session=None, flip_data=None):
 
 # ==================== DAILY BONUS WHEEL ====================
 
+@extend_schema(tags=['Game: Features'], summary='Daily Wheel Status', description='Check if the player can spin the daily bonus wheel. Returns availability, next spin time, and wheel segment configuration.')
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def daily_wheel_status(request):
@@ -644,6 +648,7 @@ def daily_wheel_status(request):
     })
 
 
+@extend_schema(tags=['Game: Features'], summary='Spin Daily Wheel', description='Spin the daily bonus wheel. Performs weighted random selection, credits the won amount to the player wallet, and returns the winning segment index for frontend animation.')
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def daily_wheel_spin(request):

@@ -10,6 +10,7 @@ import logging
 from decimal import Decimal
 
 from django.utils import timezone
+from drf_spectacular.utils import extend_schema, OpenApiResponse
 from rest_framework import status
 from rest_framework.decorators import api_view, authentication_classes, permission_classes
 from rest_framework.permissions import AllowAny
@@ -48,6 +49,12 @@ def _get_operator(request):
 
 # ==================== PLAYER MANAGEMENT ====================
 
+@extend_schema(
+    tags=['Partner: Players'],
+    summary='Register / Authenticate Player',
+    description='Register a new player or authenticate an existing one. Returns the internal player ID mapped to your external player ID. Call this before starting any game session.',
+    responses={200: OpenApiResponse(description='Existing player found'), 201: OpenApiResponse(description='New player created')},
+)
 @api_view(['POST'])
 @authentication_classes(PARTNER_AUTH)
 @permission_classes(PARTNER_PERMS)
@@ -103,6 +110,11 @@ def player_auth(request):
 
 # ==================== GAME CONFIG ====================
 
+@extend_schema(
+    tags=['Partner: Game Config'],
+    summary='Get Game Configuration',
+    description='Retrieve your operator-specific game configuration including currency, house edge, stake limits, zero probability parameters, and session settings.',
+)
 @api_view(['GET'])
 @authentication_classes(PARTNER_AUTH)
 @permission_classes(PARTNER_PERMS)
@@ -125,16 +137,27 @@ def game_config(request):
 
 # ==================== GAME OPERATIONS ====================
 
+@extend_schema(
+    tags=['Partner: Game Operations'],
+    summary='Start Game Session',
+    description=(
+        'Start a new game session for a player.\n\n'
+        '**Flow**: Validate stake → call your debit_url to deduct stake → create session → return session ID + server seed hash.\n\n'
+        '**Seamless Wallet**: Your debit endpoint is called synchronously. If debit fails, no session is created.\n\n'
+        '**Provably Fair**: The `server_seed_hash` (SHA-256) is provided upfront. Full seed revealed after game ends.'
+    ),
+    responses={
+        201: OpenApiResponse(description='Session created successfully'),
+        400: OpenApiResponse(description='Invalid stake or missing config'),
+        402: OpenApiResponse(description='Debit failed (insufficient funds on operator side)'),
+        404: OpenApiResponse(description='Player not found'),
+    },
+)
 @api_view(['POST'])
 @authentication_classes(PARTNER_AUTH)
 @permission_classes(PARTNER_PERMS)
 def game_start(request):
-    """
-    Start a new game session.
-    1. Validate player + stake
-    2. Call operator debit_url (synchronous — seamless wallet)
-    3. Create GameSession + OperatorSession
-    """
+    """Start a new game session."""
     operator = _get_operator(request)
     if not operator:
         return Response({'error': 'Authentication required'}, status=status.HTTP_401_UNAUTHORIZED)
@@ -232,6 +255,17 @@ def game_start(request):
                         status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+@extend_schema(
+    tags=['Partner: Game Operations'],
+    summary='Execute Flip',
+    description=(
+        'Execute a single flip in an active game session.\n\n'
+        '**Outcome**: Either a winning denomination value or zero (loss). '
+        'Zero probability increases with each flip according to the configured escalation curve.\n\n'
+        '**On Loss**: Session status changes to `lost`. The stake is forfeited.\n\n'
+        '**On Win**: `cashout_balance` increases. Player can flip again or cash out.'
+    ),
+)
 @api_view(['POST'])
 @authentication_classes(PARTNER_AUTH)
 @permission_classes(PARTNER_PERMS)
@@ -293,15 +327,22 @@ def game_flip(request):
     return Response(response_data)
 
 
+@extend_schema(
+    tags=['Partner: Game Operations'],
+    summary='Cash Out Session',
+    description=(
+        'Cash out an active session and credit the player.\n\n'
+        '**Flow**: Close session → call your credit_url with cashout amount → reveal server seed.\n\n'
+        '**Seamless Wallet**: Your credit endpoint is called. Session is closed regardless of credit status '
+        '(amount is owed to player).\n\n'
+        '**Provably Fair**: The full `server_seed` is returned so the player can verify all flips.'
+    ),
+)
 @api_view(['POST'])
 @authentication_classes(PARTNER_AUTH)
 @permission_classes(PARTNER_PERMS)
 def game_cashout(request):
-    """
-    Cash out a session.
-    1. Close session
-    2. Call operator credit_url (seamless wallet)
-    """
+    """Cash out a session."""
     operator = _get_operator(request)
     if not operator:
         return Response({'error': 'Authentication required'}, status=status.HTTP_401_UNAUTHORIZED)
@@ -365,6 +406,11 @@ def game_cashout(request):
     })
 
 
+@extend_schema(
+    tags=['Partner: Game Operations'],
+    summary='Get Session State',
+    description='Retrieve the current state of a game session including status, balances, flip count, and full flip history.',
+)
 @api_view(['GET'])
 @authentication_classes(PARTNER_AUTH)
 @permission_classes(PARTNER_PERMS)
@@ -390,6 +436,11 @@ def game_state(request, session_id):
     return Response(data)
 
 
+@extend_schema(
+    tags=['Partner: Game Operations'],
+    summary='Get Player Game History',
+    description='Retrieve the last 50 game sessions for a specific player, ordered by most recent first.',
+)
 @api_view(['GET'])
 @authentication_classes(PARTNER_AUTH)
 @permission_classes(PARTNER_PERMS)
@@ -407,6 +458,17 @@ def game_history(request, ext_player_id):
     return Response(GameHistorySerializer(sessions, many=True).data)
 
 
+@extend_schema(
+    tags=['Partner: Game Operations'],
+    summary='Verify Session (Provably Fair)',
+    description=(
+        'Retrieve the full cryptographic verification data for a completed session.\n\n'
+        '**Returns**: server_seed, server_seed_hash, client_seed, and all flip results with their hashes.\n\n'
+        '**Verification**: For each flip, compute `HMAC-SHA256(server_seed, client_seed:nonce:flip_number)` '
+        'and confirm it matches `result_hash`. The `server_seed_hash` = SHA-256(server_seed) should match '
+        'the hash provided at game start.'
+    ),
+)
 @api_view(['GET'])
 @authentication_classes(PARTNER_AUTH)
 @permission_classes(PARTNER_PERMS)
@@ -443,6 +505,11 @@ def game_verify(request, session_id):
 
 # ==================== REPORTS ====================
 
+@extend_schema(
+    tags=['Partner: Reports'],
+    summary='GGR Report',
+    description='Retrieve Gross Gaming Revenue reports showing total bets, total wins, GGR, commission, and net operator amount per settlement period.',
+)
 @api_view(['GET'])
 @authentication_classes(PARTNER_AUTH)
 @permission_classes(PARTNER_PERMS)
@@ -456,6 +523,11 @@ def reports_ggr(request):
     return Response(GGRReportSerializer(settlements, many=True).data)
 
 
+@extend_schema(
+    tags=['Partner: Reports'],
+    summary='Session Detail Report',
+    description='Retrieve detailed session-level report for the last 100 sessions. Includes stake, cashout amount, flip count, status, and timestamps.',
+)
 @api_view(['GET'])
 @authentication_classes(PARTNER_AUTH)
 @permission_classes(PARTNER_PERMS)
@@ -472,6 +544,11 @@ def reports_sessions(request):
     return Response(GameHistorySerializer(sessions, many=True).data)
 
 
+@extend_schema(
+    tags=['Partner: Settlements'],
+    summary='List Settlements',
+    description='Retrieve all settlement records for your operator account. Shows GGR, commission, net amount, and settlement status (pending/approved/paid).',
+)
 @api_view(['GET'])
 @authentication_classes(PARTNER_AUTH)
 @permission_classes(PARTNER_PERMS)
@@ -487,6 +564,15 @@ def settlements_list(request):
 
 # ==================== WEBHOOKS ====================
 
+@extend_schema(
+    tags=['Partner: Webhooks'],
+    summary='Configure Webhooks',
+    description=(
+        'Set or update your webhook endpoint URL and subscribed events.\n\n'
+        '**Supported events**: `game.started`, `game.flip`, `game.lost`, `game.won`, `settlement.generated`\n\n'
+        'Cashflip will POST JSON payloads to your webhook URL for each subscribed event.'
+    ),
+)
 @api_view(['POST'])
 @authentication_classes(PARTNER_AUTH)
 @permission_classes(PARTNER_PERMS)

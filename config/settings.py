@@ -143,37 +143,96 @@ REST_FRAMEWORK = {
 
 # ============ API Documentation (drf-spectacular) ============
 SPECTACULAR_SETTINGS = {
-    'TITLE': 'Cashflip Partner API',
+    'TITLE': 'Cashflip Platform API',
     'DESCRIPTION': (
-        'Games-as-a-Service API for Cashflip — a provably fair coin-flip game engine.\n\n'
-        'Operators integrate via HMAC-signed API calls. Cashflip processes everything:\n'
-        'game logic, provably fair verification, settlements, and webhooks.\n\n'
-        '## Authentication\n'
-        'All requests must include:\n'
-        '- `X-API-Key`: Your API key\n'
-        '- `X-Signature`: HMAC-SHA256 signature of the request body using your API secret\n'
-        '- `X-Timestamp` (optional): Unix timestamp for replay protection\n\n'
-        '## Seamless Wallet\n'
-        'Cashflip calls your debit/credit/rollback endpoints per bet/win/refund.\n'
-        'Configure these URLs in the Cashflip admin portal.\n\n'
-        '## Provably Fair\n'
-        'Every game session uses HMAC-SHA256 with server seed, client seed, and nonce.\n'
-        'Server seed hash is provided at game start; full seed revealed after cashout/loss.'
+        '# Cashflip Platform API\n\n'
+        'Complete API documentation for the Cashflip platform — a provably fair, '
+        'real-money coin-flip game engine built for the African mobile-first market.\n\n'
+        '---\n\n'
+        '## API Products\n\n'
+        '### 1. Partner / GaaS API (`/api/partner/v1/`)\n'
+        'Games-as-a-Service integration for operators (e.g., betting platforms). '
+        'Operators embed Cashflip into their apps via REST API with seamless wallet integration.\n\n'
+        '### 2. OTP as a Service (`/api/otp/v1/`)\n'
+        'Production-grade WhatsApp & SMS OTP delivery API. '
+        'Businesses integrate OTP verification into their apps with tiered pricing, '
+        'whitelabel sender IDs, rate limiting, and usage analytics.\n\n'
+        '### 3. Game Features API (`/api/game/`)\n'
+        'Player-facing endpoints for achievements, daily bonus wheel, feature config, '
+        'and game operations.\n\n'
+        '---\n\n'
+        '## Authentication\n\n'
+        '### Partner API (HMAC-SHA256)\n'
+        'All Partner API requests must include:\n'
+        '- `X-API-Key`: Your public API key (format: `cf_live_xxxx`)\n'
+        '- `X-Signature`: HMAC-SHA256 of the raw request body using your API secret\n'
+        '- `X-Timestamp` *(optional)*: Unix timestamp for replay protection (5-min window)\n\n'
+        '### OTPaaS API (HMAC-SHA256)\n'
+        'All OTPaaS requests must include:\n'
+        '- `X-OTP-Key`: Your OTP API key (format: `otp_live_xxxx`)\n'
+        '- `X-OTP-Signature`: HMAC-SHA256 of the raw request body using your OTP API secret\n'
+        '- `X-OTP-Timestamp` *(optional)*: Unix timestamp for replay protection\n\n'
+        '### Game API (JWT Bearer)\n'
+        'Player-facing endpoints use JWT Bearer tokens:\n'
+        '- `Authorization: Bearer <access_token>`\n'
+        '- Access tokens expire in 60 minutes; refresh tokens last 7 days\n\n'
+        '---\n\n'
+        '## Seamless Wallet (Partner API)\n'
+        'Cashflip does NOT hold operator player funds. Instead:\n'
+        '1. **Game Start**: Cashflip calls your `debit_url` to deduct the stake\n'
+        '2. **Win/Cashout**: Cashflip calls your `credit_url` to credit winnings\n'
+        '3. **Failure**: Cashflip calls your `rollback_url` to reverse a failed debit\n\n'
+        'Configure wallet URLs in the Cashflip admin portal or via your account manager.\n\n'
+        '---\n\n'
+        '## Provably Fair System\n'
+        'Every game session is cryptographically verifiable:\n'
+        '1. Game start → server provides SHA-256 hash of the server seed\n'
+        '2. Each flip → result = HMAC-SHA256(server_seed, client_seed:nonce:flip_number)\n'
+        '3. Game end → full server seed revealed for verification\n'
+        '4. Public verify endpoint available per session\n\n'
+        '---\n\n'
+        '## OTPaaS Pricing Tiers\n\n'
+        '| Tier | WhatsApp | SMS | Whitelabel | Base Fee |\n'
+        '|------|----------|-----|------------|----------|\n'
+        '| Starter | ₵0.030 | ₵0.050 | No | Free |\n'
+        '| Growth | ₵0.020 | ₵0.035 | ₵200/mo | ₵50/mo |\n'
+        '| Business | ₵0.012 | ₵0.025 | ₵500/mo | ₵200/mo |\n'
+        '| Enterprise | ₵0.008 | ₵0.015 | Included | ₵500/mo |\n\n'
+        '---\n\n'
+        '## Rate Limits\n'
+        '- **Partner API**: Configurable per API key (default 120 req/min)\n'
+        '- **OTPaaS**: Configurable per client (default 60 req/min, 5 per phone/hour)\n'
+        '- Rate limit headers: `X-RateLimit-Remaining`, `Retry-After`\n\n'
+        '---\n\n'
+        '## Support\n'
+        '- Email: support@cashflip.amoano.com\n'
+        '- Dashboard: https://console.cashflip.amoano.com\n'
     ),
-    'VERSION': '1.0.0',
+    'VERSION': '2.0.0',
     'SERVE_INCLUDE_SCHEMA': False,
     'SERVERS': [
         {'url': 'https://demo.cashflip.amoano.com', 'description': 'Staging'},
+        {'url': 'https://cashflip.amoano.com', 'description': 'Production'},
     ],
     'TAGS': [
-        {'name': 'Players', 'description': 'Player registration and authentication'},
-        {'name': 'Game', 'description': 'Game operations: start, flip, cashout, state, history, verify'},
-        {'name': 'Reports', 'description': 'GGR reports and session details'},
-        {'name': 'Settlements', 'description': 'Settlement management'},
-        {'name': 'Webhooks', 'description': 'Webhook configuration'},
+        # Partner / GaaS
+        {'name': 'Partner: Players', 'description': 'Register and authenticate operator players'},
+        {'name': 'Partner: Game Config', 'description': 'Retrieve operator-specific game configuration'},
+        {'name': 'Partner: Game Operations', 'description': 'Start sessions, flip, cashout, check state, history, and verify fairness'},
+        {'name': 'Partner: Reports', 'description': 'GGR reports and detailed session reports'},
+        {'name': 'Partner: Settlements', 'description': 'View settlement history and details'},
+        {'name': 'Partner: Webhooks', 'description': 'Configure webhook endpoints for real-time event delivery'},
+        # OTPaaS
+        {'name': 'OTPaaS: Send & Verify', 'description': 'Send OTP codes via WhatsApp or SMS, and verify them'},
+        {'name': 'OTPaaS: Status', 'description': 'Check delivery status of individual OTP requests'},
+        {'name': 'OTPaaS: Billing & Usage', 'description': 'View prepaid balance, usage analytics, and pricing tiers'},
+        # Game Features
+        {'name': 'Game: Features', 'description': 'Feature configuration, achievement badges, and daily bonus wheel'},
     ],
     'COMPONENT_SPLIT_REQUEST': True,
-    'SCHEMA_PATH_PREFIX': r'/api/partner/v1/',
+    'SCHEMA_PATH_PREFIX': r'/api/',
+    'SCHEMA_PATH_PREFIX_TRIM': False,
+    'PREPROCESSING_HOOKS': ['config.spectacular_hooks.preprocess_exclude_admin'],
 }
 
 # ============ Celery ============

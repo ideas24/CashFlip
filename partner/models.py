@@ -360,3 +360,333 @@ class OperatorSettlement(models.Model):
 
     def __str__(self):
         return f'{self.operator.name} settlement {self.period_start} to {self.period_end} ({self.status})'
+
+
+# ==================== OTP AS A SERVICE (OTPaaS) ====================
+
+class OTPPricingTier(models.Model):
+    """
+    Tiered pricing for OTP service.
+    Monthly volume thresholds determine per-OTP cost.
+    """
+    name = models.CharField(max_length=50, unique=True, help_text='Tier name e.g. Starter, Growth, Enterprise')
+    min_monthly_volume = models.PositiveIntegerField(default=0, help_text='Min OTPs/month for this tier')
+    max_monthly_volume = models.PositiveIntegerField(default=0, help_text='Max OTPs/month (0=unlimited)')
+    price_per_otp_whatsapp = models.DecimalField(max_digits=8, decimal_places=4, default=0.0300,
+        help_text='Cost per WhatsApp OTP in GHS')
+    price_per_otp_sms = models.DecimalField(max_digits=8, decimal_places=4, default=0.0500,
+        help_text='Cost per SMS OTP in GHS')
+    whitelabel_fee_monthly = models.DecimalField(max_digits=10, decimal_places=2, default=0,
+        help_text='Monthly fee for custom sender ID / whitelabel (0=not available)')
+    whitelabel_available = models.BooleanField(default=False,
+        help_text='Whether custom sender ID is available on this tier')
+    monthly_base_fee = models.DecimalField(max_digits=10, decimal_places=2, default=0,
+        help_text='Monthly platform fee (0=pay-per-use only)')
+    priority_support = models.BooleanField(default=False)
+    sla_uptime = models.DecimalField(max_digits=5, decimal_places=2, default=99.00,
+        help_text='SLA uptime guarantee %')
+    display_order = models.PositiveIntegerField(default=0)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['display_order', 'min_monthly_volume']
+        verbose_name = 'OTP Pricing Tier'
+
+    def __str__(self):
+        return f'{self.name} (₵{self.price_per_otp_whatsapp}/WA, ₵{self.price_per_otp_sms}/SMS)'
+
+
+class OTPClient(models.Model):
+    """
+    External client (business) using Cashflip's OTP as a Service.
+    Can optionally also be a game Operator, or standalone OTP-only client.
+    """
+    STATUS_CHOICES = [
+        ('pending', 'Pending Approval'),
+        ('active', 'Active'),
+        ('suspended', 'Suspended'),
+        ('deactivated', 'Deactivated'),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    operator = models.OneToOneField(Operator, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='otp_client', help_text='Link to game operator if this is a GaaS partner')
+    company_name = models.CharField(max_length=200, help_text='Business name')
+    slug = models.SlugField(max_length=50, unique=True, help_text='URL-safe identifier')
+    contact_email = models.EmailField()
+    contact_phone = models.CharField(max_length=20, blank=True, default='')
+    website = models.URLField(blank=True, default='')
+    status = models.CharField(max_length=15, choices=STATUS_CHOICES, default='pending', db_index=True)
+    pricing_tier = models.ForeignKey(OTPPricingTier, on_delete=models.PROTECT,
+        related_name='clients', help_text='Current pricing tier')
+
+    # Rate limiting
+    rate_limit_per_minute = models.PositiveIntegerField(default=60,
+        help_text='Max OTP requests per minute across all keys')
+    rate_limit_per_phone_per_hour = models.PositiveIntegerField(default=5,
+        help_text='Max OTPs to same phone number per hour')
+    daily_limit = models.PositiveIntegerField(default=10000,
+        help_text='Max OTPs per day (0=unlimited)')
+
+    # OTP configuration
+    otp_length = models.PositiveSmallIntegerField(default=6, help_text='OTP code length (4-8)')
+    otp_expiry_seconds = models.PositiveIntegerField(default=300, help_text='OTP validity in seconds')
+    allowed_channels = models.JSONField(default=list,
+        help_text='["whatsapp","sms"] — channels this client can use')
+    default_channel = models.CharField(max_length=10, default='whatsapp',
+        help_text='Default delivery channel')
+
+    # Callback / webhook
+    callback_url = models.URLField(blank=True, default='',
+        help_text='Webhook URL for delivery status callbacks')
+    callback_secret = models.CharField(max_length=128, blank=True, default='',
+        help_text='HMAC secret for signing callback payloads')
+
+    # Billing
+    prepaid_balance = models.DecimalField(max_digits=12, decimal_places=2, default=0,
+        help_text='Prepaid credit balance in GHS')
+    billing_mode = models.CharField(max_length=10, default='prepaid',
+        choices=[('prepaid', 'Prepaid'), ('postpaid', 'Postpaid')],
+        help_text='Prepaid deducts per OTP; postpaid invoices monthly')
+    auto_suspend_on_zero = models.BooleanField(default=True,
+        help_text='Auto-suspend when prepaid balance reaches zero')
+
+    # IP restrictions
+    ip_whitelist = models.JSONField(default=list, blank=True,
+        help_text='List of allowed IPs (empty=allow all)')
+
+    notes = models.TextField(blank=True, default='')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['company_name']
+        verbose_name = 'OTP Client'
+
+    def __str__(self):
+        return f'{self.company_name} [{self.get_status_display()}]'
+
+    @property
+    def is_live(self):
+        return self.status == 'active'
+
+
+class OTPClientAPIKey(models.Model):
+    """
+    API key for OTPaaS client authentication.
+    Uses same HMAC pattern as partner API but with otp_ prefix.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    client = models.ForeignKey(OTPClient, on_delete=models.CASCADE, related_name='api_keys')
+    label = models.CharField(max_length=100, default='Default')
+    api_key = models.CharField(max_length=64, unique=True, db_index=True,
+        help_text='Public key sent in X-OTP-Key header')
+    api_secret = models.CharField(max_length=128,
+        help_text='HMAC secret for signing requests')
+    is_active = models.BooleanField(default=True)
+    last_used_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    revoked_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'OTP API Key'
+
+    def __str__(self):
+        status = 'active' if self.is_active else 'revoked'
+        return f'{self.client.company_name} - {self.label} ({status})'
+
+    @staticmethod
+    def generate_key_pair():
+        api_key = f'otp_live_{secrets.token_hex(24)}'
+        api_secret = secrets.token_hex(48)
+        return api_key, api_secret
+
+    def verify_signature(self, body_bytes, signature):
+        expected = hmac.new(
+            self.api_secret.encode(),
+            body_bytes,
+            hashlib.sha256
+        ).hexdigest()
+        return hmac.compare_digest(expected, signature)
+
+    def revoke(self):
+        self.is_active = False
+        self.revoked_at = timezone.now()
+        self.save(update_fields=['is_active', 'revoked_at'])
+
+
+class OTPSenderID(models.Model):
+    """
+    Whitelabel sender ID configuration for premium clients.
+    Allows clients to send OTP from their own WhatsApp Business number
+    or custom SMS sender ID.
+    """
+    STATUS_CHOICES = [
+        ('pending', 'Pending Verification'),
+        ('verified', 'Verified'),
+        ('rejected', 'Rejected'),
+        ('suspended', 'Suspended'),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    client = models.ForeignKey(OTPClient, on_delete=models.CASCADE, related_name='sender_ids')
+    channel = models.CharField(max_length=10, choices=[('whatsapp', 'WhatsApp'), ('sms', 'SMS')])
+
+    # WhatsApp sender config
+    whatsapp_phone_number_id = models.CharField(max_length=50, blank=True, default='',
+        help_text='Client WhatsApp Business phone number ID (Meta)')
+    whatsapp_access_token = models.TextField(blank=True, default='',
+        help_text='Client WhatsApp Business access token (encrypted at rest)')
+    whatsapp_template_name = models.CharField(max_length=100, blank=True, default='',
+        help_text='Client custom auth template name')
+    whatsapp_business_name = models.CharField(max_length=200, blank=True, default='',
+        help_text='Display name shown to recipients')
+
+    # SMS sender config
+    sms_sender_id = models.CharField(max_length=11, blank=True, default='',
+        help_text='Alphanumeric sender ID for SMS (max 11 chars)')
+    sms_provider = models.CharField(max_length=20, blank=True, default='twilio',
+        choices=[('twilio', 'Twilio'), ('arkesel', 'Arkesel'), ('hubtel', 'Hubtel')])
+    sms_provider_config = models.JSONField(default=dict, blank=True,
+        help_text='Provider-specific config (account SID, auth token, etc.)')
+
+    status = models.CharField(max_length=15, choices=STATUS_CHOICES, default='pending')
+    verified_at = models.DateTimeField(null=True, blank=True)
+    monthly_fee = models.DecimalField(max_digits=10, decimal_places=2, default=0,
+        help_text='Monthly whitelabel fee charged for this sender ID')
+    is_active = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'OTP Sender ID'
+        unique_together = ['client', 'channel']
+
+    def __str__(self):
+        if self.channel == 'whatsapp':
+            return f'{self.client.company_name} WA: {self.whatsapp_business_name or self.whatsapp_phone_number_id}'
+        return f'{self.client.company_name} SMS: {self.sms_sender_id}'
+
+
+class OTPRequest(models.Model):
+    """
+    Individual OTP request log. Every OTP send and verify is recorded.
+    Used for billing, analytics, debugging, and audit trail.
+    """
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('sent', 'Sent'),
+        ('delivered', 'Delivered'),
+        ('failed', 'Failed'),
+        ('expired', 'Expired'),
+        ('verified', 'Verified'),
+        ('rejected', 'Rejected (wrong code)'),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    client = models.ForeignKey(OTPClient, on_delete=models.CASCADE, related_name='otp_requests', db_index=True)
+    api_key = models.ForeignKey(OTPClientAPIKey, on_delete=models.SET_NULL, null=True, blank=True)
+    sender_id = models.ForeignKey(OTPSenderID, on_delete=models.SET_NULL, null=True, blank=True,
+        help_text='Custom sender used (null=Cashflip default)')
+
+    # Request details
+    phone = models.CharField(max_length=20, db_index=True)
+    channel = models.CharField(max_length=10, choices=[('whatsapp', 'WhatsApp'), ('sms', 'SMS')])
+    code = models.CharField(max_length=8, help_text='Generated OTP code')
+    code_hash = models.CharField(max_length=64, blank=True, default='',
+        help_text='SHA-256 hash of code for secure storage')
+    status = models.CharField(max_length=15, choices=STATUS_CHOICES, default='pending', db_index=True)
+    expires_at = models.DateTimeField()
+
+    # Delivery metadata
+    provider_message_id = models.CharField(max_length=100, blank=True, default='',
+        help_text='Message ID from WhatsApp/SMS provider')
+    delivered_at = models.DateTimeField(null=True, blank=True)
+    delivery_attempts = models.PositiveSmallIntegerField(default=0)
+    error_message = models.TextField(blank=True, default='')
+
+    # Verification
+    verified_at = models.DateTimeField(null=True, blank=True)
+    verify_attempts = models.PositiveSmallIntegerField(default=0,
+        help_text='Number of incorrect verification attempts')
+    max_verify_attempts = models.PositiveSmallIntegerField(default=3)
+
+    # Billing
+    cost = models.DecimalField(max_digits=8, decimal_places=4, default=0,
+        help_text='Cost charged for this OTP')
+    billed = models.BooleanField(default=False)
+
+    # Client metadata
+    client_ref = models.CharField(max_length=100, blank=True, default='',
+        help_text='Client-provided reference for their own tracking')
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    user_agent = models.TextField(blank=True, default='')
+    metadata = models.JSONField(default=dict, blank=True,
+        help_text='Freeform metadata from client')
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['client', 'phone', 'status']),
+            models.Index(fields=['client', 'created_at']),
+            models.Index(fields=['phone', 'created_at']),
+        ]
+        verbose_name = 'OTP Request'
+
+    def __str__(self):
+        return f'OTP {self.phone} via {self.channel} [{self.status}]'
+
+    @property
+    def is_expired(self):
+        return timezone.now() > self.expires_at
+
+    @property
+    def is_verifiable(self):
+        return (
+            self.status in ('sent', 'delivered')
+            and not self.is_expired
+            and self.verify_attempts < self.max_verify_attempts
+        )
+
+
+class OTPClientUsage(models.Model):
+    """
+    Daily aggregated usage per client for billing and analytics.
+    One row per client per day.
+    """
+    client = models.ForeignKey(OTPClient, on_delete=models.CASCADE, related_name='daily_usage')
+    date = models.DateField(db_index=True)
+
+    # Volume
+    whatsapp_sent = models.PositiveIntegerField(default=0)
+    whatsapp_delivered = models.PositiveIntegerField(default=0)
+    whatsapp_failed = models.PositiveIntegerField(default=0)
+    sms_sent = models.PositiveIntegerField(default=0)
+    sms_delivered = models.PositiveIntegerField(default=0)
+    sms_failed = models.PositiveIntegerField(default=0)
+    total_verified = models.PositiveIntegerField(default=0)
+    total_expired = models.PositiveIntegerField(default=0)
+
+    # Costs
+    whatsapp_cost = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    sms_cost = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    total_cost = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-date']
+        unique_together = ['client', 'date']
+        verbose_name = 'OTP Client Daily Usage'
+        verbose_name_plural = 'OTP Client Daily Usage'
+
+    def __str__(self):
+        total = self.whatsapp_sent + self.sms_sent
+        return f'{self.client.company_name} {self.date}: {total} OTPs, ₵{self.total_cost}'
