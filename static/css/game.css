@@ -572,6 +572,35 @@ html, body {
 }
 .verified-icon { font-weight: bold; font-size: 1rem; }
 
+/* ==================== PROFILE MOMO ACCOUNTS ==================== */
+.section-title { font-size: 0.95rem; margin-bottom: 8px; color: #ccc; }
+.momo-accounts-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
+.momo-account-card {
+    display: flex; align-items: center; justify-content: space-between;
+    background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 8px; padding: 8px 12px; font-size: 0.85rem;
+}
+.momo-account-card.primary { border-color: rgba(39,174,96,0.4); background: rgba(39,174,96,0.08); }
+.momo-account-info { display: flex; flex-direction: column; gap: 2px; }
+.momo-account-name { font-weight: 600; color: #e0e0e0; }
+.momo-account-number { color: #999; font-size: 0.8rem; }
+.momo-account-actions { display: flex; gap: 4px; align-items: center; }
+.badge-primary { font-size: 0.65rem; background: #27ae60; color: #fff; padding: 2px 6px; border-radius: 4px; }
+.badge-network { font-size: 0.65rem; padding: 2px 6px; border-radius: 4px; background: rgba(255,255,255,0.1); color: #ccc; }
+.badge-network.mtn { background: rgba(255,204,0,0.2); color: #ffc800; }
+.badge-network.vod, .badge-network.telecel { background: rgba(255,0,0,0.15); color: #f44; }
+.badge-network.air, .badge-network.airteltigo { background: rgba(0,123,255,0.15); color: #4af; }
+.btn-tiny { font-size: 0.7rem; padding: 2px 8px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.15); background: transparent; color: #ccc; cursor: pointer; }
+.btn-tiny:hover { background: rgba(255,255,255,0.1); }
+.btn-tiny.danger { border-color: rgba(255,0,0,0.3); color: #f66; }
+.btn-tiny.danger:hover { background: rgba(255,0,0,0.15); }
+.add-momo-form { margin-bottom: 8px; }
+.input-group.compact { margin-bottom: 4px; }
+.input-group.compact input { padding: 6px 10px; font-size: 0.85rem; }
+.btn-outline { font-size: 0.8rem; padding: 4px 12px; border: 1px dashed rgba(255,255,255,0.2); background: transparent; color: #aaa; border-radius: 6px; cursor: pointer; width: 100%; }
+.btn-outline:hover { border-color: rgba(255,255,255,0.4); color: #fff; }
+.small { font-size: 0.75rem; margin-top: 4px; }
+
 /* ==================== RESPONSIVE ==================== */
 @media (max-height: 500px) {
     .lobby-card { padding: 1rem; }

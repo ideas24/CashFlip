@@ -11,7 +11,7 @@
     {% load static %}
     <link rel="icon" type="image/svg+xml" href="{% static 'images/cashflip-favicon.svg' %}">
     <meta name="theme-color" content="#0D1117">
-    <link rel="stylesheet" href="{% static 'css/game.css' %}?v=20260217c">
+    <link rel="stylesheet" href="{% static 'css/game.css' %}?v=20260217d">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
 <body>
@@ -357,6 +357,25 @@
                 <div class="stat"><span class="stat-value" id="stat-losses">0</span><span class="stat-label">Losses</span></div>
                 <div class="stat"><span class="stat-value" id="stat-highest">₵0</span><span class="stat-label">Best Win</span></div>
             </div>
+            <div class="profile-section" id="momo-accounts-section">
+                <h4 class="section-title">Payment Accounts</h4>
+                <div id="momo-accounts-list" class="momo-accounts-list">
+                    <p class="text-muted">Loading...</p>
+                </div>
+                <div id="add-momo-form" style="display:none;" class="add-momo-form">
+                    <div class="input-group compact">
+                        <input type="tel" id="profile-momo-phone" placeholder="0241234567" maxlength="12" autocomplete="off">
+                        <small id="profile-momo-network" class="network-badge" style="display:none;"></small>
+                    </div>
+                    <div id="profile-momo-verify-status" style="display:none;" class="verify-status">
+                        <span class="spinner-sm" id="profile-momo-spinner" style="display:none;"></span>
+                        <span id="profile-momo-verify-text"></span>
+                    </div>
+                    <button id="cancel-add-momo" class="btn-small btn-secondary">Cancel</button>
+                </div>
+                <button id="add-momo-btn" class="btn-small btn-outline">+ Add Account</button>
+                <p class="text-muted small" id="momo-limit-text"></p>
+            </div>
             <div class="profile-menu">
                 <button id="menu-settings" class="menu-item">⚙️ Settings</button>
                 <button id="menu-history" class="menu-item">📊 Game History</button>
@@ -412,6 +431,6 @@
         <span id="toast-message"></span>
     </div>
 
-    <script src="{% static 'js/game.js' %}?v=20260217e"></script>
+    <script src="{% static 'js/game.js' %}?v=20260217f"></script>
 </body>
 </html>

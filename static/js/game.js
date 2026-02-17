@@ -1258,6 +1258,124 @@
         }
     }
 
+    // ==================== MOMO ACCOUNT MANAGEMENT ====================
+
+    async function loadMomoAccounts() {
+        const listEl = document.getElementById('momo-accounts-list');
+        const addBtn = document.getElementById('add-momo-btn');
+        const limitText = document.getElementById('momo-limit-text');
+        if (!listEl) return;
+
+        try {
+            const resp = await API.get('/payments/momo-accounts/');
+            if (!resp.ok) { listEl.innerHTML = '<p class="text-muted">Could not load accounts</p>'; return; }
+            const data = await resp.json();
+            const accounts = data.accounts || [];
+
+            if (accounts.length === 0) {
+                listEl.innerHTML = '<p class="text-muted">No payment accounts yet. Add one to deposit or withdraw.</p>';
+            } else {
+                listEl.innerHTML = accounts.map(a => {
+                    const nwClass = (a.network || '').toLowerCase();
+                    const nwName = NETWORK_NAMES[a.network] || a.network;
+                    const isPrimary = a.is_primary;
+                    return `<div class="momo-account-card${isPrimary ? ' primary' : ''}">
+                        <div class="momo-account-info">
+                            <span class="momo-account-name">${a.verified_name}</span>
+                            <span class="momo-account-number">${a.mobile_number} <span class="badge-network ${nwClass}">${nwName}</span></span>
+                        </div>
+                        <div class="momo-account-actions">
+                            ${isPrimary ? '<span class="badge-primary">Primary</span>' : `<button class="btn-tiny" onclick="switchPrimaryMomo('${a.id}')">Set Primary</button><button class="btn-tiny danger" onclick="removeMomoAccount('${a.id}')">Remove</button>`}
+                        </div>
+                    </div>`;
+                }).join('');
+            }
+
+            if (addBtn) addBtn.style.display = accounts.length >= 3 ? 'none' : 'block';
+            if (limitText) limitText.textContent = `${accounts.length}/3 accounts`;
+        } catch (e) {
+            listEl.innerHTML = '<p class="text-muted">Error loading accounts</p>';
+        }
+    }
+
+    // Expose to global scope for inline onclick handlers
+    window.switchPrimaryMomo = async function(accountId) {
+        try {
+            const resp = await API.post('/payments/momo-accounts/set-primary/', { account_id: accountId });
+            const data = await resp.json();
+            if (data.success) {
+                loadMomoAccounts();
+            } else {
+                alert(data.error || 'Failed to switch primary');
+            }
+        } catch (e) { alert('Network error'); }
+    };
+
+    window.removeMomoAccount = async function(accountId) {
+        if (!confirm('Remove this payment account?')) return;
+        try {
+            const resp = await API.post('/payments/momo-accounts/remove/', { account_id: accountId });
+            const data = await resp.json();
+            if (data.success) {
+                loadMomoAccounts();
+            } else {
+                alert(data.error || 'Failed to remove account');
+            }
+        } catch (e) { alert('Network error'); }
+    };
+
+    // Profile add-momo phone input handler
+    let _profileVerifyTimeout = null;
+    function handleProfileMomoPhoneInput() {
+        const phone = document.getElementById('profile-momo-phone').value.replace(/\D/g, '');
+        const networkEl = document.getElementById('profile-momo-network');
+        const nw = detectNetworkFromPhone(phone);
+
+        if (nw && phone.length >= 3) {
+            networkEl.textContent = NETWORK_NAMES[nw] || nw;
+            networkEl.className = 'network-badge ' + nw.toLowerCase();
+            networkEl.style.display = 'inline-block';
+        } else {
+            networkEl.style.display = 'none';
+        }
+
+        const verifyStatus = document.getElementById('profile-momo-verify-status');
+        const spinner = document.getElementById('profile-momo-spinner');
+        const verifyText = document.getElementById('profile-momo-verify-text');
+
+        if (_profileVerifyTimeout) clearTimeout(_profileVerifyTimeout);
+        if (phone.length === 10 && nw) {
+            _profileVerifyTimeout = setTimeout(async () => {
+                verifyStatus.style.display = 'flex';
+                spinner.style.display = 'inline-block';
+                verifyText.textContent = 'Verifying...';
+
+                try {
+                    const resp = await API.post('/payments/momo-accounts/add/', { mobile_number: phone });
+                    const data = await resp.json();
+                    spinner.style.display = 'none';
+                    if (data.success) {
+                        verifyText.textContent = `Added: ${data.account.verified_name}`;
+                        verifyStatus.className = 'verify-status';
+                        document.getElementById('add-momo-form').style.display = 'none';
+                        document.getElementById('add-momo-btn').style.display = 'block';
+                        document.getElementById('profile-momo-phone').value = '';
+                        loadMomoAccounts();
+                    } else {
+                        verifyText.textContent = data.error || 'Verification failed';
+                        verifyStatus.className = 'verify-status error';
+                    }
+                } catch (e) {
+                    spinner.style.display = 'none';
+                    verifyText.textContent = 'Network error';
+                    verifyStatus.className = 'verify-status error';
+                }
+            }, 400);
+        } else {
+            verifyStatus.style.display = 'none';
+        }
+    }
+
     async function loadReferral() {
         try {
             const resp = await API.get('/accounts/profile/');
@@ -1315,15 +1433,31 @@
             loadReferral();
         });
 
-        // Profile panel
+        // Profile panel — load momo accounts on open
         document.getElementById('profile-btn')?.addEventListener('click', () => {
             document.getElementById('profile-panel')?.classList.add('show');
             document.getElementById('profile-panel')?.classList.remove('hidden');
+            loadMomoAccounts();
         });
         document.getElementById('game-profile-btn')?.addEventListener('click', () => {
             document.getElementById('profile-panel')?.classList.add('show');
             document.getElementById('profile-panel')?.classList.remove('hidden');
+            loadMomoAccounts();
         });
+
+        // Momo account management in profile
+        document.getElementById('add-momo-btn')?.addEventListener('click', () => {
+            document.getElementById('add-momo-form').style.display = 'block';
+            document.getElementById('add-momo-btn').style.display = 'none';
+            document.getElementById('profile-momo-phone').value = '';
+            document.getElementById('profile-momo-verify-status').style.display = 'none';
+            document.getElementById('profile-momo-phone').focus();
+        });
+        document.getElementById('cancel-add-momo')?.addEventListener('click', () => {
+            document.getElementById('add-momo-form').style.display = 'none';
+            document.getElementById('add-momo-btn').style.display = 'block';
+        });
+        document.getElementById('profile-momo-phone')?.addEventListener('input', handleProfileMomoPhoneInput);
         document.getElementById('close-profile')?.addEventListener('click', () => {
             document.getElementById('profile-panel')?.classList.remove('show');
         });
