@@ -648,8 +648,19 @@
             const resp = await API.get('/payments/wallet/');
             if (resp.ok) {
                 const data = await resp.json();
+                const balance = parseFloat(data.balance);
                 document.getElementById('lobby-balance').textContent =
-                    `${data.currency_symbol}${parseFloat(data.balance).toFixed(2)}`;
+                    `${data.currency_symbol}${balance.toFixed(2)}`;
+
+                // Show/hide deposit CTA overlay
+                const ctaOverlay = document.getElementById('deposit-cta-overlay');
+                if (ctaOverlay) {
+                    if (balance <= 0) {
+                        ctaOverlay.classList.remove('hidden');
+                    } else {
+                        ctaOverlay.classList.add('hidden');
+                    }
+                }
             }
         } catch (e) { console.error('Wallet load error:', e); }
     }
@@ -1432,6 +1443,7 @@
 
         // Lobby actions
         document.getElementById('deposit-btn')?.addEventListener('click', () => showModal('deposit-modal'));
+        document.getElementById('cta-deposit-btn')?.addEventListener('click', () => showModal('deposit-modal'));
         document.getElementById('withdraw-btn')?.addEventListener('click', () => showModal('withdraw-modal'));
         document.getElementById('history-btn')?.addEventListener('click', () => {
             showModal('history-modal');

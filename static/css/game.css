@@ -572,6 +572,73 @@ html, body {
 }
 .verified-icon { font-weight: bold; font-size: 1rem; }
 
+/* ==================== DEPOSIT CTA OVERLAY ==================== */
+.deposit-cta-overlay {
+    position: absolute; inset: 0; z-index: 50;
+    display: flex; align-items: center; justify-content: center;
+    pointer-events: all;
+}
+.deposit-cta-overlay.hidden { display: none; }
+.cta-backdrop {
+    position: absolute; inset: 0;
+    background: radial-gradient(ellipse at center, rgba(13,17,23,0.7) 0%, rgba(13,17,23,0.95) 100%);
+    backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+}
+.cta-content {
+    position: relative; z-index: 2; text-align: center;
+    padding: 2rem; max-width: 360px; width: 90%;
+    animation: ctaFadeIn 0.6s ease-out;
+}
+@keyframes ctaFadeIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+
+.cta-coin-stack { display: flex; justify-content: center; gap: -8px; margin-bottom: 1.2rem; }
+.cta-coin {
+    width: 48px; height: 48px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 900; font-size: 1.2rem; color: #0D1117;
+    animation: coinFloat 2s ease-in-out infinite;
+}
+.cta-coin.c1 { background: linear-gradient(135deg, #ffc800, #e6a800); animation-delay: 0s; margin-right: -8px; z-index: 3; }
+.cta-coin.c2 { background: linear-gradient(135deg, #ffdd44, #ffc800); animation-delay: 0.2s; margin-right: -8px; z-index: 2; }
+.cta-coin.c3 { background: linear-gradient(135deg, #ffe066, #ffdd44); animation-delay: 0.4s; z-index: 1; }
+@keyframes coinFloat {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-8px); }
+}
+.cta-title {
+    font-size: 1.6rem; font-weight: 800; color: #fff;
+    margin-bottom: 0.4rem;
+    text-shadow: 0 0 30px rgba(255,200,0,0.3);
+}
+.cta-subtitle { color: #aaa; font-size: 0.9rem; margin-bottom: 1.5rem; line-height: 1.4; }
+
+.cta-deposit-btn {
+    position: relative; display: inline-block;
+    padding: 14px 40px; border: none; border-radius: 12px;
+    background: linear-gradient(135deg, #ffc800, #e6a800);
+    color: #0D1117; font-size: 1.1rem; font-weight: 800;
+    cursor: pointer; overflow: hidden;
+    box-shadow: 0 4px 20px rgba(255,200,0,0.4), 0 0 40px rgba(255,200,0,0.15);
+    transition: transform 0.2s, box-shadow 0.2s;
+    transform: perspective(600px) rotateX(2deg);
+}
+.cta-deposit-btn:hover {
+    transform: perspective(600px) rotateX(0deg) scale(1.05);
+    box-shadow: 0 6px 30px rgba(255,200,0,0.5), 0 0 60px rgba(255,200,0,0.2);
+}
+.cta-deposit-btn:active { transform: perspective(600px) scale(0.97); }
+.cta-btn-glow {
+    position: absolute; inset: -2px; border-radius: 14px;
+    background: linear-gradient(45deg, transparent, rgba(255,255,255,0.3), transparent);
+    animation: btnGlow 2s linear infinite;
+}
+@keyframes btnGlow {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
+}
+.cta-btn-text { position: relative; z-index: 1; }
+.cta-hint { color: #666; font-size: 0.75rem; margin-top: 1rem; }
+
 /* ==================== PROFILE MOMO ACCOUNTS ==================== */
 .section-title { font-size: 0.95rem; margin-bottom: 8px; color: #ccc; }
 .momo-accounts-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
