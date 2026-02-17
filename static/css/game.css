@@ -545,6 +545,33 @@ html, body {
 }
 @keyframes toastIn { from { transform: translateX(-50%) translateY(20px); opacity: 0; } to { transform: translateX(-50%) translateY(0); opacity: 1; } }
 
+/* ==================== MOMO VERIFICATION ==================== */
+.network-badge {
+    display: inline-block; margin-top: 4px; padding: 2px 10px;
+    border-radius: 12px; font-size: 0.75rem; font-weight: 600; letter-spacing: 0.5px;
+}
+.network-badge.mtn { background: #ffcc00; color: #1a1a2e; }
+.network-badge.vod { background: #e60000; color: #fff; }
+.network-badge.air { background: #e60000; color: #fff; }
+.verify-status {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 0.85rem; color: var(--casino-muted); padding: 4px 0;
+}
+.verify-status.error { color: #e74c3c; }
+.spinner-sm {
+    width: 14px; height: 14px; border: 2px solid var(--casino-border);
+    border-top-color: var(--casino-gold); border-radius: 50%;
+    animation: spin 0.6s linear infinite; display: inline-block;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.verified-info { padding: 6px 0; }
+.verified-name-card {
+    display: flex; align-items: center; gap: 8px;
+    background: rgba(39, 174, 96, 0.12); border: 1px solid rgba(39, 174, 96, 0.3);
+    border-radius: 8px; padding: 8px 12px; font-size: 0.9rem; color: #27ae60;
+}
+.verified-icon { font-weight: bold; font-size: 1rem; }
+
 /* ==================== RESPONSIVE ==================== */
 @media (max-height: 500px) {
     .lobby-card { padding: 1rem; }

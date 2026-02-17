@@ -11,7 +11,7 @@
     {% load static %}
     <link rel="icon" type="image/svg+xml" href="{% static 'images/cashflip-favicon.svg' %}">
     <meta name="theme-color" content="#0D1117">
-    <link rel="stylesheet" href="{% static 'css/game.css' %}?v=20260217b">
+    <link rel="stylesheet" href="{% static 'css/game.css' %}?v=20260217c">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
 <body>
@@ -253,18 +253,22 @@
                     </div>
                     <div class="input-group">
                         <label>Mobile Number</label>
-                        <input type="tel" id="dep-phone" placeholder="0241234567" maxlength="12">
+                        <input type="tel" id="dep-phone" placeholder="0241234567" maxlength="12" autocomplete="off">
+                        <small id="dep-network-label" class="network-badge" style="display:none;"></small>
                     </div>
-                    <div class="input-group">
-                        <label>Network</label>
-                        <select id="dep-network">
-                            <option value="">Auto-detect</option>
-                            <option value="MTN">MTN</option>
-                            <option value="VOD">Vodafone</option>
-                            <option value="AIR">AirtelTigo</option>
-                        </select>
+                    <div id="dep-verify-status" style="display:none;" class="verify-status">
+                        <span id="dep-verify-spinner" class="spinner-sm" style="display:none;"></span>
+                        <span id="dep-verify-text"></span>
                     </div>
-                    <button id="dep-momo-btn" class="btn-primary">Pay with Mobile Money</button>
+                    <div id="dep-verified-info" style="display:none;" class="verified-info">
+                        <div class="verified-name-card">
+                            <span class="verified-icon">✓</span>
+                            <span id="dep-verified-name"></span>
+                        </div>
+                    </div>
+                    <input type="hidden" id="dep-account-id" value="">
+                    <input type="hidden" id="dep-network" value="">
+                    <button id="dep-momo-btn" class="btn-primary" disabled>Pay with Mobile Money</button>
                 </div>
                 <div id="card-tab" class="tab-content">
                     <div class="input-group">
@@ -293,18 +297,22 @@
                 </div>
                 <div class="input-group">
                     <label>Mobile Number</label>
-                    <input type="tel" id="wdr-phone" placeholder="0241234567" maxlength="12">
+                    <input type="tel" id="wdr-phone" placeholder="0241234567" maxlength="12" autocomplete="off">
+                    <small id="wdr-network-label" class="network-badge" style="display:none;"></small>
                 </div>
-                <div class="input-group">
-                    <label>Network</label>
-                    <select id="wdr-network">
-                        <option value="">Auto-detect</option>
-                        <option value="MTN">MTN</option>
-                        <option value="VOD">Vodafone</option>
-                        <option value="AIR">AirtelTigo</option>
-                    </select>
+                <div id="wdr-verify-status" style="display:none;" class="verify-status">
+                    <span id="wdr-verify-spinner" class="spinner-sm" style="display:none;"></span>
+                    <span id="wdr-verify-text"></span>
                 </div>
-                <button id="wdr-btn" class="btn-primary">Withdraw</button>
+                <div id="wdr-verified-info" style="display:none;" class="verified-info">
+                    <div class="verified-name-card">
+                        <span class="verified-icon">✓</span>
+                        <span id="wdr-verified-name"></span>
+                    </div>
+                </div>
+                <input type="hidden" id="wdr-account-id" value="">
+                <input type="hidden" id="wdr-network" value="">
+                <button id="wdr-btn" class="btn-primary" disabled>Withdraw</button>
                 <div id="wdr-status" class="status-msg"></div>
             </div>
         </div>
@@ -404,6 +412,6 @@
         <span id="toast-message"></span>
     </div>
 
-    <script src="{% static 'js/game.js' %}?v=20260217d"></script>
+    <script src="{% static 'js/game.js' %}?v=20260217e"></script>
 </body>
 </html>

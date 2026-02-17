@@ -925,29 +925,135 @@
     }
 
     // ==================== PAYMENTS ====================
+
+    // Client-side network detection from phone prefix (Ghana numbers)
+    const NETWORK_PREFIXES = {
+        '023': 'MTN', '024': 'MTN', '054': 'MTN', '055': 'MTN', '059': 'MTN',
+        '020': 'VOD', '050': 'VOD',
+        '027': 'AIR', '057': 'AIR', '026': 'AIR', '056': 'AIR',
+    };
+    const NETWORK_NAMES = { MTN: 'MTN Mobile Money', VOD: 'Telecel Cash', AIR: 'AirtelTigo Money' };
+
+    function detectNetworkFromPhone(phone) {
+        const cleaned = phone.replace(/\D/g, '');
+        const prefix3 = cleaned.substring(0, 3);
+        return NETWORK_PREFIXES[prefix3] || null;
+    }
+
+    let _verifyTimeout = null;
+    let _lastVerifiedPhone = '';
+
+    function resetDepositVerification() {
+        const btn = document.getElementById('dep-momo-btn');
+        const verifyStatus = document.getElementById('dep-verify-status');
+        const verifiedInfo = document.getElementById('dep-verified-info');
+        if (btn) btn.disabled = true;
+        if (verifyStatus) verifyStatus.style.display = 'none';
+        if (verifiedInfo) verifiedInfo.style.display = 'none';
+        document.getElementById('dep-account-id').value = '';
+        _lastVerifiedPhone = '';
+    }
+
+    function handleDepPhoneInput() {
+        const phoneEl = document.getElementById('dep-phone');
+        const networkLabel = document.getElementById('dep-network-label');
+        const networkHidden = document.getElementById('dep-network');
+        const phone = phoneEl.value.replace(/\D/g, '');
+
+        // Auto-detect network from prefix
+        const nw = detectNetworkFromPhone(phone);
+        if (nw && phone.length >= 3) {
+            networkLabel.textContent = NETWORK_NAMES[nw] || nw;
+            networkLabel.className = 'network-badge ' + nw.toLowerCase();
+            networkLabel.style.display = 'inline-block';
+            networkHidden.value = nw;
+        } else {
+            networkLabel.style.display = 'none';
+            networkHidden.value = '';
+        }
+
+        // Reset verification if phone changed
+        if (phone !== _lastVerifiedPhone) {
+            resetDepositVerification();
+        }
+
+        // Auto-verify when 10 digits entered
+        if (_verifyTimeout) clearTimeout(_verifyTimeout);
+        if (phone.length === 10 && nw && phone !== _lastVerifiedPhone) {
+            _verifyTimeout = setTimeout(() => verifyDepositPhone(phone), 400);
+        }
+    }
+
+    async function verifyDepositPhone(phone) {
+        const verifyStatus = document.getElementById('dep-verify-status');
+        const spinner = document.getElementById('dep-verify-spinner');
+        const verifyText = document.getElementById('dep-verify-text');
+        const verifiedInfo = document.getElementById('dep-verified-info');
+        const verifiedName = document.getElementById('dep-verified-name');
+        const btn = document.getElementById('dep-momo-btn');
+
+        // Show verifying state
+        verifyStatus.style.display = 'flex';
+        verifyStatus.className = 'verify-status';
+        spinner.style.display = 'inline-block';
+        verifyText.textContent = 'Verifying account...';
+        verifiedInfo.style.display = 'none';
+        btn.disabled = true;
+
+        try {
+            const resp = await API.post('/payments/momo-accounts/add/', {
+                mobile_number: phone,
+            });
+            const data = await resp.json();
+
+            if (data.success && data.account) {
+                spinner.style.display = 'none';
+                verifyStatus.style.display = 'none';
+                verifiedInfo.style.display = 'block';
+                verifiedName.textContent = `${data.account.verified_name} (${NETWORK_NAMES[data.account.network] || data.account.network})`;
+                document.getElementById('dep-account-id').value = data.account.id;
+                document.getElementById('dep-network').value = data.account.network;
+                btn.disabled = false;
+                _lastVerifiedPhone = phone;
+            } else {
+                spinner.style.display = 'none';
+                verifyText.textContent = data.error || 'Verification failed';
+                verifyStatus.className = 'verify-status error';
+            }
+        } catch (e) {
+            spinner.style.display = 'none';
+            verifyText.textContent = 'Could not verify. Check number and try again.';
+            verifyStatus.className = 'verify-status error';
+        }
+    }
+
     async function depositMoMo() {
         const amount = document.getElementById('dep-amount')?.value;
-        const phone = document.getElementById('dep-phone')?.value;
-        const network = document.getElementById('dep-network')?.value;
+        const accountId = document.getElementById('dep-account-id')?.value;
         const statusEl = document.getElementById('dep-status');
 
-        if (!amount || !phone) {
-            statusEl.textContent = 'Amount and phone required';
+        if (!amount) {
+            statusEl.textContent = 'Enter an amount';
+            statusEl.className = 'status-msg error';
+            return;
+        }
+        if (!accountId) {
+            statusEl.textContent = 'Enter your mobile number and wait for verification';
             statusEl.className = 'status-msg error';
             return;
         }
 
-        statusEl.textContent = 'Processing...';
+        statusEl.textContent = 'Sending payment prompt...';
         statusEl.className = 'status-msg';
 
         try {
             const resp = await API.post('/payments/deposit/mobile-money/', {
-                amount, mobile_number: phone, network,
+                amount, account_id: accountId,
             });
             const data = await resp.json();
 
             if (data.success) {
-                statusEl.textContent = 'Payment prompt sent! Check your phone.';
+                statusEl.textContent = `Payment prompt sent to ${data.verified_name || 'your phone'}! Check your phone.`;
                 statusEl.className = 'status-msg success';
                 setTimeout(() => {
                     hideModal('deposit-modal');
@@ -994,29 +1100,117 @@
         }
     }
 
+    // Withdraw phone input handler (same network detect + verify pattern)
+    let _wdrVerifyTimeout = null;
+    let _wdrLastVerifiedPhone = '';
+
+    function resetWithdrawVerification() {
+        const btn = document.getElementById('wdr-btn');
+        const verifyStatus = document.getElementById('wdr-verify-status');
+        const verifiedInfo = document.getElementById('wdr-verified-info');
+        if (btn) btn.disabled = true;
+        if (verifyStatus) verifyStatus.style.display = 'none';
+        if (verifiedInfo) verifiedInfo.style.display = 'none';
+        document.getElementById('wdr-account-id').value = '';
+        _wdrLastVerifiedPhone = '';
+    }
+
+    function handleWdrPhoneInput() {
+        const phoneEl = document.getElementById('wdr-phone');
+        const networkLabel = document.getElementById('wdr-network-label');
+        const networkHidden = document.getElementById('wdr-network');
+        const phone = phoneEl.value.replace(/\D/g, '');
+
+        const nw = detectNetworkFromPhone(phone);
+        if (nw && phone.length >= 3) {
+            networkLabel.textContent = NETWORK_NAMES[nw] || nw;
+            networkLabel.className = 'network-badge ' + nw.toLowerCase();
+            networkLabel.style.display = 'inline-block';
+            networkHidden.value = nw;
+        } else {
+            networkLabel.style.display = 'none';
+            networkHidden.value = '';
+        }
+
+        if (phone !== _wdrLastVerifiedPhone) {
+            resetWithdrawVerification();
+        }
+
+        if (_wdrVerifyTimeout) clearTimeout(_wdrVerifyTimeout);
+        if (phone.length === 10 && nw && phone !== _wdrLastVerifiedPhone) {
+            _wdrVerifyTimeout = setTimeout(() => verifyWithdrawPhone(phone), 400);
+        }
+    }
+
+    async function verifyWithdrawPhone(phone) {
+        const verifyStatus = document.getElementById('wdr-verify-status');
+        const spinner = document.getElementById('wdr-verify-spinner');
+        const verifyText = document.getElementById('wdr-verify-text');
+        const verifiedInfo = document.getElementById('wdr-verified-info');
+        const verifiedName = document.getElementById('wdr-verified-name');
+        const btn = document.getElementById('wdr-btn');
+
+        verifyStatus.style.display = 'flex';
+        verifyStatus.className = 'verify-status';
+        spinner.style.display = 'inline-block';
+        verifyText.textContent = 'Verifying account...';
+        verifiedInfo.style.display = 'none';
+        btn.disabled = true;
+
+        try {
+            const resp = await API.post('/payments/momo-accounts/add/', {
+                mobile_number: phone,
+            });
+            const data = await resp.json();
+
+            if (data.success && data.account) {
+                spinner.style.display = 'none';
+                verifyStatus.style.display = 'none';
+                verifiedInfo.style.display = 'block';
+                verifiedName.textContent = `${data.account.verified_name} (${NETWORK_NAMES[data.account.network] || data.account.network})`;
+                document.getElementById('wdr-account-id').value = data.account.id;
+                document.getElementById('wdr-network').value = data.account.network;
+                btn.disabled = false;
+                _wdrLastVerifiedPhone = phone;
+            } else {
+                spinner.style.display = 'none';
+                verifyText.textContent = data.error || 'Verification failed';
+                verifyStatus.className = 'verify-status error';
+            }
+        } catch (e) {
+            spinner.style.display = 'none';
+            verifyText.textContent = 'Could not verify. Check number and try again.';
+            verifyStatus.className = 'verify-status error';
+        }
+    }
+
     async function doWithdraw() {
         const amount = document.getElementById('wdr-amount')?.value;
-        const phone = document.getElementById('wdr-phone')?.value;
-        const network = document.getElementById('wdr-network')?.value;
+        const accountId = document.getElementById('wdr-account-id')?.value;
         const statusEl = document.getElementById('wdr-status');
 
-        if (!amount || !phone) {
-            statusEl.textContent = 'Amount and phone required';
+        if (!amount) {
+            statusEl.textContent = 'Enter an amount';
+            statusEl.className = 'status-msg error';
+            return;
+        }
+        if (!accountId) {
+            statusEl.textContent = 'Enter your mobile number and wait for verification';
             statusEl.className = 'status-msg error';
             return;
         }
 
-        statusEl.textContent = 'Processing...';
+        statusEl.textContent = 'Processing withdrawal...';
         statusEl.className = 'status-msg';
 
         try {
             const resp = await API.post('/payments/withdraw/', {
-                amount, mobile_number: phone, network,
+                amount, account_id: accountId,
             });
             const data = await resp.json();
 
             if (data.success) {
-                statusEl.textContent = 'Withdrawal processing!';
+                statusEl.textContent = 'Withdrawal processing! Funds will arrive shortly.';
                 statusEl.className = 'status-msg success';
                 setTimeout(() => {
                     hideModal('withdraw-modal');
@@ -1170,6 +1364,10 @@
                 document.getElementById(tabId)?.classList.add('active');
             });
         });
+
+        // Phone input: auto-detect network + verify name
+        document.getElementById('dep-phone')?.addEventListener('input', handleDepPhoneInput);
+        document.getElementById('wdr-phone')?.addEventListener('input', handleWdrPhoneInput);
 
         // Payment buttons
         document.getElementById('dep-momo-btn')?.addEventListener('click', depositMoMo);
