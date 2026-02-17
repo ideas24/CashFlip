@@ -1022,9 +1022,18 @@
             }
         } catch (e) {
             spinner.style.display = 'none';
-            verifyText.textContent = 'Could not verify. Check number and try again.';
+            verifyText.textContent = e?.status === 429 ? 'Too many attempts. Wait a minute and try again.' : 'Could not verify. Check number and try again.';
             verifyStatus.className = 'verify-status error';
         }
+    }
+
+    function parseApiError(resp, data) {
+        if (resp?.status === 429) return 'Too many requests. Please wait a moment and try again.';
+        if (resp?.status === 403) return data?.error || 'Access denied.';
+        if (resp?.status === 404) return data?.error || 'Account not found.';
+        if (data?.error) return data.error;
+        if (data?.detail) return data.detail;
+        return 'Something went wrong. Please try again.';
     }
 
     async function depositMoMo() {
@@ -1053,18 +1062,18 @@
             const data = await resp.json();
 
             if (data.success) {
-                statusEl.textContent = `Payment prompt sent to ${data.verified_name || 'your phone'}! Check your phone.`;
+                statusEl.textContent = `Payment prompt sent to ${data.verified_name || 'your phone'}! Approve on your phone.`;
                 statusEl.className = 'status-msg success';
                 setTimeout(() => {
                     hideModal('deposit-modal');
                     loadWalletBalance();
-                }, 3000);
+                }, 4000);
             } else {
-                statusEl.textContent = data.error || 'Deposit failed';
+                statusEl.textContent = parseApiError(resp, data);
                 statusEl.className = 'status-msg error';
             }
         } catch (e) {
-            statusEl.textContent = 'Network error';
+            statusEl.textContent = 'Connection failed. Check your internet and try again.';
             statusEl.className = 'status-msg error';
         }
     }
@@ -1095,7 +1104,7 @@
                 statusEl.className = 'status-msg error';
             }
         } catch (e) {
-            statusEl.textContent = 'Network error';
+            statusEl.textContent = 'Connection failed. Check your internet and try again.';
             statusEl.className = 'status-msg error';
         }
     }
@@ -1210,18 +1219,18 @@
             const data = await resp.json();
 
             if (data.success) {
-                statusEl.textContent = 'Withdrawal processing! Funds will arrive shortly.';
+                statusEl.textContent = 'Withdrawal sent! Funds will arrive in 1-5 minutes.';
                 statusEl.className = 'status-msg success';
                 setTimeout(() => {
                     hideModal('withdraw-modal');
                     loadWalletBalance();
-                }, 3000);
+                }, 4000);
             } else {
-                statusEl.textContent = data.error || 'Withdrawal failed';
+                statusEl.textContent = parseApiError(resp, data);
                 statusEl.className = 'status-msg error';
             }
         } catch (e) {
-            statusEl.textContent = 'Network error';
+            statusEl.textContent = 'Connection failed. Check your internet and try again.';
             statusEl.className = 'status-msg error';
         }
     }
