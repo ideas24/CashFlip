@@ -85,69 +85,85 @@ def start_game(request):
             status=status.HTTP_400_BAD_REQUEST
         )
 
-    # Check wallet balance
+    # All wallet operations in a single atomic transaction to prevent
+    # race conditions and ensure select_for_update works correctly.
     from wallet.models import Wallet, WalletTransaction
-    try:
-        wallet = Wallet.objects.select_for_update().get(player=player)
-    except Wallet.DoesNotExist:
-        return Response({'error': 'Wallet not found. Please make a deposit first.'}, status=status.HTTP_400_BAD_REQUEST)
 
-    # Grant test balance if simulation is active and configured
-    if sim_active and sim.grant_test_balance > 0:
-        grant_amount = sim.grant_test_balance
-        if wallet.balance < grant_amount:
+    try:
+        with transaction.atomic():
+            # Lock wallet row — prevents concurrent game starts
+            try:
+                wallet = Wallet.objects.select_for_update().get(player=player)
+            except Wallet.DoesNotExist:
+                return Response({'error': 'Wallet not found. Please make a deposit first.'}, status=status.HTTP_400_BAD_REQUEST)
+
+            # Re-check active session inside transaction (double-start guard)
+            if GameSession.objects.filter(player=player, status__in=['active', 'paused']).exists():
+                return Response(
+                    {'error': 'You already have an active game session'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Grant test balance if simulation is active and configured
+            if sim_active and sim.grant_test_balance > 0:
+                grant_amount = sim.grant_test_balance
+                if wallet.balance < grant_amount:
+                    balance_before = wallet.balance
+                    wallet.balance = grant_amount
+                    wallet.save(update_fields=['balance', 'updated_at'])
+                    tx_ref = f'CF-TEST-{uuid.uuid4().hex[:8].upper()}'
+                    WalletTransaction.objects.create(
+                        wallet=wallet,
+                        amount=grant_amount - balance_before,
+                        tx_type='test_credit',
+                        reference=tx_ref,
+                        balance_before=balance_before,
+                        balance_after=wallet.balance,
+                        metadata={'sim_config': sim.name},
+                    )
+                    logger.info(f'[SIM] Granted test balance {grant_amount} to {player.phone}')
+
+            # Balance check with wallet row locked — no race condition
+            if wallet.available_balance < stake_amount:
+                return Response(
+                    {'error': f'Insufficient balance. Available: {currency.symbol}{wallet.available_balance}'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Deduct stake from wallet
             balance_before = wallet.balance
-            wallet.balance = grant_amount
-            wallet.save(update_fields=['balance', 'updated_at'])
-            tx_ref = f'CF-TEST-{uuid.uuid4().hex[:8].upper()}'
+            wallet.balance -= stake_amount
+            wallet.locked_balance += stake_amount
+            wallet.save(update_fields=['balance', 'locked_balance', 'updated_at'])
+
+            tx_ref = f'CF-STAKE-{uuid.uuid4().hex[:8].upper()}'
             WalletTransaction.objects.create(
                 wallet=wallet,
-                amount=grant_amount - balance_before,
-                tx_type='test_credit',
+                amount=-stake_amount,
+                tx_type='stake',
                 reference=tx_ref,
                 balance_before=balance_before,
                 balance_after=wallet.balance,
-                metadata={'sim_config': sim.name},
+                metadata={'currency': currency_code},
             )
-            logger.info(f'[SIM] Granted test balance {grant_amount} to {player.phone}')
 
-    if wallet.available_balance < stake_amount:
-        return Response(
-            {'error': f'Insufficient balance. Available: {currency.symbol}{wallet.available_balance}'},
-            status=status.HTTP_400_BAD_REQUEST
-        )
+            # Create session
+            session = GameSession.objects.create(
+                player=player,
+                currency=currency,
+                stake_amount=stake_amount,
+                status='active',
+                client_seed=client_seed,
+            )
+            session.generate_seeds()
 
-    with transaction.atomic():
-        # Deduct stake from wallet
-        balance_before = wallet.balance
-        wallet.balance -= stake_amount
-        wallet.locked_balance += stake_amount
-        wallet.save(update_fields=['balance', 'locked_balance', 'updated_at'])
+            # Track simulation usage
+            if sim_active:
+                sim.increment_usage()
 
-        tx_ref = f'CF-STAKE-{uuid.uuid4().hex[:8].upper()}'
-        WalletTransaction.objects.create(
-            wallet=wallet,
-            amount=-stake_amount,
-            tx_type='stake',
-            reference=tx_ref,
-            balance_before=balance_before,
-            balance_after=wallet.balance,
-            metadata={'currency': currency_code},
-        )
-
-        # Create session
-        session = GameSession.objects.create(
-            player=player,
-            currency=currency,
-            stake_amount=stake_amount,
-            status='active',
-            client_seed=client_seed,
-        )
-        session.generate_seeds()
-
-        # Track simulation usage
-        if sim_active:
-            sim.increment_usage()
+    except Exception as e:
+        logger.error(f'start_game transaction failed for {player.phone}: {e}')
+        return Response({'error': 'Failed to start game. Please try again.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     response_data = {
         'session_id': str(session.id),
@@ -181,9 +197,10 @@ def flip(request):
     if result['is_zero']:
         from wallet.models import Wallet
         try:
-            wallet = Wallet.objects.get(player=player)
-            wallet.locked_balance = max(Decimal('0'), wallet.locked_balance - session.stake_amount)
-            wallet.save(update_fields=['locked_balance', 'updated_at'])
+            with transaction.atomic():
+                wallet = Wallet.objects.select_for_update().get(player=player)
+                wallet.locked_balance = max(Decimal('0'), wallet.locked_balance - session.stake_amount)
+                wallet.save(update_fields=['locked_balance', 'updated_at'])
         except Wallet.DoesNotExist:
             pass
 
