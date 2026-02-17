@@ -514,6 +514,55 @@ def orchard_webhook(request):
 
 
 @csrf_exempt
+def paystack_success(request):
+    """Paystack success callback — proxy router redirects here after successful payment."""
+    reference = request.GET.get('reference', '')
+    logger.info(f'Paystack success callback: {reference}')
+
+    from payments.models import Deposit
+
+    deposit = None
+    if reference:
+        deposit = Deposit.objects.filter(paystack_reference=reference).first()
+
+    if deposit and deposit.status == 'completed':
+        amount = deposit.amount
+        return JsonResponse({'status': 'success', 'message': f'Payment of GHS {amount} received.', 'reference': reference})
+
+    # If not yet completed, try verifying with Paystack now
+    if deposit and deposit.status in ('pending', 'processing'):
+        success = process_paystack_webhook({
+            'event': 'charge.success',
+            'data': {'reference': reference, 'status': 'success'},
+        })
+        if success:
+            deposit.refresh_from_db()
+            return JsonResponse({'status': 'success', 'message': f'Payment of GHS {deposit.amount} received.', 'reference': reference})
+
+    return JsonResponse({'status': 'pending', 'message': 'Payment is being processed.', 'reference': reference})
+
+
+@csrf_exempt
+def paystack_cancel(request):
+    """Paystack cancel callback — proxy router redirects here when payment is cancelled/failed."""
+    reference = request.GET.get('reference', '')
+    error = request.GET.get('error', '')
+    payment_status = request.GET.get('status', 'cancelled')
+    logger.info(f'Paystack cancel callback: {reference} status={payment_status} error={error}')
+
+    from payments.models import Deposit
+
+    if reference:
+        deposit = Deposit.objects.filter(paystack_reference=reference, status__in=('pending', 'processing')).first()
+        if deposit:
+            deposit.status = 'failed'
+            deposit.failure_reason = error or payment_status
+            deposit.save(update_fields=['status', 'failure_reason'])
+
+    return JsonResponse({'status': 'cancelled', 'message': 'Payment was cancelled or failed.', 'reference': reference})
+
+
+@csrf_exempt
 @require_POST
 def paystack_webhook(request):
     """Handle Paystack webhooks."""

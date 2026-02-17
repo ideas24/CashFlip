@@ -243,7 +243,7 @@ def initiate_mobile_money_deposit(player, amount, mobile_number, network=None):
     if network == 'UNK':
         return False, 'Could not detect network. Please select manually.'
 
-    payment_ref = f'CF-DEP-{uuid.uuid4().hex[:8].upper()}'
+    payment_ref = f'{settings.PAYMENT_PREFIX_DEPOSIT}{uuid.uuid4().hex[:8].upper()}'
     normalized = normalize_phone(mobile_number)
     timestamp = datetime.now(dt_timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
 
@@ -323,7 +323,7 @@ def initiate_card_deposit(player, amount):
     """
     from payments.models import Deposit
 
-    payment_ref = f'CF-PS-{uuid.uuid4().hex[:8].upper()}'
+    payment_ref = f'{settings.PAYMENT_PREFIX_PAYSTACK}{uuid.uuid4().hex[:8].upper()}'
 
     deposit = Deposit.objects.create(
         player=player,
@@ -397,8 +397,8 @@ def initiate_withdrawal(player, amount, mobile_number, network=None):
         network = detect_network(mobile_number)
 
     normalized = normalize_phone(mobile_number)
-    payout_ref = f'CF-PAY-{uuid.uuid4().hex[:8].upper()}'
-    ext_trid = f'CF-PAY-{int(time.time())}-{payout_ref[-8:]}'
+    payout_ref = f'{settings.PAYMENT_PREFIX_PAYOUT}{uuid.uuid4().hex[:8].upper()}'
+    ext_trid = f'{settings.PAYMENT_PREFIX_PAYOUT}{int(time.time())}-{payout_ref[-8:]}'
     timestamp = datetime.now(dt_timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
 
     withdrawal = Withdrawal.objects.create(
@@ -481,8 +481,8 @@ def process_orchard_callback(reference, trans_status, resp_code, data):
 
     logger.info(f'Orchard callback: ref={reference}, status={trans_status}, code={resp_code}')
 
-    # Deposit callback (CF-DEP- prefix)
-    if reference.startswith('CF-DEP-'):
+    # Deposit callback
+    if reference.startswith(settings.PAYMENT_PREFIX_DEPOSIT):
         deposit = Deposit.objects.filter(orchard_reference=reference).first()
         if not deposit:
             logger.warning(f'Deposit not found: {reference}')
@@ -505,8 +505,8 @@ def process_orchard_callback(reference, trans_status, resp_code, data):
             deposit.save()
             return True
 
-    # Withdrawal callback (CF-PAY- prefix)
-    if reference.startswith('CF-PAY-'):
+    # Withdrawal callback
+    if reference.startswith(settings.PAYMENT_PREFIX_PAYOUT):
         withdrawal = Withdrawal.objects.filter(payout_ext_trid=reference).first()
         if not withdrawal:
             withdrawal = Withdrawal.objects.filter(payout_reference=reference).first()
@@ -542,7 +542,7 @@ def process_paystack_webhook(webhook_data):
     data = webhook_data.get('data', {})
     reference = data.get('reference', '')
 
-    if not reference.startswith('CF-PS-'):
+    if not reference.startswith(settings.PAYMENT_PREFIX_PAYSTACK):
         return False
 
     deposit = Deposit.objects.filter(paystack_reference=reference).first()

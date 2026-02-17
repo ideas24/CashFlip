@@ -222,6 +222,12 @@ PAYSTACK_PUBLIC_KEY = os.getenv('PAYSTACK_PUBLIC_KEY')
 PAYSTACK_CALLBACK_URL = os.getenv('PAYSTACK_CALLBACK_URL')
 PAYSTACK_WEBHOOK_URL = os.getenv('PAYSTACK_WEBHOOK_URL')
 
+# ============ Payment Reference Prefixes ============
+# Staging: CF-PS-, CF-DEP-, CF-PAY-  |  Production: CFP-PS-, CFP-DEP-, CFP-PAY-
+PAYMENT_PREFIX_PAYSTACK = os.getenv('PAYMENT_PREFIX_PAYSTACK', 'CF-PS-')
+PAYMENT_PREFIX_DEPOSIT = os.getenv('PAYMENT_PREFIX_DEPOSIT', 'CF-DEP-')
+PAYMENT_PREFIX_PAYOUT = os.getenv('PAYMENT_PREFIX_PAYOUT', 'CF-PAY-')
+
 # ============ WhatsApp OTP (reachmint bot — authentication template) ============
 WHATSAPP_ACCESS_TOKEN = os.getenv('WHATSAPP_ACCESS_TOKEN')
 WHATSAPP_PHONE_NUMBER_ID = os.getenv('WHATSAPP_PHONE_NUMBER_ID')

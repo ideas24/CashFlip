@@ -31,4 +31,8 @@ urlpatterns = [
     # Webhooks
     path('webhooks/orchard/', views.orchard_webhook, name='orchard_webhook'),
     path('webhooks/paystack/', views.paystack_webhook, name='paystack_webhook'),
+
+    # Paystack callback endpoints (proxy router redirects here)
+    path('paystack-success/', views.paystack_success, name='paystack_success'),
+    path('paystack-cancel/', views.paystack_cancel, name='paystack_cancel'),
 ]
