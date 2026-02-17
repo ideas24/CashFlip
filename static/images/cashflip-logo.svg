@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 80" fill="none">
+  <!-- Coin icon -->
+  <circle cx="40" cy="40" r="32" fill="#F5C842"/>
+  <circle cx="40" cy="40" r="27" fill="none" stroke="#D4A72C" stroke-width="2"/>
+  <text x="40" y="48" text-anchor="middle" font-family="'Orbitron', sans-serif" font-weight="900" font-size="24" fill="#0D1117">CF</text>
+  <!-- Arrow flip indicator -->
+  <path d="M18 20 Q40 8 62 20" stroke="#00BFA6" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+  <polygon points="60,16 66,21 60,24" fill="#00BFA6"/>
+  <path d="M62 60 Q40 72 18 60" stroke="#00BFA6" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+  <polygon points="20,56 14,61 20,64" fill="#00BFA6"/>
+  <!-- Wordmark -->
+  <text x="88" y="52" font-family="'Orbitron', sans-serif" font-weight="900" font-size="36" fill="#F0F4F8">CASH</text>
+  <text x="218" y="52" font-family="'Orbitron', sans-serif" font-weight="900" font-size="36" fill="#00BFA6">FLIP</text>
+</svg>

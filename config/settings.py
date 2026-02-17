@@ -32,6 +32,7 @@ INSTALLED_APPS = [
     'django_filters',
     'import_export',
     'social_django',
+    'drf_spectacular',
     # Cashflip apps
     'accounts',
     'game',
@@ -40,6 +41,7 @@ INSTALLED_APPS = [
     'ads',
     'referrals',
     'analytics',
+    'partner',
 ]
 
 MIDDLEWARE = [
@@ -136,6 +138,42 @@ REST_FRAMEWORK = {
     ],
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 20,
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+}
+
+# ============ API Documentation (drf-spectacular) ============
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'Cashflip Partner API',
+    'DESCRIPTION': (
+        'Games-as-a-Service API for Cashflip — a provably fair coin-flip game engine.\n\n'
+        'Operators integrate via HMAC-signed API calls. Cashflip processes everything:\n'
+        'game logic, provably fair verification, settlements, and webhooks.\n\n'
+        '## Authentication\n'
+        'All requests must include:\n'
+        '- `X-API-Key`: Your API key\n'
+        '- `X-Signature`: HMAC-SHA256 signature of the request body using your API secret\n'
+        '- `X-Timestamp` (optional): Unix timestamp for replay protection\n\n'
+        '## Seamless Wallet\n'
+        'Cashflip calls your debit/credit/rollback endpoints per bet/win/refund.\n'
+        'Configure these URLs in the Cashflip admin portal.\n\n'
+        '## Provably Fair\n'
+        'Every game session uses HMAC-SHA256 with server seed, client seed, and nonce.\n'
+        'Server seed hash is provided at game start; full seed revealed after cashout/loss.'
+    ),
+    'VERSION': '1.0.0',
+    'SERVE_INCLUDE_SCHEMA': False,
+    'SERVERS': [
+        {'url': 'https://demo.cashflip.amoano.com', 'description': 'Staging'},
+    ],
+    'TAGS': [
+        {'name': 'Players', 'description': 'Player registration and authentication'},
+        {'name': 'Game', 'description': 'Game operations: start, flip, cashout, state, history, verify'},
+        {'name': 'Reports', 'description': 'GGR reports and session details'},
+        {'name': 'Settlements', 'description': 'Settlement management'},
+        {'name': 'Webhooks', 'description': 'Webhook configuration'},
+    ],
+    'COMPONENT_SPLIT_REQUEST': True,
+    'SCHEMA_PATH_PREFIX': r'/api/partner/v1/',
 }
 
 # ============ Celery ============

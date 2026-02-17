@@ -7,6 +7,42 @@ from django.db import models
 from django.utils import timezone
 
 
+class SiteBranding(models.Model):
+    """
+    Singleton branding config for Cashflip. Admin-uploadable logos, colors, tagline.
+    Defaults to generated SVG assets; admin can override with uploaded files.
+    """
+    logo = models.FileField(upload_to='branding/', blank=True, default='',
+                            help_text='Main logo (SVG/PNG). Default: static/images/cashflip-logo.svg')
+    logo_icon = models.FileField(upload_to='branding/', blank=True, default='',
+                                 help_text='Square icon/favicon (SVG/PNG). Default: static/images/cashflip-icon.svg')
+    loading_animation = models.FileField(upload_to='branding/', blank=True, default='',
+                                         help_text='Loading screen animation (GIF/SVG). Blank = CSS glow default')
+    primary_color = models.CharField(max_length=7, default='#00BFA6', help_text='Electric Teal')
+    secondary_color = models.CharField(max_length=7, default='#F5C842', help_text='Rich Gold')
+    accent_color = models.CharField(max_length=7, default='#00E676', help_text='Lime Flash (success)')
+    background_color = models.CharField(max_length=7, default='#0D1117', help_text='Midnight Obsidian')
+    tagline = models.CharField(max_length=200, default='Flip Notes. Stack Cash. Win Big.',
+                               help_text='Displayed on auth/loading screens')
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Site Branding'
+        verbose_name_plural = 'Site Branding'
+
+    def __str__(self):
+        return 'Cashflip Branding'
+
+    def save(self, *args, **kwargs):
+        self.pk = 1
+        super().save(*args, **kwargs)
+
+    @classmethod
+    def get_branding(cls):
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj
+
+
 class Currency(models.Model):
     code = models.CharField(max_length=5, unique=True, db_index=True)
     name = models.CharField(max_length=50)

@@ -34,5 +34,8 @@ Pillow==10.1.0
 # Admin extras
 django-import-export==4.3.4
 
+# API Documentation
+drf-spectacular==0.29.0
+
 # Utilities
 python-dateutil==2.9.0.post0

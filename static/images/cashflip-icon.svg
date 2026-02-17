@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80" fill="none">
+  <!-- Gold coin -->
+  <circle cx="40" cy="40" r="36" fill="#F5C842"/>
+  <circle cx="40" cy="40" r="30" fill="none" stroke="#D4A72C" stroke-width="2"/>
+  <!-- CF monogram -->
+  <text x="40" y="49" text-anchor="middle" font-family="'Orbitron', sans-serif" font-weight="900" font-size="28" fill="#0D1117">CF</text>
+  <!-- Teal flip arrows -->
+  <path d="M14 18 Q40 4 66 18" stroke="#00BFA6" stroke-width="3" fill="none" stroke-linecap="round"/>
+  <polygon points="64,14 70,19 64,23" fill="#00BFA6"/>
+  <path d="M66 62 Q40 76 14 62" stroke="#00BFA6" stroke-width="3" fill="none" stroke-linecap="round"/>
+  <polygon points="16,58 10,63 16,67" fill="#00BFA6"/>
+</svg>

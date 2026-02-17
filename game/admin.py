@@ -1,5 +1,28 @@
 from django.contrib import admin
-from game.models import Currency, CurrencyDenomination, GameConfig, SimulatedGameConfig, GameSession, FlipResult
+from game.models import SiteBranding, Currency, CurrencyDenomination, GameConfig, SimulatedGameConfig, GameSession, FlipResult
+
+
+@admin.register(SiteBranding)
+class SiteBrandingAdmin(admin.ModelAdmin):
+    list_display = ['__str__', 'primary_color', 'secondary_color', 'tagline', 'updated_at']
+    fieldsets = (
+        ('Logos', {
+            'fields': ('logo', 'logo_icon', 'loading_animation'),
+            'description': 'Upload custom logos. Leave blank to use default SVG assets.',
+        }),
+        ('Brand Colors', {
+            'fields': ('primary_color', 'secondary_color', 'accent_color', 'background_color'),
+        }),
+        ('Content', {
+            'fields': ('tagline',),
+        }),
+    )
+
+    def has_add_permission(self, request):
+        return not SiteBranding.objects.exists()
+
+    def has_delete_permission(self, request, obj=None):
+        return False
 
 
 class DenominationInline(admin.TabularInline):

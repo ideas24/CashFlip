@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 280 80" fill="none">
+  <!-- Green shield icon -->
+  <path d="M40 8 L64 18 L64 42 Q64 62 40 72 Q16 62 16 42 L16 18 Z" fill="#1B5E20"/>
+  <path d="M40 14 L58 22 L58 40 Q58 56 40 64 Q22 56 22 40 L22 22 Z" fill="none" stroke="#4CAF50" stroke-width="1.5"/>
+  <text x="40" y="46" text-anchor="middle" font-family="'Orbitron', sans-serif" font-weight="900" font-size="18" fill="#FFFFFF">EB</text>
+  <!-- Wordmark -->
+  <text x="82" y="38" font-family="'Orbitron', sans-serif" font-weight="900" font-size="28" fill="#FFFFFF">ELITE</text>
+  <text x="198" y="38" font-family="'Orbitron', sans-serif" font-weight="900" font-size="28" fill="#4CAF50">BET</text>
+  <text x="82" y="58" font-family="'Inter', sans-serif" font-weight="400" font-size="12" fill="#8B95A5">elitebetgh.com</text>
+</svg>

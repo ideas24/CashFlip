@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="mobile-web-app-capable" content="yes">
+    <title>{{ operator_name }} - Cashflip</title>
+    <link rel="icon" type="image/svg+xml" href="/static/images/cashflip-favicon.svg">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Inter:wght@300;400;500;600;700&display=swap');
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            width: 100%; height: 100vh; overflow: hidden;
+            font-family: 'Inter', sans-serif;
+            background: {{ bg_color|default:"#0D1117" }};
+            color: #F0F4F8;
+            display: flex; align-items: center; justify-content: center;
+            flex-direction: column;
+        }
+
+        .loader-container {
+            text-align: center;
+            animation: fadeIn 0.5s ease;
+        }
+
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+        .operator-logo {
+            max-width: 200px; max-height: 80px;
+            margin-bottom: 1.5rem;
+            filter: drop-shadow(0 0 20px {{ primary_color|default:"#00BFA6" }}40);
+        }
+
+        .powered-by {
+            font-size: 0.7rem;
+            color: #8B95A5;
+            margin-bottom: 0.5rem;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        .brand-glow {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 2rem; font-weight: 900;
+            color: {{ primary_color|default:"#00BFA6" }};
+            text-shadow: 0 0 20px {{ primary_color|default:"#00BFA6" }}80,
+                         0 0 40px {{ primary_color|default:"#00BFA6" }}40;
+            animation: glow 2s ease-in-out infinite alternate;
+            margin-bottom: 1.5rem;
+        }
+
+        @keyframes glow {
+            from { text-shadow: 0 0 20px {{ primary_color|default:"#00BFA6" }}80; }
+            to { text-shadow: 0 0 40px {{ primary_color|default:"#00BFA6" }}CC, 0 0 60px {{ primary_color|default:"#00BFA6" }}66; }
+        }
+
+        .loader-bar {
+            width: 200px; height: 4px;
+            background: #2A3345;
+            border-radius: 2px; margin: 0 auto 1rem; overflow: hidden;
+        }
+
+        .loader-fill {
+            width: 0; height: 100%;
+            background: linear-gradient(90deg, {{ primary_color|default:"#00BFA6" }}, {{ accent_color|default:"#F5C842" }});
+            border-radius: 2px;
+            animation: loadFill 2s ease forwards;
+        }
+
+        @keyframes loadFill { to { width: 100%; } }
+
+        .loader-text {
+            color: #8B95A5; font-size: 0.85rem;
+        }
+
+        .cashflip-badge {
+            position: fixed; bottom: 1rem;
+            display: flex; align-items: center; gap: 0.4rem;
+            font-size: 0.75rem; color: #8B95A5;
+            opacity: 0.6;
+        }
+
+        .cashflip-badge span {
+            font-family: 'Orbitron', sans-serif;
+            color: #00BFA6; font-weight: 700;
+        }
+    </style>
+</head>
+<body>
+    <div class="loader-container">
+        {% if operator_logo %}
+        <img src="{{ operator_logo }}" alt="{{ operator_name }}" class="operator-logo">
+        {% endif %}
+
+        <div class="powered-by">Powered by</div>
+        <div class="brand-glow">CASHFLIP</div>
+
+        <div class="loader-bar">
+            <div class="loader-fill"></div>
+        </div>
+        <p class="loader-text">Loading game...</p>
+    </div>
+
+    <div class="cashflip-badge">
+        Powered by <span>CASH</span><span style="color: #F0F4F8;">FLIP</span>
+    </div>
+
+    <script>
+        // Redirect to game after loading animation
+        setTimeout(function() {
+            window.location.href = "{{ game_url|default:'/' }}";
+        }, 2500);
+    </script>
+</body>
+</html>

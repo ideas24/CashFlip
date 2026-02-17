@@ -4,6 +4,7 @@ from django.conf import settings
 from django.conf.urls.static import static
 from django.http import JsonResponse
 from django.views.generic import TemplateView
+from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
 
 
 def health_check(request):
@@ -21,6 +22,12 @@ urlpatterns = [
     path('api/accounts/', include('accounts.urls')),
     path('api/game/', include('game.urls')),
     path('api/payments/', include('payments.urls')),
+    path('api/partner/v1/', include('partner.urls')),
+
+    # API Documentation
+    path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
+    path('api/docs/', SpectacularRedocView.as_view(url_name='schema'), name='redoc'),
+    path('api/docs/swagger/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
 
     # Social auth
     path('auth/', include('social_django.urls', namespace='social')),
