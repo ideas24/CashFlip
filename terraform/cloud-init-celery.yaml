@@ -73,16 +73,22 @@ write_files:
       "$VENV_DIR/bin/pip" install --quiet -r "$APP_DIR/requirements.txt"
       
       # Ensure logs directory exists
-      mkdir -p "$APP_DIR/logs"
-      chown -R cashflip:cashflip "$APP_DIR/logs"
+      mkdir -p "$APP_DIR/logs" /var/run/celery
+      chown -R cashflip:cashflip "$APP_DIR/logs" /var/run/celery
       
-      # Restart celery
+      # Restart celery worker (all VMs)
       log "Restarting cashflip-celery.service..."
       systemctl restart cashflip-celery.service
       
+      # Restart celery beat ONLY on instance 0 (avoid duplicate scheduled tasks)
+      if systemctl is-enabled cashflip-celerybeat.service 2>/dev/null | grep -q enabled; then
+        log "Restarting cashflip-celerybeat.service (this is the beat node)..."
+        systemctl restart cashflip-celerybeat.service
+      fi
+      
       log "=== CashFlip Celery Deploy COMPLETE ==="
 
-  # ---- Celery wrapper (sources .env properly) ----
+  # ---- Celery worker wrapper (sources .env properly) ----
   - path: /opt/cashflip/start-celery.sh
     permissions: '0755'
     content: |
@@ -93,7 +99,21 @@ write_files:
       cd /opt/cashflip/app
       exec /opt/cashflip/venv/bin/celery -A config worker -l info -c 4 -Q default,game --without-heartbeat
 
-  # ---- Systemd: Celery worker ----
+  # ---- Celery beat wrapper (sources .env properly) ----
+  - path: /opt/cashflip/start-celerybeat.sh
+    permissions: '0755'
+    content: |
+      #!/bin/bash
+      set -a
+      source /opt/cashflip/.env
+      set +a
+      cd /opt/cashflip/app
+      exec /opt/cashflip/venv/bin/celery -A config beat \
+        --pidfile=/var/run/celery/cashflip-beat.pid \
+        --logfile=/opt/cashflip/logs/celery-beat.log \
+        --loglevel=INFO
+
+  # ---- Systemd: Celery worker (runs on ALL celery VMs) ----
   - path: /etc/systemd/system/cashflip-celery.service
     content: |
       [Unit]
@@ -113,10 +133,91 @@ write_files:
       [Install]
       WantedBy=multi-user.target
 
+  # ---- Systemd: Celery beat (enabled ONLY on instance 0 via runcmd) ----
+  - path: /etc/systemd/system/cashflip-celerybeat.service
+    content: |
+      [Unit]
+      Description=Cashflip Celery Beat Scheduler
+      After=network.target
+
+      [Service]
+      Type=simple
+      User=cashflip
+      Group=cashflip
+      WorkingDirectory=/opt/cashflip/app
+      ExecStart=/opt/cashflip/start-celerybeat.sh
+      Restart=always
+      RestartSec=10
+
+      [Install]
+      WantedBy=multi-user.target
+
+  # ---- Production monitoring script ----
+  - path: /opt/cashflip/monitor.sh
+    permissions: '0755'
+    content: |
+      #!/bin/bash
+      # Health monitor — checks services, disk, memory, sends Mailgun alerts
+      set -a
+      source /opt/cashflip/.env 2>/dev/null || true
+      set +a
+      ALERT_EMAIL="${ALERT_EMAIL:-contact@eddievolt.com}"
+      FROM_EMAIL="${FROM_EMAIL:-deploy@mail.eddievolt.com}"
+      SMTP_SERVER="${SMTP_SERVER:-smtp.mailgun.org}"
+      SMTP_PORT="${SMTP_PORT:-587}"
+      SMTP_USER="${SMTP_USER:-deploy@mail.eddievolt.com}"
+      HOSTNAME=$(hostname)
+      LOG="/opt/cashflip/logs/monitor.log"
+      STATE="/tmp/cf_monitor_state"
+      log() { echo "$(date '+%Y-%m-%d %H:%M:%S') $1" >> "$LOG"; }
+      send_alert() {
+        local subj="$1" body="$2" key="$3"
+        if [ -n "$key" ] && [ -f "$STATE" ]; then
+          last=$(grep "^${key}=" "$STATE" 2>/dev/null | cut -d= -f2)
+          now=$(date +%s)
+          [ -n "$last" ] && [ $((now - last)) -lt 3600 ] && return
+        fi
+        log "ALERT: $subj"
+        [ -z "$SMTP_PASSWORD" ] && return
+        curl -s --url "smtp://${SMTP_SERVER}:${SMTP_PORT}" --ssl-reqd \
+          --mail-from "$FROM_EMAIL" --mail-rcpt "$ALERT_EMAIL" \
+          --user "${SMTP_USER}:${SMTP_PASSWORD}" -T - <<MAIL
+      From: Cashflip Monitor <${FROM_EMAIL}>
+      To: ${ALERT_EMAIL}
+      Subject: [CASHFLIP] ${subj}
+
+      ${body}
+      Server: ${HOSTNAME} | $(date)
+      MAIL
+        [ -n "$key" ] && { grep -v "^${key}=" "$STATE" > "${STATE}.tmp" 2>/dev/null; echo "${key}=$(date +%s)" >> "${STATE}.tmp"; mv "${STATE}.tmp" "$STATE"; }
+      }
+      # Check celery worker
+      systemctl is-active --quiet cashflip-celery.service || { send_alert "Celery DOWN on $HOSTNAME" "cashflip-celery.service not running" "celery_down"; systemctl restart cashflip-celery.service; }
+      # Check disk
+      usage=$(df / | tail -1 | awk '{print $5}' | tr -d '%')
+      [ "$usage" -gt 85 ] && send_alert "Disk ${usage}% on $HOSTNAME" "$(df -h /)" "disk_warn"
+      # Check memory
+      mem=$(free | awk '/Mem:/ {printf "%.0f", $3/$2*100}')
+      [ "$mem" -gt 90 ] && send_alert "Memory ${mem}% on $HOSTNAME" "$(free -h)" "mem_high"
+      log "check done"
+
 runcmd:
   - useradd -r -m -s /bin/bash cashflip || true
-  - mkdir -p /opt/cashflip/app /opt/cashflip/logs /opt/cashflip/.ssh
-  - chown -R cashflip:cashflip /opt/cashflip
+  - mkdir -p /opt/cashflip/app /opt/cashflip/logs /opt/cashflip/.ssh /var/run/celery
+  - chown -R cashflip:cashflip /opt/cashflip /var/run/celery
   - chmod 700 /opt/cashflip/.ssh
   - systemctl daemon-reload
   - systemctl enable cashflip-celery.service
+  # Enable Celery Beat ONLY on VMSS instance 0 (avoid duplicate scheduled tasks)
+  - |
+    INSTANCE_ID=$(curl -s -H 'Metadata:true' 'http://169.254.169.254/metadata/instance/compute?api-version=2021-02-01' | python3 -c "import sys,json; print(json.load(sys.stdin).get('name','').split('_')[-1])" 2>/dev/null || echo 'unknown')
+    if [ "$INSTANCE_ID" = "0" ] || [ "$INSTANCE_ID" = "000000" ]; then
+      systemctl enable --now cashflip-celerybeat.service
+      echo "Beat enabled on instance 0"
+    else
+      systemctl disable cashflip-celerybeat.service 2>/dev/null || true
+      echo "Beat disabled on instance $INSTANCE_ID (not instance 0)"
+    fi
+  # Monitoring cron: every 5 minutes
+  - echo '*/5 * * * * root /opt/cashflip/monitor.sh' > /etc/cron.d/cashflip-monitor
+  - chmod 644 /etc/cron.d/cashflip-monitor
