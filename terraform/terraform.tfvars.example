@@ -1,11 +1,27 @@
-# Copy this file to terraform.tfvars and fill in values
+# ============================================================
+# CashFlip Production — Terraform Variables
+# Copy to terraform.tfvars and fill in values before apply
+# ============================================================
 
-admin_ssh_public_key = "ssh-rsa AAAA..."
-db_admin_password    = "YourSecurePassword123!"
+# SSH public key for VM access (from ~/.ssh/cashflip.pub or your admin key)
+admin_ssh_public_key = "ssh-ed25519 AAAA..."
 
-# Optional overrides
+# PostgreSQL admin password (use a strong password)
+db_admin_password = "YourSecurePassword123!"
+
+# Optional overrides (defaults are cost-efficient for launch)
 # location           = "West Europe"
-# app_vm_count       = 5
-# celery_vm_count    = 3
-# vm_size_app        = "Standard_D2s_v3"
+# app_vm_count       = 2     # Scale up to 5+ as needed
+# celery_vm_count    = 1     # Scale up to 3+ as needed
+# vm_size_app        = "Standard_D2s_v3"   # 2 vCPU, 8GB RAM
 # vm_size_celery     = "Standard_D2s_v3"
+
+# ============================================================
+# AFTER terraform apply:
+#   1. Copy terraform/production.env.template -> production.env
+#   2. Fill in DATABASE_URL and REDIS_URL from terraform output
+#   3. Generate new SECRET_KEY and JWT_SECRET_KEY
+#   4. Run: ./scripts/deploy-prod.sh --init --env production.env
+#   5. Update DNS: ./terraform/update_dns.sh $(terraform output -raw lb_public_ip)
+#   6. Wait for DNS, then: ./scripts/deploy-prod.sh --cert
+# ============================================================

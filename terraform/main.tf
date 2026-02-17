@@ -37,11 +37,11 @@ variable "db_admin_password" {
 }
 
 variable "app_vm_count" {
-  default = 5
+  default = 2
 }
 
 variable "celery_vm_count" {
-  default = 3
+  default = 1
 }
 
 variable "vm_size_app" {
@@ -98,6 +98,13 @@ resource "azurerm_subnet" "db" {
       actions = ["Microsoft.Network/virtualNetworks/subnets/join/action"]
     }
   }
+}
+
+resource "azurerm_subnet" "redis" {
+  name                 = "redis-subnet"
+  resource_group_name  = azurerm_resource_group.main.name
+  virtual_network_name = azurerm_virtual_network.main.name
+  address_prefixes     = ["10.0.5.0/24"]
 }
 
 resource "azurerm_subnet" "bastion" {
@@ -394,7 +401,7 @@ resource "azurerm_redis_cache" "main" {
     maxmemory_policy = "allkeys-lru"
   }
 
-  subnet_id = azurerm_subnet.app.id
+  subnet_id = azurerm_subnet.redis.id
 }
 
 # ==================== Azure Bastion ====================
@@ -463,4 +470,16 @@ output "redis_primary_key" {
 output "key_vault_uri" {
   value       = azurerm_key_vault.main.vault_uri
   description = "Key Vault URI"
+}
+
+output "database_url" {
+  value       = "postgres://cashflip_admin:${var.db_admin_password}@${azurerm_postgresql_flexible_server.main.fqdn}:5432/cashflip_db?sslmode=require"
+  sensitive   = true
+  description = "Full DATABASE_URL for .env"
+}
+
+output "redis_url" {
+  value       = "rediss://:${azurerm_redis_cache.main.primary_access_key}@${azurerm_redis_cache.main.hostname}:6380/0"
+  sensitive   = true
+  description = "Full REDIS_URL for .env (DB 0 — change index for broker/results)"
 }

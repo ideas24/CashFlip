@@ -1,4 +1,9 @@
 #cloud-config
+# ============================================================
+# CashFlip Production — App VM Cloud-Init
+# Provisions: Python, Nginx, systemd service, deploy script
+# After terraform apply, run: scripts/deploy-prod.sh --init
+# ============================================================
 package_update: true
 package_upgrade: true
 
@@ -13,42 +18,86 @@ packages:
   - libpq-dev
   - build-essential
   - redis-tools
+  - jq
 
 write_files:
+  # ---- SSH config for GitHub deploy key ----
+  - path: /opt/cashflip/.ssh/config
+    permissions: '0600'
+    content: |
+      Host github.com
+        IdentityFile /opt/cashflip/.ssh/id_ed25519
+        StrictHostKeyChecking no
+        UserKnownHostsFile /dev/null
+
+  # ---- On-VM deploy script (called by deploy-prod.sh or manually) ----
   - path: /opt/cashflip/deploy.sh
     permissions: '0755'
     content: |
       #!/bin/bash
       set -e
-      
       APP_DIR="/opt/cashflip/app"
       VENV_DIR="/opt/cashflip/venv"
+      SSH_KEY="/opt/cashflip/.ssh/id_ed25519"
+      GIT_SSH="ssh -i $SSH_KEY -o StrictHostKeyChecking=no"
+      LOG="/opt/cashflip/logs/deploy.log"
       
-      # Clone or pull repo
-      if [ ! -d "$APP_DIR/.git" ]; then
-        git clone https://github.com/YOUR_ORG/cashflip.git "$APP_DIR"
-      else
-        cd "$APP_DIR" && git pull origin master
+      log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOG"; }
+      
+      log "=== CashFlip App Deploy START ==="
+      
+      # Preflight: SSH key must exist
+      if [ ! -f "$SSH_KEY" ]; then
+        log "ERROR: Deploy key not found at $SSH_KEY"
+        log "Run: scripts/deploy-prod.sh --init"
+        exit 1
       fi
       
-      # Setup venv
-      python3 -m venv "$VENV_DIR"
-      "$VENV_DIR/bin/pip" install -r "$APP_DIR/requirements.txt"
+      # Preflight: .env must exist
+      if [ ! -f /opt/cashflip/.env ]; then
+        log "ERROR: /opt/cashflip/.env not found"
+        log "Run: scripts/deploy-prod.sh --init --env production.env"
+        exit 1
+      fi
       
-      # Run migrations
+      # Clone or pull
+      if [ ! -d "$APP_DIR/.git" ]; then
+        log "Cloning repository..."
+        GIT_SSH_COMMAND="$GIT_SSH" git clone git@github.com:ideas24/CashFlip.git "$APP_DIR"
+        chown -R cashflip:cashflip "$APP_DIR"
+      else
+        log "Pulling latest from master..."
+        cd "$APP_DIR"
+        GIT_SSH_COMMAND="$GIT_SSH" git pull origin master
+      fi
+      
+      # Virtualenv
+      if [ ! -d "$VENV_DIR" ]; then
+        log "Creating virtualenv..."
+        python3 -m venv "$VENV_DIR"
+      fi
+      log "Installing requirements..."
+      "$VENV_DIR/bin/pip" install --quiet --upgrade pip
+      "$VENV_DIR/bin/pip" install --quiet -r "$APP_DIR/requirements.txt"
+      
+      # Django management
       cd "$APP_DIR"
+      log "Running migrations..."
       "$VENV_DIR/bin/python" manage.py migrate --noinput
+      log "Collecting static files..."
       "$VENV_DIR/bin/python" manage.py collectstatic --noinput
-      "$VENV_DIR/bin/python" manage.py seed_data
+      log "Seeding data..."
+      "$VENV_DIR/bin/python" manage.py seed_data || true
       
-      # Restart services
+      # Restart service
+      log "Restarting cashflip.service..."
       systemctl restart cashflip.service
       
-      echo "Deploy complete!"
+      log "=== CashFlip App Deploy COMPLETE ==="
 
+  # ---- Nginx: Game subdomain ----
   - path: /etc/nginx/sites-available/cashflip.amoano.com
     content: |
-      # Cashflip PRODUCTION - Game Subdomain
       limit_req_zone $binary_remote_addr zone=cf_general:10m rate=30r/s;
       limit_req_zone $binary_remote_addr zone=cf_api:10m rate=20r/s;
       limit_req_zone $binary_remote_addr zone=cf_auth:10m rate=5r/m;
@@ -56,17 +105,27 @@ write_files:
       server {
           listen 80;
           server_name cashflip.amoano.com;
-          return 301 https://$server_name$request_uri;
+
+          # Let's Encrypt challenge
+          location /.well-known/acme-challenge/ {
+              root /var/www/certbot;
+          }
+          location / {
+              return 301 https://$server_name$request_uri;
+          }
       }
 
       server {
           listen 443 ssl http2;
           server_name cashflip.amoano.com;
 
+          # SSL certs managed by certbot (placeholder until provisioned)
+          ssl_certificate     /etc/nginx/ssl/placeholder.crt;
+          ssl_certificate_key /etc/nginx/ssl/placeholder.key;
+
           add_header X-Frame-Options "DENY" always;
           add_header X-Content-Type-Options "nosniff" always;
           add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
-
           client_max_body_size 10M;
 
           location /static/ {
@@ -81,7 +140,6 @@ write_files:
               access_log off;
           }
 
-          # BLOCK admin on game subdomain
           location /admin/ {
               return 302 /;
           }
@@ -136,23 +194,31 @@ write_files:
           }
       }
 
+  # ---- Nginx: Admin subdomain ----
   - path: /etc/nginx/sites-available/manage.cashflip.amoano.com
     content: |
-      # Cashflip PRODUCTION - Admin Subdomain (hidden)
       server {
           listen 80;
           server_name manage.cashflip.amoano.com;
-          return 301 https://$server_name$request_uri;
+
+          location /.well-known/acme-challenge/ {
+              root /var/www/certbot;
+          }
+          location / {
+              return 301 https://$server_name$request_uri;
+          }
       }
 
       server {
           listen 443 ssl http2;
           server_name manage.cashflip.amoano.com;
 
+          ssl_certificate     /etc/nginx/ssl/placeholder.crt;
+          ssl_certificate_key /etc/nginx/ssl/placeholder.key;
+
           add_header X-Frame-Options "DENY" always;
           add_header X-Content-Type-Options "nosniff" always;
           add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
-
           client_max_body_size 20M;
 
           location /static/ {
@@ -186,12 +252,13 @@ write_files:
           }
       }
 
+  # ---- Systemd: Gunicorn service ----
   - path: /etc/systemd/system/cashflip.service
     content: |
       [Unit]
       Description=Cashflip Gunicorn
       After=network.target
-      
+
       [Service]
       User=cashflip
       Group=cashflip
@@ -201,18 +268,31 @@ write_files:
       ExecStart=/opt/cashflip/venv/bin/gunicorn --bind 0.0.0.0:8000 --workers 4 --timeout 60 --max-requests 1000 config.wsgi:application
       Restart=always
       RestartSec=10
-      
+
       [Install]
       WantedBy=multi-user.target
 
+  # ---- Self-signed placeholder cert (replaced by certbot via deploy script) ----
+  - path: /opt/cashflip/gen-placeholder-cert.sh
+    permissions: '0755'
+    content: |
+      #!/bin/bash
+      mkdir -p /etc/nginx/ssl
+      openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+        -keyout /etc/nginx/ssl/placeholder.key \
+        -out /etc/nginx/ssl/placeholder.crt \
+        -subj "/CN=cashflip.amoano.com"
+
 runcmd:
-  - useradd -r -s /bin/false cashflip || true
-  - mkdir -p /opt/cashflip/app /opt/cashflip/logs
+  - useradd -r -m -s /bin/bash cashflip || true
+  - mkdir -p /opt/cashflip/app /opt/cashflip/logs /opt/cashflip/.ssh /var/www/certbot
   - chown -R cashflip:cashflip /opt/cashflip
+  - chmod 700 /opt/cashflip/.ssh
+  # Generate placeholder SSL cert so nginx can start before certbot runs
+  - bash /opt/cashflip/gen-placeholder-cert.sh
   - ln -sf /etc/nginx/sites-available/cashflip.amoano.com /etc/nginx/sites-enabled/
   - ln -sf /etc/nginx/sites-available/manage.cashflip.amoano.com /etc/nginx/sites-enabled/
   - rm -f /etc/nginx/sites-enabled/default
   - nginx -t && systemctl reload nginx
-  - certbot --nginx -d cashflip.amoano.com -d manage.cashflip.amoano.com --non-interactive --agree-tos --email admin@amoano.com || true
   - systemctl daemon-reload
   - systemctl enable cashflip.service
