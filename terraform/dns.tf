@@ -25,23 +25,37 @@ resource "local_file" "dns_script" {
     API_KEY="pk1_ec05cee783e1a5c039879a5ccd682590cf96310f0a2ea73c0c1c0fe07687e802"
     SECRET_KEY="sk1_fe2256e4a8bf539ea5f1bbf59cfeca909c7c5b51e48199538d98285fa386c441"
     
-    echo "Setting cashflip.amoano.com -> $LB_IP"
+    echo "=== Setting cashflip.amoano.com -> $LB_IP ==="
     
-    # Delete existing A record
+    # Delete existing A records
     curl -s -X POST "https://api.porkbun.com/api/json/v3/dns/deleteByNameType/amoano.com/A/cashflip" \
+      -H "Content-Type: application/json" \
+      -d "{\"apikey\":\"$API_KEY\",\"secretapikey\":\"$SECRET_KEY\"}"
+    
+    curl -s -X POST "https://api.porkbun.com/api/json/v3/dns/deleteByNameType/amoano.com/A/manage.cashflip" \
       -H "Content-Type: application/json" \
       -d "{\"apikey\":\"$API_KEY\",\"secretapikey\":\"$SECRET_KEY\"}"
     
     echo ""
     
-    # Create new A record
-    RESULT=$(curl -s -X POST "https://api.porkbun.com/api/json/v3/dns/create/amoano.com" \
+    # Create game subdomain: cashflip.amoano.com
+    echo "Creating cashflip.amoano.com -> $LB_IP"
+    curl -s -X POST "https://api.porkbun.com/api/json/v3/dns/create/amoano.com" \
       -H "Content-Type: application/json" \
-      -d "{\"apikey\":\"$API_KEY\",\"secretapikey\":\"$SECRET_KEY\",\"type\":\"A\",\"name\":\"cashflip\",\"content\":\"$LB_IP\",\"ttl\":\"300\"}")
+      -d "{\"apikey\":\"$API_KEY\",\"secretapikey\":\"$SECRET_KEY\",\"type\":\"A\",\"name\":\"cashflip\",\"content\":\"$LB_IP\",\"ttl\":\"300\"}"
     
-    echo "$RESULT"
     echo ""
-    echo "DNS updated. Allow 5 minutes for propagation."
+    
+    # Create admin subdomain: manage.cashflip.amoano.com
+    echo "Creating manage.cashflip.amoano.com -> $LB_IP"
+    curl -s -X POST "https://api.porkbun.com/api/json/v3/dns/create/amoano.com" \
+      -H "Content-Type: application/json" \
+      -d "{\"apikey\":\"$API_KEY\",\"secretapikey\":\"$SECRET_KEY\",\"type\":\"A\",\"name\":\"manage.cashflip\",\"content\":\"$LB_IP\",\"ttl\":\"300\"}"
+    
+    echo ""
+    echo "DNS updated for both subdomains. Allow 5 minutes for propagation."
+    echo "  Game:  cashflip.amoano.com -> $LB_IP"
+    echo "  Admin: manage.cashflip.amoano.com -> $LB_IP"
   SCRIPT
 
   file_permission = "0755"

@@ -1,16 +1,15 @@
-# Cashflip Admin Panel - PRODUCTION Nginx Configuration
+# Cashflip Admin Panel - STAGING Nginx Configuration
 # Only serves /admin/ and /static/ - no game routes
-# Deploy this on production servers alongside cashflip.amoano.com
 
 server {
     listen 80;
-    server_name manage.cashflip.amoano.com;
+    server_name manage.demo.cashflip.amoano.com;
     return 301 https://$server_name$request_uri;
 }
 
 server {
     listen 443 ssl http2;
-    server_name manage.cashflip.amoano.com;
+    server_name manage.demo.cashflip.amoano.com;
 
     # Security headers
     add_header X-Frame-Options "DENY" always;
