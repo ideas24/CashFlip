@@ -105,6 +105,15 @@ export default function PlayersPage() {
                       ))}
                     </TableRow>
                   ))
+                ) : !data?.results.length ? (
+                  <TableRow>
+                    <TableCell colSpan={8} className="text-center py-12">
+                      <div className="text-muted">
+                        <div className="text-lg mb-1">No players found</div>
+                        <div className="text-sm">{search ? 'Try adjusting your search query' : 'Players will appear here once they sign up'}</div>
+                      </div>
+                    </TableCell>
+                  </TableRow>
                 ) : data?.results.map(player => (
                   <TableRow key={player.id}>
                     <TableCell>

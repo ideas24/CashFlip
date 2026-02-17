@@ -14,7 +14,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
 from accounts.models import Player, AdminRole, StaffMember, AuthConfig, PlayerProfile
-from game.models import GameSession, FlipResult, Currency
+from game.models import GameSession, FlipResult, Currency, GameConfig, SimulatedGameConfig
 from wallet.models import Wallet, WalletTransaction
 from payments.models import Deposit, Withdrawal
 
@@ -443,33 +443,222 @@ def reject_withdrawal(request, wdr_id):
 
 # ==================== PARTNERS ====================
 
-@api_view(['GET'])
+def _serialize_operator(op):
+    """Serialize an Operator to dict."""
+    try:
+        from partner.models import OperatorSession
+        sessions_count = OperatorSession.objects.filter(operator=op).count()
+    except Exception:
+        sessions_count = 0
+    return {
+        'id': str(op.id),
+        'name': op.name,
+        'slug': op.slug,
+        'website': op.website or '',
+        'contact_email': op.contact_email or '',
+        'contact_phone': op.contact_phone or '',
+        'status': op.status,
+        'debit_url': op.debit_url or '',
+        'credit_url': op.credit_url or '',
+        'rollback_url': op.rollback_url or '',
+        'commission_percent': str(op.commission_percent),
+        'settlement_frequency': op.settlement_frequency,
+        'min_settlement_amount': str(op.min_settlement_amount),
+        'notes': op.notes or '',
+        'total_sessions': sessions_count,
+        'total_revenue': '0.00',
+        'api_keys_count': op.api_keys.filter(is_active=True).count(),
+        'created_at': op.created_at.isoformat(),
+        'updated_at': op.updated_at.isoformat(),
+    }
+
+
+@api_view(['GET', 'POST'])
 @permission_classes([IsStaffAdmin])
 def partner_list(request):
     try:
-        from partner.models import Operator, OperatorSession
+        from partner.models import Operator
     except ImportError:
         return Response({'results': [], 'count': 0})
 
-    operators = Operator.objects.all().order_by('-created_at')
-    results = []
-    for op in operators:
-        sessions_count = OperatorSession.objects.filter(operator=op).count()
-        results.append({
-            'id': str(op.id),
-            'name': op.name,
-            'slug': op.slug,
-            'website': op.website or '',
-            'status': op.status,
-            'commission_percent': str(op.commission_percent),
-            'settlement_frequency': op.settlement_frequency,
-            'total_sessions': sessions_count,
-            'total_revenue': '0.00',
-            'api_keys_count': op.api_keys.filter(is_active=True).count(),
-            'created_at': op.created_at.isoformat(),
-        })
+    if request.method == 'POST':
+        data = request.data
+        name = data.get('name', '').strip()
+        slug = data.get('slug', '').strip()
+        if not name or not slug:
+            return Response({'error': 'Name and slug are required'}, status=400)
+        if Operator.objects.filter(slug=slug).exists():
+            return Response({'error': f'Slug "{slug}" already exists'}, status=400)
+        op = Operator.objects.create(
+            name=name,
+            slug=slug,
+            website=data.get('website', ''),
+            contact_email=data.get('contact_email', ''),
+            contact_phone=data.get('contact_phone', ''),
+            status=data.get('status', 'pending'),
+            commission_percent=data.get('commission_percent', 20),
+            settlement_frequency=data.get('settlement_frequency', 'weekly'),
+            min_settlement_amount=data.get('min_settlement_amount', 100),
+            notes=data.get('notes', ''),
+        )
+        return Response(_serialize_operator(op), status=201)
 
-    return Response({'results': results, 'count': len(results)})
+    operators = Operator.objects.all().order_by('-created_at')
+    results = [_serialize_operator(op) for op in operators]
+    return Response({
+        'results': results,
+        'count': len(results),
+        'status_choices': [
+            {'value': 'pending', 'label': 'Pending Approval'},
+            {'value': 'active', 'label': 'Active'},
+            {'value': 'suspended', 'label': 'Suspended'},
+            {'value': 'deactivated', 'label': 'Deactivated'},
+        ],
+        'settlement_choices': [
+            {'value': 'daily', 'label': 'Daily'},
+            {'value': 'weekly', 'label': 'Weekly'},
+            {'value': 'monthly', 'label': 'Monthly'},
+        ],
+    })
+
+
+@api_view(['GET', 'PATCH', 'DELETE'])
+@permission_classes([IsStaffAdmin])
+def partner_detail(request, partner_id):
+    try:
+        from partner.models import Operator
+        op = Operator.objects.get(pk=partner_id)
+    except ImportError:
+        return Response({'error': 'Partner module not installed'}, status=500)
+    except Operator.DoesNotExist:
+        return Response({'error': 'Partner not found'}, status=404)
+
+    if request.method == 'DELETE':
+        op.delete()
+        return Response(status=204)
+
+    if request.method == 'PATCH':
+        data = request.data
+        updatable = [
+            'name', 'slug', 'website', 'contact_email', 'contact_phone',
+            'status', 'debit_url', 'credit_url', 'rollback_url',
+            'commission_percent', 'settlement_frequency', 'min_settlement_amount', 'notes',
+        ]
+        updated = []
+        for field in updatable:
+            if field in data:
+                setattr(op, field, data[field])
+                updated.append(field)
+        if updated:
+            op.save(update_fields=updated + ['updated_at'])
+        return Response(_serialize_operator(op))
+
+    return Response(_serialize_operator(op))
+
+
+@api_view(['GET', 'POST'])
+@permission_classes([IsStaffAdmin])
+def partner_api_keys(request, partner_id):
+    """List, create, or revoke API keys for a partner."""
+    try:
+        from partner.models import Operator, OperatorAPIKey
+        op = Operator.objects.get(pk=partner_id)
+    except ImportError:
+        return Response({'error': 'Partner module not installed'}, status=500)
+    except Operator.DoesNotExist:
+        return Response({'error': 'Partner not found'}, status=404)
+
+    if request.method == 'POST':
+        import secrets as _secrets
+        label = request.data.get('label', 'Default').strip() or 'Default'
+        api_key = f'cf_live_{_secrets.token_hex(20)}'
+        api_secret = _secrets.token_hex(32)
+        key_obj = OperatorAPIKey.objects.create(
+            operator=op,
+            label=label,
+            api_key=api_key,
+            api_secret=api_secret,
+            is_active=True,
+            rate_limit_per_minute=request.data.get('rate_limit_per_minute', 120),
+        )
+        # Return full secret only on creation
+        return Response({
+            'id': str(key_obj.id),
+            'label': key_obj.label,
+            'api_key': key_obj.api_key,
+            'api_secret': key_obj.api_secret,
+            'is_active': key_obj.is_active,
+            'rate_limit_per_minute': key_obj.rate_limit_per_minute,
+            'ip_whitelist': key_obj.ip_whitelist,
+            'created_at': key_obj.created_at.isoformat(),
+            'last_used_at': None,
+            'just_created': True,
+        }, status=201)
+
+    keys = op.api_keys.all().order_by('-created_at')
+    result = []
+    for k in keys:
+        result.append({
+            'id': str(k.id),
+            'label': k.label,
+            'api_key': k.api_key,
+            'api_secret_hint': k.api_secret[:8] + '...' + k.api_secret[-4:] if len(k.api_secret) > 12 else '***',
+            'api_secret': k.api_secret,
+            'is_active': k.is_active,
+            'rate_limit_per_minute': k.rate_limit_per_minute,
+            'ip_whitelist': k.ip_whitelist,
+            'created_at': k.created_at.isoformat(),
+            'last_used_at': k.last_used_at.isoformat() if k.last_used_at else None,
+            'revoked_at': k.revoked_at.isoformat() if k.revoked_at else None,
+        })
+    return Response({'keys': result, 'count': len(result)})
+
+
+@api_view(['PATCH', 'DELETE'])
+@permission_classes([IsStaffAdmin])
+def partner_api_key_detail(request, partner_id, key_id):
+    """Toggle or delete a specific API key."""
+    try:
+        from partner.models import OperatorAPIKey
+        key_obj = OperatorAPIKey.objects.get(pk=key_id, operator_id=partner_id)
+    except ImportError:
+        return Response({'error': 'Partner module not installed'}, status=500)
+    except OperatorAPIKey.DoesNotExist:
+        return Response({'error': 'API key not found'}, status=404)
+
+    if request.method == 'DELETE':
+        key_obj.delete()
+        return Response(status=204)
+
+    # PATCH — toggle active, update label, rate limit, ip whitelist
+    data = request.data
+    if 'is_active' in data:
+        key_obj.is_active = data['is_active']
+        if not data['is_active']:
+            from django.utils import timezone as tz
+            key_obj.revoked_at = tz.now()
+        else:
+            key_obj.revoked_at = None
+    if 'label' in data:
+        key_obj.label = data['label']
+    if 'rate_limit_per_minute' in data:
+        key_obj.rate_limit_per_minute = data['rate_limit_per_minute']
+    if 'ip_whitelist' in data:
+        key_obj.ip_whitelist = data['ip_whitelist']
+    key_obj.save()
+    return Response({
+        'id': str(key_obj.id),
+        'label': key_obj.label,
+        'api_key': key_obj.api_key,
+        'api_secret_hint': key_obj.api_secret[:8] + '...' + key_obj.api_secret[-4:] if len(key_obj.api_secret) > 12 else '***',
+        'api_secret': key_obj.api_secret,
+        'is_active': key_obj.is_active,
+        'rate_limit_per_minute': key_obj.rate_limit_per_minute,
+        'ip_whitelist': key_obj.ip_whitelist,
+        'created_at': key_obj.created_at.isoformat(),
+        'last_used_at': key_obj.last_used_at.isoformat() if key_obj.last_used_at else None,
+        'revoked_at': key_obj.revoked_at.isoformat() if key_obj.revoked_at else None,
+    })
 
 
 # ==================== ANALYTICS ====================
@@ -622,16 +811,73 @@ def staff_update(request, user_id):
 def settings_view(request):
     auth_config = AuthConfig.get_config()
 
+    # Get actual GameConfig (first active one, or defaults)
+    game_config = GameConfig.objects.filter(is_active=True).first()
+    sim_config = SimulatedGameConfig.get_active_config()
+    all_sim_configs = SimulatedGameConfig.objects.all().order_by('-is_enabled', '-updated_at')
+
     if request.method == 'GET':
+        game_data = {}
+        if game_config:
+            game_data = {
+                'id': game_config.id,
+                'currency': game_config.currency.code if game_config.currency else 'GHS',
+                'house_edge_percent': str(game_config.house_edge_percent),
+                'min_deposit': str(game_config.min_deposit),
+                'max_cashout': str(game_config.max_cashout),
+                'min_stake': str(game_config.min_stake),
+                'pause_cost_percent': str(game_config.pause_cost_percent),
+                'zero_base_rate': str(game_config.zero_base_rate),
+                'zero_growth_rate': str(game_config.zero_growth_rate),
+                'min_flips_before_zero': game_config.min_flips_before_zero,
+                'max_session_duration_minutes': game_config.max_session_duration_minutes,
+                'is_active': game_config.is_active,
+            }
+        else:
+            game_data = {
+                'id': None,
+                'currency': 'GHS',
+                'house_edge_percent': '60.00',
+                'min_deposit': '1.00',
+                'max_cashout': '10000.00',
+                'min_stake': '1.00',
+                'pause_cost_percent': '10.00',
+                'zero_base_rate': '0.0500',
+                'zero_growth_rate': '0.0800',
+                'min_flips_before_zero': 2,
+                'max_session_duration_minutes': 120,
+                'is_active': True,
+            }
+
+        sim_list = []
+        for sc in all_sim_configs:
+            sim_list.append({
+                'id': sc.id,
+                'name': sc.name,
+                'is_enabled': sc.is_enabled,
+                'outcome_mode': sc.outcome_mode,
+                'outcome_mode_display': sc.get_outcome_mode_display(),
+                'force_zero_at_flip': sc.force_zero_at_flip,
+                'fixed_zero_probability': str(sc.fixed_zero_probability),
+                'win_streak_length': sc.win_streak_length,
+                'force_denomination_value': str(sc.force_denomination_value) if sc.force_denomination_value else '',
+                'apply_to_all_players': sc.apply_to_all_players,
+                'override_min_stake': str(sc.override_min_stake) if sc.override_min_stake else '',
+                'override_max_cashout': str(sc.override_max_cashout) if sc.override_max_cashout else '',
+                'grant_test_balance': str(sc.grant_test_balance),
+                'auto_disable_after': sc.auto_disable_after,
+                'sessions_used': sc.sessions_used,
+                'notes': sc.notes,
+                'updated_at': sc.updated_at.isoformat(),
+            })
+
         return Response({
             'auth': AuthSettingsSerializer(auth_config).data,
-            'game': {
-                'house_edge_percent': '60.00',
-                'min_stake': '1.00',
-                'max_stake': '1000.00',
-                'zero_base_rate': '0.05',
-                'max_multiplier': '100',
-            },
+            'game': game_data,
+            'simulated_configs': sim_list,
+            'outcome_mode_choices': [
+                {'value': c[0], 'label': c[1]} for c in SimulatedGameConfig.OUTCOME_CHOICES
+            ],
         })
 
     # POST — save settings
@@ -643,4 +889,334 @@ def settings_view(request):
                 setattr(auth_config, field, auth_data[field])
         auth_config.save()
 
+    game_data = request.data.get('game', {})
+    if game_data and game_config:
+        game_fields = ['house_edge_percent', 'min_deposit', 'max_cashout', 'min_stake',
+                       'pause_cost_percent', 'zero_base_rate', 'zero_growth_rate',
+                       'min_flips_before_zero', 'max_session_duration_minutes']
+        updated = []
+        for field in game_fields:
+            if field in game_data:
+                setattr(game_config, field, game_data[field])
+                updated.append(field)
+        if updated:
+            game_config.save(update_fields=updated + ['updated_at'])
+
     return Response({'status': 'saved'})
+
+
+@api_view(['POST', 'PATCH', 'DELETE'])
+@permission_classes([IsStaffAdmin])
+def simulated_config_manage(request, config_id=None):
+    """Create, update, or delete simulated game configs."""
+    if request.method == 'POST' and config_id is None:
+        sc = SimulatedGameConfig.objects.create(
+            name=request.data.get('name', 'New Test Config'),
+            is_enabled=request.data.get('is_enabled', False),
+            outcome_mode=request.data.get('outcome_mode', 'normal'),
+        )
+        return Response({'id': sc.id, 'status': 'created'}, status=status.HTTP_201_CREATED)
+
+    if config_id is None:
+        return Response({'error': 'Config ID required'}, status=400)
+
+    try:
+        sc = SimulatedGameConfig.objects.get(id=config_id)
+    except SimulatedGameConfig.DoesNotExist:
+        return Response({'error': 'Config not found'}, status=404)
+
+    if request.method == 'DELETE':
+        sc.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    # PATCH
+    fields_map = {
+        'name': 'name', 'is_enabled': 'is_enabled', 'outcome_mode': 'outcome_mode',
+        'force_zero_at_flip': 'force_zero_at_flip', 'fixed_zero_probability': 'fixed_zero_probability',
+        'win_streak_length': 'win_streak_length', 'force_denomination_value': 'force_denomination_value',
+        'apply_to_all_players': 'apply_to_all_players', 'override_min_stake': 'override_min_stake',
+        'override_max_cashout': 'override_max_cashout', 'grant_test_balance': 'grant_test_balance',
+        'auto_disable_after': 'auto_disable_after', 'notes': 'notes',
+    }
+    updated = []
+    for key, field in fields_map.items():
+        if key in request.data:
+            val = request.data[key]
+            if val == '' and field in ('force_denomination_value', 'override_min_stake', 'override_max_cashout'):
+                val = None
+            setattr(sc, field, val)
+            updated.append(field)
+    if updated:
+        sc.save(update_fields=updated + ['updated_at'])
+
+    # If enabling this config, disable all others
+    if 'is_enabled' in request.data and request.data['is_enabled']:
+        SimulatedGameConfig.objects.exclude(id=sc.id).update(is_enabled=False)
+
+    return Response({'status': 'updated'})
+
+
+# ==================== STAFF MANAGEMENT ====================
+
+@api_view(['POST'])
+@permission_classes([IsStaffAdmin])
+def create_staff(request):
+    """Create a new staff member from an existing player account."""
+    phone = request.data.get('phone', '')
+    role_codename = request.data.get('role', '')
+
+    if not phone or not role_codename:
+        return Response({'error': 'Phone and role are required'}, status=400)
+
+    try:
+        player = Player.objects.get(phone=phone)
+    except Player.DoesNotExist:
+        return Response({'error': f'No player found with phone {phone}'}, status=404)
+
+    try:
+        role = AdminRole.objects.get(codename=role_codename)
+    except AdminRole.DoesNotExist:
+        return Response({'error': f'Role "{role_codename}" not found'}, status=404)
+
+    if StaffMember.objects.filter(player=player).exists():
+        return Response({'error': 'This player is already a staff member'}, status=400)
+
+    player.is_staff = True
+    player.save(update_fields=['is_staff'])
+
+    sm = StaffMember.objects.create(player=player, role=role, is_active=True)
+    return Response({'status': 'created', 'id': str(sm.player.id)}, status=status.HTTP_201_CREATED)
+
+
+@api_view(['POST'])
+@permission_classes([IsStaffAdmin])
+def create_role(request):
+    """Create a new admin role."""
+    name = request.data.get('name', '')
+    codename = request.data.get('codename', '')
+    permissions = request.data.get('permissions', [])
+    description = request.data.get('description', '')
+
+    if not name or not codename:
+        return Response({'error': 'Name and codename are required'}, status=400)
+
+    if AdminRole.objects.filter(codename=codename).exists():
+        return Response({'error': f'Role with codename "{codename}" already exists'}, status=400)
+
+    role = AdminRole.objects.create(
+        name=name, codename=codename,
+        permissions=permissions, description=description,
+    )
+    return Response(RoleSerializer(role).data, status=status.HTTP_201_CREATED)
+
+
+@api_view(['DELETE'])
+@permission_classes([IsStaffAdmin])
+def delete_staff(request, user_id):
+    """Remove a staff member (doesn't delete the player account)."""
+    try:
+        sm = StaffMember.objects.get(player_id=user_id)
+    except StaffMember.DoesNotExist:
+        return Response({'error': 'Staff member not found'}, status=404)
+
+    sm.player.is_staff = False
+    sm.player.save(update_fields=['is_staff'])
+    sm.delete()
+    return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+# ==================== GLOBAL SEARCH ====================
+
+@api_view(['GET'])
+@permission_classes([IsStaffAdmin])
+def global_search(request):
+    q = request.query_params.get('q', '').strip()
+    if len(q) < 2:
+        return Response({'results': []})
+
+    results = []
+
+    # Search players
+    players = Player.objects.filter(
+        Q(phone__icontains=q) | Q(display_name__icontains=q),
+        is_staff=False, is_superuser=False,
+    ).order_by('-date_joined')[:5]
+    for p in players:
+        wallet = getattr(p, 'wallet', None)
+        results.append({
+            'type': 'player',
+            'id': str(p.id),
+            'title': p.get_display_name(),
+            'subtitle': p.phone or '',
+            'meta': f'Balance: GHS {wallet.balance if wallet else 0}',
+            'url': '/players',
+        })
+
+    # Search game sessions by player
+    sessions = GameSession.objects.select_related('player').filter(
+        Q(player__phone__icontains=q) | Q(player__display_name__icontains=q),
+    ).order_by('-created_at')[:5]
+    for s in sessions:
+        results.append({
+            'type': 'session',
+            'id': str(s.id),
+            'title': f'Session #{str(s.id)[:8]}',
+            'subtitle': f'{s.player.get_display_name()} — {s.status}',
+            'meta': f'Stake: GHS {s.stake_amount}',
+            'url': '/sessions',
+        })
+
+    # Search deposits/withdrawals by phone or reference
+    for dep in Deposit.objects.select_related('player').filter(
+        Q(player__phone__icontains=q) | Q(orchard_reference__icontains=q) | Q(paystack_reference__icontains=q),
+    ).order_by('-created_at')[:3]:
+        ref = dep.orchard_reference or dep.paystack_reference or str(dep.id)[:8]
+        results.append({
+            'type': 'transaction',
+            'id': str(dep.id),
+            'title': f'Deposit {ref}',
+            'subtitle': f'{dep.player.get_display_name()} — {dep.status}',
+            'meta': f'GHS {dep.amount}',
+            'url': '/transactions',
+        })
+    for wdr in Withdrawal.objects.select_related('player').filter(
+        Q(player__phone__icontains=q) | Q(payout_reference__icontains=q),
+    ).order_by('-created_at')[:3]:
+        ref = wdr.payout_reference or str(wdr.id)[:8]
+        results.append({
+            'type': 'transaction',
+            'id': str(wdr.id),
+            'title': f'Withdrawal {ref}',
+            'subtitle': f'{wdr.player.get_display_name()} — {wdr.status}',
+            'meta': f'GHS {wdr.amount}',
+            'url': '/transactions',
+        })
+
+    # Search partners
+    try:
+        from partner.models import Operator
+        for op in Operator.objects.filter(
+            Q(name__icontains=q) | Q(slug__icontains=q),
+        )[:3]:
+            results.append({
+                'type': 'partner',
+                'id': str(op.id),
+                'title': op.name,
+                'subtitle': op.slug,
+                'meta': f'Status: {op.status}',
+                'url': '/partners',
+            })
+    except ImportError:
+        pass
+
+    return Response({'results': results[:15]})
+
+
+# ==================== NOTIFICATIONS ====================
+
+@api_view(['GET'])
+@permission_classes([IsStaffAdmin])
+def notifications_list(request):
+    """Generate real-time notifications from system events."""
+    notifications = []
+    now = timezone.now()
+    today = now.date()
+
+    # Pending withdrawals
+    pending_wdrs = Withdrawal.objects.filter(status='pending').order_by('-created_at')
+    pending_count = pending_wdrs.count()
+    if pending_count > 0:
+        total_pending = pending_wdrs.aggregate(s=Sum('amount'))['s'] or 0
+        latest = pending_wdrs.first()
+        notifications.append({
+            'id': f'pending-wdr-{today}',
+            'type': 'warning',
+            'title': f'{pending_count} Pending Withdrawal{"s" if pending_count > 1 else ""}',
+            'message': f'GHS {total_pending} total awaiting approval',
+            'url': '/finance',
+            'created_at': latest.created_at.isoformat() if latest else now.isoformat(),
+            'read': False,
+        })
+
+    # New signups today
+    new_today = Player.objects.filter(date_joined__date=today, is_staff=False).count()
+    if new_today > 0:
+        notifications.append({
+            'id': f'signups-{today}',
+            'type': 'info',
+            'title': f'{new_today} New Player{"s" if new_today > 1 else ""} Today',
+            'message': f'{new_today} players signed up today',
+            'url': '/players',
+            'created_at': now.isoformat(),
+            'read': False,
+        })
+
+    # Large wins (cashout > 500 in last 24h)
+    big_wins = GameSession.objects.filter(
+        status='cashed_out',
+        cashout_balance__gte=500,
+        created_at__gte=now - timedelta(hours=24),
+    ).select_related('player').order_by('-cashout_balance')[:3]
+    for win in big_wins:
+        notifications.append({
+            'id': f'bigwin-{win.id}',
+            'type': 'alert',
+            'title': f'Large Win: GHS {win.cashout_balance}',
+            'message': f'{win.player.get_display_name()} cashed out GHS {win.cashout_balance}',
+            'url': '/sessions',
+            'created_at': win.created_at.isoformat(),
+            'read': False,
+        })
+
+    # Failed deposits in last 24h
+    failed_deps = Deposit.objects.filter(
+        status='failed',
+        created_at__gte=now - timedelta(hours=24),
+    ).count()
+    if failed_deps > 0:
+        notifications.append({
+            'id': f'failed-deps-{today}',
+            'type': 'danger',
+            'title': f'{failed_deps} Failed Deposit{"s" if failed_deps > 1 else ""}',
+            'message': f'{failed_deps} deposits failed in the last 24 hours',
+            'url': '/transactions',
+            'created_at': now.isoformat(),
+            'read': False,
+        })
+
+    # Active simulation config warning
+    sim_config = SimulatedGameConfig.get_active_config()
+    if sim_config:
+        notifications.append({
+            'id': f'sim-active-{sim_config.id}',
+            'type': 'warning',
+            'title': 'Simulation Mode Active',
+            'message': f'"{sim_config.name}" is overriding game outcomes ({sim_config.get_outcome_mode_display()})',
+            'url': '/settings',
+            'created_at': sim_config.updated_at.isoformat(),
+            'read': False,
+        })
+
+    # Revenue milestone
+    revenue_today = (
+        (Deposit.objects.filter(created_at__date=today, status='completed').aggregate(s=Sum('amount'))['s'] or Decimal('0'))
+        - (Withdrawal.objects.filter(created_at__date=today, status='completed').aggregate(s=Sum('amount'))['s'] or Decimal('0'))
+    )
+    if revenue_today > 1000:
+        notifications.append({
+            'id': f'revenue-{today}',
+            'type': 'success',
+            'title': f'Revenue Milestone: GHS {revenue_today}',
+            'message': f'Today\'s net revenue has crossed GHS 1,000',
+            'url': '/',
+            'created_at': now.isoformat(),
+            'read': False,
+        })
+
+    # Sort by created_at descending
+    notifications.sort(key=lambda x: x['created_at'], reverse=True)
+
+    return Response({
+        'notifications': notifications[:20],
+        'unread_count': len([n for n in notifications if not n['read']]),
+    })

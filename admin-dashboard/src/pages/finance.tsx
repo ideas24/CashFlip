@@ -126,24 +126,34 @@ export default function FinancePage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {data!.recent.map(tx => (
-                    <TableRow key={tx.id}>
-                      <TableCell>
-                        <Badge variant={tx.type === 'deposit' ? 'success' : 'warning'} className="capitalize">{tx.type}</Badge>
+                  {data!.recent.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center py-12">
+                        <DollarSign size={36} className="mx-auto mb-3 text-muted opacity-40" />
+                        <div className="text-sm text-muted">No financial activity yet</div>
+                        <div className="text-xs text-muted mt-1">Deposits and withdrawals will appear here</div>
                       </TableCell>
-                      <TableCell className="text-white font-medium">{tx.player_name}</TableCell>
-                      <TableCell className={`font-semibold ${tx.type === 'deposit' ? 'text-success' : 'text-warning'}`}>
-                        {tx.type === 'deposit' ? '+' : '-'}{formatCurrency(tx.amount)}
-                      </TableCell>
-                      <TableCell className="capitalize">{tx.provider}</TableCell>
-                      <TableCell>
-                        <Badge variant={tx.status === 'completed' ? 'success' : tx.status === 'pending' ? 'warning' : 'danger'}>
-                          {tx.status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-muted text-xs">{formatDateTime(tx.created_at)}</TableCell>
                     </TableRow>
-                  ))}
+                  ) : (
+                    data!.recent.map(tx => (
+                      <TableRow key={tx.id}>
+                        <TableCell>
+                          <Badge variant={tx.type === 'deposit' ? 'success' : 'warning'} className="capitalize">{tx.type}</Badge>
+                        </TableCell>
+                        <TableCell className="text-white font-medium">{tx.player_name}</TableCell>
+                        <TableCell className={`font-semibold ${tx.type === 'deposit' ? 'text-success' : 'text-warning'}`}>
+                          {tx.type === 'deposit' ? '+' : '-'}{formatCurrency(tx.amount)}
+                        </TableCell>
+                        <TableCell className="capitalize">{tx.provider}</TableCell>
+                        <TableCell>
+                          <Badge variant={tx.status === 'completed' ? 'success' : tx.status === 'pending' ? 'warning' : 'danger'}>
+                            {tx.status}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-muted text-xs">{formatDateTime(tx.created_at)}</TableCell>
+                      </TableRow>
+                    ))
+                  )}
                 </TableBody>
               </Table>
             </CardContent>

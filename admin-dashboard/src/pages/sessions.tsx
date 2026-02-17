@@ -113,6 +113,15 @@ export default function SessionsPage() {
                       ))}
                     </TableRow>
                   ))
+                ) : !data?.results.length ? (
+                  <TableRow>
+                    <TableCell colSpan={8} className="text-center py-12">
+                      <div className="text-muted">
+                        <div className="text-lg mb-1">No game sessions found</div>
+                        <div className="text-sm">{search || statusFilter ? 'Try adjusting your filters' : 'Sessions will appear here once players start playing'}</div>
+                      </div>
+                    </TableCell>
+                  </TableRow>
                 ) : data?.results.map(s => (
                   <TableRow key={s.id}>
                     <TableCell>

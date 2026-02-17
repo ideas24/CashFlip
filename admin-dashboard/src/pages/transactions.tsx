@@ -104,6 +104,15 @@ export default function TransactionsPage() {
                       ))}
                     </TableRow>
                   ))
+                ) : !data?.results.length ? (
+                  <TableRow>
+                    <TableCell colSpan={7} className="text-center py-12">
+                      <div className="text-muted">
+                        <div className="text-lg mb-1">No transactions found</div>
+                        <div className="text-sm">{search || typeFilter ? 'Try adjusting your filters' : 'Transactions will appear here once players make deposits or withdrawals'}</div>
+                      </div>
+                    </TableCell>
+                  </TableRow>
                 ) : data?.results.map(tx => (
                   <TableRow key={tx.id}>
                     <TableCell>
