@@ -11,7 +11,7 @@
     {% load static %}
     <link rel="icon" type="image/svg+xml" href="{% static 'images/cashflip-favicon.svg' %}">
     <meta name="theme-color" content="#0D1117">
-    <link rel="stylesheet" href="{% static 'css/game.css' %}?v=20260217h">
+    <link rel="stylesheet" href="{% static 'css/game.css' %}?v=20260217h2">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
 <body>
@@ -111,25 +111,6 @@
             </div>
         </div>
 
-        <!-- Zero-balance CTA overlay (shown when wallet is empty) -->
-        <div id="deposit-cta-overlay" class="deposit-cta-overlay hidden">
-            <div class="cta-backdrop"></div>
-            <div class="cta-content">
-                <div class="cta-coin-stack">
-                    <div class="cta-coin c1">₵</div>
-                    <div class="cta-coin c2">₵</div>
-                    <div class="cta-coin c3">₵</div>
-                </div>
-                <h2 class="cta-title">Ready to Win?</h2>
-                <p class="cta-subtitle">Deposit to start flipping notes and stacking cash</p>
-                <button id="cta-deposit-btn" class="cta-deposit-btn">
-                    <span class="cta-btn-glow"></span>
-                    <span class="cta-btn-text">💰 Deposit Now</span>
-                </button>
-                <p class="cta-hint" id="cta-hint">Loading...</p>
-            </div>
-        </div>
-
         <div class="lobby-body">
             <div class="lobby-card stake-card">
                 <h2>Start Playing</h2>
@@ -172,6 +153,25 @@
                 </div>
                 <div id="live-feed" class="live-feed">
                     <div class="feed-placeholder">Loading live results...</div>
+                </div>
+            </div>
+
+            <!-- Zero-balance CTA overlay (shown when wallet is empty, game board visible behind) -->
+            <div id="deposit-cta-overlay" class="deposit-cta-overlay hidden">
+                <div class="cta-backdrop"></div>
+                <div class="cta-content">
+                    <div class="cta-coin-stack">
+                        <div class="cta-coin c1">₵</div>
+                        <div class="cta-coin c2">₵</div>
+                        <div class="cta-coin c3">₵</div>
+                    </div>
+                    <h2 class="cta-title">Ready to Win?</h2>
+                    <p class="cta-subtitle">Deposit to start flipping notes and stacking cash</p>
+                    <button id="cta-deposit-btn" class="cta-deposit-btn">
+                        <span class="cta-btn-glow"></span>
+                        <span class="cta-btn-text">💰 Deposit Now</span>
+                    </button>
+                    <p class="cta-hint" id="cta-hint">Loading...</p>
                 </div>
             </div>
         </div>
@@ -494,6 +494,6 @@
         <span id="toast-message"></span>
     </div>
 
-    <script src="{% static 'js/game.js' %}?v=20260217h"></script>
+    <script src="{% static 'js/game.js' %}?v=20260217h2"></script>
 </body>
 </html>

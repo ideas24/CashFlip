@@ -716,8 +716,8 @@ html, body {
 .deposit-cta-overlay.hidden { display: none; }
 .cta-backdrop {
     position: absolute; inset: 0;
-    background: radial-gradient(ellipse at center, rgba(13,17,23,0.7) 0%, rgba(13,17,23,0.95) 100%);
-    backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+    background: radial-gradient(ellipse at center, rgba(13,17,23,0.45) 0%, rgba(13,17,23,0.65) 100%);
+    backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px);
 }
 .cta-content {
     position: relative; z-index: 2; text-align: center;

@@ -152,23 +152,18 @@ def add_momo_account(request):
     verified_name = result['name'].strip().upper()
     network = result['network']
 
-    # SECURITY: Strict name matching — both first AND last name must match
+    # SECURITY: Strict exact full name matching against existing accounts
     if existing_accounts.exists():
         existing_name = existing_accounts.first().verified_name.strip().upper()
-        existing_parts = set(existing_name.split())
-        new_parts = set(verified_name.split())
-
-        # All name parts from the existing account must appear in the new name and vice versa
-        if existing_parts != new_parts:
+        if verified_name != existing_name:
             logger.warning(
                 f'Name mismatch for player {request.user.id}: '
-                f'existing="{existing_name}" parts={existing_parts}, '
-                f'new="{verified_name}" parts={new_parts} ({normalized})'
+                f'existing="{existing_name}", new="{verified_name}" ({normalized})'
             )
             return Response({
                 'error': f'Account name "{result["name"]}" does not match your '
                          f'registered name "{existing_accounts.first().verified_name}". '
-                         f'Both first and last names must match for security.'
+                         f'All payment accounts must be in the same name for security.'
             }, status=status.HTTP_403_FORBIDDEN)
 
     # Create the account
