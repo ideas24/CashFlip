@@ -11,7 +11,7 @@ from rest_framework.response import Response
 from rest_framework.throttling import AnonRateThrottle
 
 from accounts.authentication import generate_access_token, generate_refresh_token, verify_refresh_token
-from accounts.models import Player, PlayerProfile
+from accounts.models import Player, PlayerProfile, AuthConfig
 from accounts.otp_service import send_otp, verify_otp
 from accounts.serializers import (
     RequestOTPSerializer, VerifyOTPSerializer, RefreshTokenSerializer,
@@ -37,6 +37,15 @@ def request_otp(request):
     channel = serializer.validated_data['channel']
     ip = request.META.get('HTTP_X_FORWARDED_FOR', request.META.get('REMOTE_ADDR', ''))
 
+    # Enforce auth config toggle
+    auth_cfg = AuthConfig.get_config()
+    if channel == 'sms' and not auth_cfg.sms_otp_enabled:
+        msg = auth_cfg.maintenance_message or 'SMS login is currently disabled.'
+        return Response({'error': msg}, status=status.HTTP_403_FORBIDDEN)
+    if channel == 'whatsapp' and not auth_cfg.whatsapp_otp_enabled:
+        msg = auth_cfg.maintenance_message or 'WhatsApp login is currently disabled.'
+        return Response({'error': msg}, status=status.HTTP_403_FORBIDDEN)
+
     result = send_otp(phone, channel=channel, ip_address=ip)
     
     if result['success']:
@@ -53,6 +62,12 @@ def request_sms_otp(request):
     Dedicated endpoint for the SMS login button.
     Body: {"phone": "0241234567"}
     """
+    # Enforce auth config toggle
+    auth_cfg = AuthConfig.get_config()
+    if not auth_cfg.sms_otp_enabled:
+        msg = auth_cfg.maintenance_message or 'SMS login is currently disabled.'
+        return Response({'error': msg}, status=status.HTTP_403_FORBIDDEN)
+
     from accounts.serializers import PhoneOnlySerializer
     serializer = PhoneOnlySerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
@@ -76,6 +91,12 @@ def request_whatsapp_otp(request):
     Dedicated endpoint for the WhatsApp login button.
     Body: {"phone": "0241234567"}
     """
+    # Enforce auth config toggle
+    auth_cfg = AuthConfig.get_config()
+    if not auth_cfg.whatsapp_otp_enabled:
+        msg = auth_cfg.maintenance_message or 'WhatsApp login is currently disabled.'
+        return Response({'error': msg}, status=status.HTTP_403_FORBIDDEN)
+
     from accounts.serializers import PhoneOnlySerializer
     serializer = PhoneOnlySerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
@@ -185,6 +206,19 @@ def update_profile(request):
     serializer.is_valid(raise_exception=True)
     serializer.save()
     return Response(PlayerSerializer(request.user).data)
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def auth_methods(request):
+    """Public endpoint — frontend fetches this to know which login buttons to show."""
+    cfg = AuthConfig.get_config()
+    return Response({
+        'sms_otp': cfg.sms_otp_enabled,
+        'whatsapp_otp': cfg.whatsapp_otp_enabled,
+        'google': cfg.google_enabled,
+        'facebook': cfg.facebook_enabled,
+    })
 
 
 def _process_referral(new_player, ref_code):

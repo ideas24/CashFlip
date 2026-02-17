@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
-from accounts.models import Player, PlayerProfile, OTPToken, AdminRole, StaffMember, AuditLog
+from accounts.models import Player, PlayerProfile, OTPToken, AdminRole, AuthConfig, StaffMember, AuditLog
 
 
 @admin.register(Player)
@@ -34,6 +34,32 @@ class OTPTokenAdmin(admin.ModelAdmin):
     list_filter = ['channel', 'is_used']
     search_fields = ['phone']
     readonly_fields = ['created_at']
+
+
+@admin.register(AuthConfig)
+class AuthConfigAdmin(admin.ModelAdmin):
+    list_display = ['__str__', 'sms_otp_enabled', 'whatsapp_otp_enabled', 'google_enabled', 'facebook_enabled', 'updated_at']
+
+    fieldsets = (
+        ('Login Method Toggles', {
+            'fields': ('sms_otp_enabled', 'whatsapp_otp_enabled', 'google_enabled', 'facebook_enabled'),
+            'description': 'Enable or disable each login method. Changes take effect immediately.',
+        }),
+        ('OTP Settings', {
+            'fields': ('otp_expiry_minutes', 'max_otp_per_hour'),
+        }),
+        ('Maintenance', {
+            'fields': ('maintenance_message',),
+            'description': 'Custom message shown to users when a login method is disabled. Leave blank for a generic message.',
+        }),
+    )
+
+    def has_add_permission(self, request):
+        # Singleton — only allow add if none exists
+        return not AuthConfig.objects.exists()
+
+    def has_delete_permission(self, request, obj=None):
+        return False
 
 
 @admin.register(AdminRole)

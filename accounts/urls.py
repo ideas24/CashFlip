@@ -15,6 +15,9 @@ urlpatterns = [
     path('auth/verify-otp/', views.verify_otp_view, name='verify_otp'),
     path('auth/refresh/', views.refresh_token_view, name='refresh_token'),
 
+    # Public — which login buttons to show
+    path('auth/methods/', views.auth_methods, name='auth_methods'),
+
     # Profile
     path('profile/', views.player_profile, name='profile'),
     path('profile/update/', views.update_profile, name='update_profile'),

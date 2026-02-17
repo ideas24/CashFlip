@@ -159,6 +159,55 @@ class AdminRole(models.Model):
         return perm in self.permissions
 
 
+class AuthConfig(models.Model):
+    """
+    Singleton config to toggle login methods on/off from admin.
+    Frontend fetches this to show/hide login buttons; backend enforces it.
+    """
+    # Login method toggles
+    sms_otp_enabled = models.BooleanField(default=True, help_text='Enable SMS OTP login')
+    whatsapp_otp_enabled = models.BooleanField(default=True, help_text='Enable WhatsApp OTP login')
+    google_enabled = models.BooleanField(default=False, help_text='Enable Google OAuth login')
+    facebook_enabled = models.BooleanField(default=False, help_text='Enable Facebook OAuth login')
+
+    # OTP settings
+    otp_expiry_minutes = models.PositiveIntegerField(default=5, help_text='OTP code expiry in minutes')
+    max_otp_per_hour = models.PositiveIntegerField(default=6, help_text='Max OTP requests per phone per hour')
+
+    # Display
+    maintenance_message = models.CharField(max_length=255, blank=True, default='',
+                                           help_text='Message shown when a login method is disabled (blank = generic)')
+
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Auth Configuration'
+        verbose_name_plural = 'Auth Configuration'
+
+    def __str__(self):
+        methods = []
+        if self.sms_otp_enabled:
+            methods.append('SMS')
+        if self.whatsapp_otp_enabled:
+            methods.append('WhatsApp')
+        if self.google_enabled:
+            methods.append('Google')
+        if self.facebook_enabled:
+            methods.append('Facebook')
+        return f'Auth Config — Active: {", ".join(methods) or "None"}'
+
+    def save(self, *args, **kwargs):
+        # Enforce singleton — always use pk=1
+        self.pk = 1
+        super().save(*args, **kwargs)
+
+    @classmethod
+    def get_config(cls):
+        """Get or create the singleton auth config."""
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj
+
+
 class StaffMember(models.Model):
     player = models.OneToOneField(Player, on_delete=models.CASCADE, related_name='staff_profile')
     role = models.ForeignKey(AdminRole, on_delete=models.PROTECT, related_name='members')
