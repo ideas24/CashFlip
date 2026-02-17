@@ -137,6 +137,23 @@ deploy_code() {
     log "Code deployed to all VMs"
 }
 
+# ---- Action: Rebuild React admin console + restart pm2 ----
+deploy_admin() {
+    log "Rebuilding React admin console on App VMs..."
+    local script="
+export HOME=/root
+cd /opt/cashflip/app/admin-dashboard
+echo 'Installing deps...'
+npm ci --production=false 2>&1 | tail -2
+echo 'Building...'
+npm run build 2>&1 | tail -3
+pm2 restart cashflip-admin 2>&1 | tail -2
+echo 'Admin console rebuilt and pm2 restarted'
+"
+    run_on_vmss "$APP_VMSS" "$script" "Rebuild admin console"
+    log "Admin console rebuilt on all App VMs"
+}
+
 # ---- Action: Provision SSL certs ----
 provision_certs() {
     log "Provisioning SSL certificates via certbot..."
@@ -194,6 +211,7 @@ usage() {
     echo "  $0 --with-env FILE            Code update + push .env file"
     echo "  $0 --init --env FILE          First-time: SSH key + env + full deploy"
     echo "  $0 --env-only FILE            Push .env file only (no code update)"
+    echo "  $0 --admin                    Rebuild React admin console + restart pm2"
     echo "  $0 --cert                     Provision/renew SSL certificates"
     echo "  $0 --status                   Check service status on all VMs"
     echo "  $0 --logs                     View deploy logs from all VMs"
@@ -208,6 +226,9 @@ usage() {
     echo ""
     echo "  # Code update with env change"
     echo "  $0 --with-env terraform/production.env"
+    echo ""
+    echo "  # Code update + rebuild admin console"
+    echo "  $0 --admin"
     echo ""
 }
 
@@ -231,6 +252,7 @@ preflight() {
 main() {
     local mode="code"
     local env_file=""
+    local rebuild_admin=false
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -250,6 +272,10 @@ main() {
                 mode="env_only"
                 shift
                 env_file="$1"
+                shift
+                ;;
+            --admin)
+                rebuild_admin=true
                 shift
                 ;;
             --cert)
@@ -306,11 +332,17 @@ main() {
         code)
             log "=== CODE DEPLOY (env unchanged) ==="
             deploy_code
+            if [ "$rebuild_admin" = true ]; then
+                deploy_admin
+            fi
             ;;
         code_and_env)
             log "=== CODE + ENV DEPLOY ==="
             push_env "$env_file"
             deploy_code
+            if [ "$rebuild_admin" = true ]; then
+                deploy_admin
+            fi
             ;;
         env_only)
             if [ -z "$env_file" ]; then
