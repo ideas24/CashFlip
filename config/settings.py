@@ -184,6 +184,11 @@ CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = TIME_ZONE
 
+# Azure Redis requires SSL cert config when using rediss://
+if CELERY_BROKER_URL.startswith('rediss://'):
+    CELERY_BROKER_USE_SSL = {'ssl_cert_reqs': 'CERT_REQUIRED'}
+    CELERY_REDIS_BACKEND_USE_SSL = {'ssl_cert_reqs': 'CERT_REQUIRED'}
+
 # ============ CORS ============
 CORS_ALLOWED_ORIGINS = os.getenv('CORS_ALLOWED_ORIGINS', 'https://demo.cashflip.amoano.com').split(',')
 CORS_ALLOW_CREDENTIALS = True
