@@ -274,8 +274,150 @@
         toast._timeout = setTimeout(() => toast.classList.add('hidden'), duration);
     }
 
+    // ==================== COUNTRY PICKER ====================
+    const COUNTRIES = [
+        {name:'Ghana',code:'+233',iso:'GH',flag:'🇬🇭'},{name:'Nigeria',code:'+234',iso:'NG',flag:'🇳🇬'},
+        {name:'Kenya',code:'+254',iso:'KE',flag:'🇰🇪'},{name:'South Africa',code:'+27',iso:'ZA',flag:'🇿🇦'},
+        {name:'Uganda',code:'+256',iso:'UG',flag:'🇺🇬'},{name:'Tanzania',code:'+255',iso:'TZ',flag:'🇹🇿'},
+        {name:'Cameroon',code:'+237',iso:'CM',flag:'🇨🇲'},{name:'Ivory Coast',code:'+225',iso:'CI',flag:'🇨🇮'},
+        {name:'Senegal',code:'+221',iso:'SN',flag:'🇸🇳'},{name:'Rwanda',code:'+250',iso:'RW',flag:'🇷🇼'},
+        {name:'Ethiopia',code:'+251',iso:'ET',flag:'🇪🇹'},{name:'Zambia',code:'+260',iso:'ZM',flag:'🇿🇲'},
+        {name:'Zimbabwe',code:'+263',iso:'ZW',flag:'🇿🇼'},{name:'Mozambique',code:'+258',iso:'MZ',flag:'🇲🇿'},
+        {name:'Botswana',code:'+267',iso:'BW',flag:'🇧🇼'},{name:'Namibia',code:'+264',iso:'NA',flag:'🇳🇦'},
+        {name:'Malawi',code:'+265',iso:'MW',flag:'🇲🇼'},{name:'Mali',code:'+223',iso:'ML',flag:'🇲🇱'},
+        {name:'Burkina Faso',code:'+226',iso:'BF',flag:'🇧🇫'},{name:'Niger',code:'+227',iso:'NE',flag:'🇳🇪'},
+        {name:'Togo',code:'+228',iso:'TG',flag:'🇹🇬'},{name:'Benin',code:'+229',iso:'BJ',flag:'🇧🇯'},
+        {name:'Sierra Leone',code:'+232',iso:'SL',flag:'🇸🇱'},{name:'Liberia',code:'+231',iso:'LR',flag:'🇱🇷'},
+        {name:'Gambia',code:'+220',iso:'GM',flag:'🇬🇲'},{name:'Guinea',code:'+224',iso:'GN',flag:'🇬🇳'},
+        {name:'DR Congo',code:'+243',iso:'CD',flag:'🇨🇩'},{name:'Congo',code:'+242',iso:'CG',flag:'🇨🇬'},
+        {name:'Angola',code:'+244',iso:'AO',flag:'🇦🇴'},{name:'Gabon',code:'+241',iso:'GA',flag:'🇬🇦'},
+        {name:'Chad',code:'+235',iso:'TD',flag:'🇹🇩'},{name:'Madagascar',code:'+261',iso:'MG',flag:'🇲🇬'},
+        {name:'Mauritius',code:'+230',iso:'MU',flag:'🇲🇺'},{name:'Somalia',code:'+252',iso:'SO',flag:'🇸🇴'},
+        {name:'Sudan',code:'+249',iso:'SD',flag:'🇸🇩'},{name:'South Sudan',code:'+211',iso:'SS',flag:'🇸🇸'},
+        {name:'Egypt',code:'+20',iso:'EG',flag:'🇪🇬'},{name:'Morocco',code:'+212',iso:'MA',flag:'🇲🇦'},
+        {name:'Tunisia',code:'+216',iso:'TN',flag:'🇹🇳'},{name:'Algeria',code:'+213',iso:'DZ',flag:'🇩🇿'},
+        {name:'Libya',code:'+218',iso:'LY',flag:'🇱🇾'},{name:'Eritrea',code:'+291',iso:'ER',flag:'🇪🇷'},
+        {name:'Djibouti',code:'+253',iso:'DJ',flag:'🇩🇯'},{name:'Comoros',code:'+269',iso:'KM',flag:'🇰🇲'},
+        {name:'Cabo Verde',code:'+238',iso:'CV',flag:'🇨🇻'},{name:'Eswatini',code:'+268',iso:'SZ',flag:'🇸🇿'},
+        {name:'Lesotho',code:'+266',iso:'LS',flag:'🇱🇸'},{name:'Equatorial Guinea',code:'+240',iso:'GQ',flag:'🇬🇶'},
+        {name:'Guinea-Bissau',code:'+245',iso:'GW',flag:'🇬🇼'},{name:'Central African Rep.',code:'+236',iso:'CF',flag:'🇨🇫'},
+        {name:'Mauritania',code:'+222',iso:'MR',flag:'🇲🇷'},{name:'Burundi',code:'+257',iso:'BI',flag:'🇧🇮'},
+        {name:'Seychelles',code:'+248',iso:'SC',flag:'🇸🇨'},{name:'São Tomé',code:'+239',iso:'ST',flag:'🇸🇹'},
+        {name:'United Kingdom',code:'+44',iso:'GB',flag:'🇬🇧'},{name:'United States',code:'+1',iso:'US',flag:'🇺🇸'},
+        {name:'Canada',code:'+1',iso:'CA',flag:'🇨🇦'},{name:'France',code:'+33',iso:'FR',flag:'🇫🇷'},
+        {name:'Germany',code:'+49',iso:'DE',flag:'🇩🇪'},{name:'Italy',code:'+39',iso:'IT',flag:'🇮🇹'},
+        {name:'Spain',code:'+34',iso:'ES',flag:'🇪🇸'},{name:'Portugal',code:'+351',iso:'PT',flag:'🇵🇹'},
+        {name:'Netherlands',code:'+31',iso:'NL',flag:'🇳🇱'},{name:'Belgium',code:'+32',iso:'BE',flag:'🇧🇪'},
+        {name:'Switzerland',code:'+41',iso:'CH',flag:'🇨🇭'},{name:'Austria',code:'+43',iso:'AT',flag:'🇦🇹'},
+        {name:'Sweden',code:'+46',iso:'SE',flag:'🇸🇪'},{name:'Norway',code:'+47',iso:'NO',flag:'🇳🇴'},
+        {name:'Denmark',code:'+45',iso:'DK',flag:'🇩🇰'},{name:'Finland',code:'+358',iso:'FI',flag:'🇫🇮'},
+        {name:'Ireland',code:'+353',iso:'IE',flag:'🇮🇪'},{name:'Poland',code:'+48',iso:'PL',flag:'🇵🇱'},
+        {name:'Czech Republic',code:'+420',iso:'CZ',flag:'🇨🇿'},{name:'Romania',code:'+40',iso:'RO',flag:'🇷🇴'},
+        {name:'Hungary',code:'+36',iso:'HU',flag:'🇭🇺'},{name:'Greece',code:'+30',iso:'GR',flag:'🇬🇷'},
+        {name:'Turkey',code:'+90',iso:'TR',flag:'🇹🇷'},{name:'Russia',code:'+7',iso:'RU',flag:'🇷🇺'},
+        {name:'Ukraine',code:'+380',iso:'UA',flag:'🇺🇦'},{name:'India',code:'+91',iso:'IN',flag:'🇮🇳'},
+        {name:'Pakistan',code:'+92',iso:'PK',flag:'🇵🇰'},{name:'Bangladesh',code:'+880',iso:'BD',flag:'🇧🇩'},
+        {name:'Sri Lanka',code:'+94',iso:'LK',flag:'🇱🇰'},{name:'Nepal',code:'+977',iso:'NP',flag:'🇳🇵'},
+        {name:'China',code:'+86',iso:'CN',flag:'🇨🇳'},{name:'Japan',code:'+81',iso:'JP',flag:'🇯🇵'},
+        {name:'South Korea',code:'+82',iso:'KR',flag:'🇰🇷'},{name:'Philippines',code:'+63',iso:'PH',flag:'🇵🇭'},
+        {name:'Indonesia',code:'+62',iso:'ID',flag:'🇮🇩'},{name:'Malaysia',code:'+60',iso:'MY',flag:'🇲🇾'},
+        {name:'Thailand',code:'+66',iso:'TH',flag:'🇹🇭'},{name:'Vietnam',code:'+84',iso:'VN',flag:'🇻🇳'},
+        {name:'Singapore',code:'+65',iso:'SG',flag:'🇸🇬'},{name:'Australia',code:'+61',iso:'AU',flag:'🇦🇺'},
+        {name:'New Zealand',code:'+64',iso:'NZ',flag:'🇳🇿'},{name:'Brazil',code:'+55',iso:'BR',flag:'🇧🇷'},
+        {name:'Mexico',code:'+52',iso:'MX',flag:'🇲🇽'},{name:'Argentina',code:'+54',iso:'AR',flag:'🇦🇷'},
+        {name:'Colombia',code:'+57',iso:'CO',flag:'🇨🇴'},{name:'Chile',code:'+56',iso:'CL',flag:'🇨🇱'},
+        {name:'Peru',code:'+51',iso:'PE',flag:'🇵🇪'},{name:'Saudi Arabia',code:'+966',iso:'SA',flag:'🇸🇦'},
+        {name:'UAE',code:'+971',iso:'AE',flag:'🇦🇪'},{name:'Qatar',code:'+974',iso:'QA',flag:'🇶🇦'},
+        {name:'Kuwait',code:'+965',iso:'KW',flag:'🇰🇼'},{name:'Bahrain',code:'+973',iso:'BH',flag:'🇧🇭'},
+        {name:'Oman',code:'+968',iso:'OM',flag:'🇴🇲'},{name:'Jordan',code:'+962',iso:'JO',flag:'🇯🇴'},
+        {name:'Lebanon',code:'+961',iso:'LB',flag:'🇱🇧'},{name:'Israel',code:'+972',iso:'IL',flag:'🇮🇱'},
+        {name:'Jamaica',code:'+1876',iso:'JM',flag:'🇯🇲'},{name:'Trinidad',code:'+1868',iso:'TT',flag:'🇹🇹'},
+        {name:'Barbados',code:'+1246',iso:'BB',flag:'🇧🇧'},{name:'Haiti',code:'+509',iso:'HT',flag:'🇭🇹'},
+        {name:'Cuba',code:'+53',iso:'CU',flag:'🇨🇺'},{name:'Dominican Rep.',code:'+1809',iso:'DO',flag:'🇩🇴'},
+    ];
+
+    let selectedCountry = COUNTRIES[0]; // Ghana default
+
+    function initCountryPicker() {
+        const toggle = document.getElementById('country-toggle');
+        const dropdown = document.getElementById('country-dropdown');
+        const search = document.getElementById('country-search');
+        const list = document.getElementById('country-list');
+        if (!toggle || !dropdown || !list) return;
+
+        function renderList(filter) {
+            const q = (filter || '').toLowerCase();
+            const filtered = q ? COUNTRIES.filter(c =>
+                c.name.toLowerCase().includes(q) || c.code.includes(q) || c.iso.toLowerCase().includes(q)
+            ) : COUNTRIES;
+            list.innerHTML = filtered.map(c =>
+                `<div class="country-item${c.iso === selectedCountry.iso ? ' active' : ''}" data-iso="${c.iso}">` +
+                `<span class="ci-flag">${c.flag}</span>` +
+                `<span class="ci-name">${c.name}</span>` +
+                `<span class="ci-code">${c.code}</span></div>`
+            ).join('');
+        }
+
+        function selectCountry(c) {
+            selectedCountry = c;
+            document.getElementById('selected-flag').textContent = c.flag;
+            document.getElementById('selected-code').textContent = c.code;
+            dropdown.classList.add('hidden');
+            search.value = '';
+            renderList('');
+            document.getElementById('phone-input')?.focus();
+        }
+
+        renderList('');
+
+        // Set initial flag via JS to ensure emoji renders
+        document.getElementById('selected-flag').textContent = selectedCountry.flag;
+        document.getElementById('selected-code').textContent = selectedCountry.code;
+
+        toggle.addEventListener('click', (e) => {
+            e.preventDefault();
+            dropdown.classList.toggle('hidden');
+            if (!dropdown.classList.contains('hidden')) {
+                search.value = '';
+                renderList('');
+                setTimeout(() => search.focus(), 50);
+            }
+        });
+
+        search.addEventListener('input', () => renderList(search.value));
+
+        list.addEventListener('click', (e) => {
+            const item = e.target.closest('.country-item');
+            if (!item) return;
+            const iso = item.dataset.iso;
+            const c = COUNTRIES.find(x => x.iso === iso);
+            if (c) selectCountry(c);
+        });
+
+        // Close dropdown on outside click
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('#country-picker')) {
+                dropdown.classList.add('hidden');
+            }
+        });
+
+        // Keyboard nav in search
+        search.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') dropdown.classList.add('hidden');
+            if (e.key === 'Enter') {
+                const first = list.querySelector('.country-item');
+                if (first) {
+                    const iso = first.dataset.iso;
+                    const c = COUNTRIES.find(x => x.iso === iso);
+                    if (c) selectCountry(c);
+                }
+            }
+        });
+    }
+
     // ==================== AUTH ====================
     function initAuth() {
+        initCountryPicker();
         // Fetch auth methods config from admin
         fetch(API.base + '/accounts/auth/methods/')
             .then(r => r.json())
@@ -332,7 +474,7 @@
             }
 
             // Build full phone: country code + local number (strip leading 0)
-            const countryCode = document.getElementById('country-code')?.value || '+233';
+            const countryCode = selectedCountry.code || '+233';
             let local = rawPhone.replace(/[\s\-]/g, '');
             if (local.startsWith('0')) local = local.substring(1);
             const phone = countryCode + local;

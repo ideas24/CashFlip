@@ -11,7 +11,7 @@
     {% load static %}
     <link rel="icon" type="image/svg+xml" href="{% static 'images/cashflip-favicon.svg' %}">
     <meta name="theme-color" content="#0D1117">
-    <link rel="stylesheet" href="{% static 'css/game.css' %}">
+    <link rel="stylesheet" href="{% static 'css/game.css' %}?v=20260217b">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
 <body>
@@ -37,19 +37,17 @@
             <div id="otp-step-1" class="auth-step active">
                 <div class="input-group">
                     <div class="phone-row">
-                        <select id="country-code" class="country-select">
-                            <option value="+233" data-flag="🇬🇭" selected>🇬🇭 +233</option>
-                            <option value="+234" data-flag="🇳🇬">🇳🇬 +234</option>
-                            <option value="+254" data-flag="🇰🇪">🇰🇪 +254</option>
-                            <option value="+256" data-flag="🇺🇬">🇺🇬 +256</option>
-                            <option value="+255" data-flag="🇹🇿">🇹🇿 +255</option>
-                            <option value="+27" data-flag="🇿🇦">🇿🇦 +27</option>
-                            <option value="+225" data-flag="🇨🇮">🇨🇮 +225</option>
-                            <option value="+221" data-flag="🇸🇳">🇸🇳 +221</option>
-                            <option value="+237" data-flag="🇨🇲">🇨🇲 +237</option>
-                            <option value="+44" data-flag="🇬🇧">🇬🇧 +44</option>
-                            <option value="+1" data-flag="🇺🇸">🇺🇸 +1</option>
-                        </select>
+                        <div class="country-picker" id="country-picker">
+                            <button type="button" class="country-toggle" id="country-toggle">
+                                <span id="selected-flag">🇭</span>
+                                <span id="selected-code">+233</span>
+                                <span class="picker-arrow">▾</span>
+                            </button>
+                            <div class="country-dropdown hidden" id="country-dropdown">
+                                <input type="text" class="country-search" id="country-search" placeholder="Search country...">
+                                <div class="country-list" id="country-list"></div>
+                            </div>
+                        </div>
                         <input type="tel" id="phone-input" placeholder="24 123 4567" maxlength="15">
                     </div>
                 </div>
@@ -406,6 +404,6 @@
         <span id="toast-message"></span>
     </div>
 
-    <script src="{% static 'js/game.js' %}"></script>
+    <script src="{% static 'js/game.js' %}?v=20260217c"></script>
 </body>
 </html>
