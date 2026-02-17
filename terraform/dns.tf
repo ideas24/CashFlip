@@ -4,58 +4,59 @@
 #
 #   ./update_dns.sh $(terraform output -raw lb_public_ip)
 #
-# The script uses Porkbun API to point cashflip.amoano.com -> LB IP
+# Requires PORKBUN_API_KEY and PORKBUN_SECRET_KEY environment variables
+# (set in your .env or export them before running)
 
 # DNS update script
 resource "local_file" "dns_script" {
   filename = "${path.module}/update_dns.sh"
   content  = <<-SCRIPT
     #!/bin/bash
-    # Update Porkbun DNS A record for cashflip.amoano.com
+    # Update Porkbun DNS A records for cashflip production subdomains
     # Usage: ./update_dns.sh <LB_PUBLIC_IP>
+    #
+    # Requires env vars: PORKBUN_API_KEY, PORKBUN_SECRET_KEY
+    # Source from .env:  source <(grep PORKBUN /path/to/.env)
     
     set -e
     
     LB_IP="$1"
     if [ -z "$LB_IP" ]; then
       echo "Usage: $0 <LB_PUBLIC_IP>"
+      echo "  Requires: PORKBUN_API_KEY and PORKBUN_SECRET_KEY env vars"
       exit 1
     fi
     
-    API_KEY="pk1_ec05cee783e1a5c039879a5ccd682590cf96310f0a2ea73c0c1c0fe07687e802"
-    SECRET_KEY="sk1_fe2256e4a8bf539ea5f1bbf59cfeca909c7c5b51e48199538d98285fa386c441"
+    if [ -z "$PORKBUN_API_KEY" ] || [ -z "$PORKBUN_SECRET_KEY" ]; then
+      echo "ERROR: PORKBUN_API_KEY and PORKBUN_SECRET_KEY must be set"
+      echo "  export PORKBUN_API_KEY=pk1_..."
+      echo "  export PORKBUN_SECRET_KEY=sk1_..."
+      exit 1
+    fi
     
-    echo "=== Setting cashflip.amoano.com -> $LB_IP ==="
+    SUBDOMAINS=("cashflip" "manage.cashflip" "console.cashflip")
     
-    # Delete existing A records
-    curl -s -X POST "https://api.porkbun.com/api/json/v3/dns/deleteByNameType/amoano.com/A/cashflip" \
-      -H "Content-Type: application/json" \
-      -d "{\"apikey\":\"$API_KEY\",\"secretapikey\":\"$SECRET_KEY\"}"
-    
-    curl -s -X POST "https://api.porkbun.com/api/json/v3/dns/deleteByNameType/amoano.com/A/manage.cashflip" \
-      -H "Content-Type: application/json" \
-      -d "{\"apikey\":\"$API_KEY\",\"secretapikey\":\"$SECRET_KEY\"}"
-    
+    echo "=== Updating DNS for cashflip production ==="
+    echo "  Target IP: $LB_IP"
     echo ""
     
-    # Create game subdomain: cashflip.amoano.com
-    echo "Creating cashflip.amoano.com -> $LB_IP"
-    curl -s -X POST "https://api.porkbun.com/api/json/v3/dns/create/amoano.com" \
-      -H "Content-Type: application/json" \
-      -d "{\"apikey\":\"$API_KEY\",\"secretapikey\":\"$SECRET_KEY\",\"type\":\"A\",\"name\":\"cashflip\",\"content\":\"$LB_IP\",\"ttl\":\"300\"}"
+    for SUB in "$${SUBDOMAINS[@]}"; do
+      echo "[$SUB.amoano.com] Deleting old A record..."
+      curl -s -X POST "https://api.porkbun.com/api/json/v3/dns/deleteByNameType/amoano.com/A/$SUB" \
+        -H "Content-Type: application/json" \
+        -d "{\"apikey\":\"$PORKBUN_API_KEY\",\"secretapikey\":\"$PORKBUN_SECRET_KEY\"}" || true
+      
+      echo "[$SUB.amoano.com] Creating A -> $LB_IP"
+      curl -s -X POST "https://api.porkbun.com/api/json/v3/dns/create/amoano.com" \
+        -H "Content-Type: application/json" \
+        -d "{\"apikey\":\"$PORKBUN_API_KEY\",\"secretapikey\":\"$PORKBUN_SECRET_KEY\",\"type\":\"A\",\"name\":\"$SUB\",\"content\":\"$LB_IP\",\"ttl\":\"300\"}"
+      echo ""
+    done
     
-    echo ""
-    
-    # Create admin subdomain: manage.cashflip.amoano.com
-    echo "Creating manage.cashflip.amoano.com -> $LB_IP"
-    curl -s -X POST "https://api.porkbun.com/api/json/v3/dns/create/amoano.com" \
-      -H "Content-Type: application/json" \
-      -d "{\"apikey\":\"$API_KEY\",\"secretapikey\":\"$SECRET_KEY\",\"type\":\"A\",\"name\":\"manage.cashflip\",\"content\":\"$LB_IP\",\"ttl\":\"300\"}"
-    
-    echo ""
-    echo "DNS updated for both subdomains. Allow 5 minutes for propagation."
-    echo "  Game:  cashflip.amoano.com -> $LB_IP"
-    echo "  Admin: manage.cashflip.amoano.com -> $LB_IP"
+    echo "=== DNS updated. Allow 5 minutes for propagation. ==="
+    for SUB in "$${SUBDOMAINS[@]}"; do
+      echo "  $SUB.amoano.com -> $LB_IP"
+    done
   SCRIPT
 
   file_permission = "0755"
