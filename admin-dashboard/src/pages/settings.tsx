@@ -16,6 +16,13 @@ interface AuthSettings {
   max_otp_per_hour: number
 }
 
+interface SimFeedEntry {
+  player: string
+  won: boolean
+  amount: string
+  flips: number
+}
+
 interface GameSettings {
   id: number | null
   currency: string
@@ -28,6 +35,8 @@ interface GameSettings {
   zero_growth_rate: string
   min_flips_before_zero: number
   max_session_duration_minutes: number
+  simulated_feed_enabled: boolean
+  simulated_feed_data: SimFeedEntry[]
   is_active: boolean
 }
 
@@ -94,7 +103,7 @@ export default function SettingsPage() {
     setSettings({ ...settings, auth: { ...settings.auth, [key]: value } })
   }
 
-  const updateGame = (key: string, value: string | number | boolean) => {
+  const updateGame = (key: string, value: string | number | boolean | SimFeedEntry[]) => {
     if (!settings) return
     setSettings({ ...settings, game: { ...settings.game, [key]: value } })
   }
@@ -310,6 +319,73 @@ export default function SettingsPage() {
                             onChange={e => updateGame('max_session_duration_minutes', parseInt(e.target.value) || 120)} />
                         </div>
                       </div>
+                    </div>
+
+                    {/* Simulated Live Feed */}
+                    <div>
+                      <h3 className="text-sm font-semibold text-white mb-3">Simulated Live Feed (Demo Mode)</h3>
+                      <p className="text-xs text-muted mb-3">Enable fake leaderboard entries for demo/pitching. These mix with real results in the live feed.</p>
+                      <div className="flex items-center gap-3 mb-4">
+                        <button
+                          onClick={() => updateGame('simulated_feed_enabled', !s.game.simulated_feed_enabled)}
+                          className={`relative w-11 h-6 rounded-full transition-colors cursor-pointer ${
+                            s.game.simulated_feed_enabled ? 'bg-emerald-500' : 'bg-slate-600'
+                          }`}
+                        >
+                          <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${
+                            s.game.simulated_feed_enabled ? 'translate-x-5' : ''
+                          }`} />
+                        </button>
+                        <span className="text-sm text-slate-300">{s.game.simulated_feed_enabled ? 'Enabled — fake entries shown in live feed' : 'Disabled'}</span>
+                      </div>
+
+                      {s.game.simulated_feed_enabled && (
+                        <div className="space-y-2">
+                          {(s.game.simulated_feed_data || []).map((entry: SimFeedEntry, i: number) => (
+                            <div key={i} className="flex items-center gap-2 p-2 rounded-lg bg-slate-800/50 border border-slate-700/50">
+                              <Input className="w-28" placeholder="Player name" value={entry.player}
+                                onChange={e => {
+                                  const data = [...(s.game.simulated_feed_data || [])]
+                                  data[i] = { ...data[i], player: e.target.value }
+                                  updateGame('simulated_feed_data', data)
+                                }} />
+                              <Input className="w-20" type="text" placeholder="Amount" value={entry.amount}
+                                onChange={e => {
+                                  const data = [...(s.game.simulated_feed_data || [])]
+                                  data[i] = { ...data[i], amount: e.target.value }
+                                  updateGame('simulated_feed_data', data)
+                                }} />
+                              <Input className="w-16" type="number" placeholder="Flips" value={entry.flips}
+                                onChange={e => {
+                                  const data = [...(s.game.simulated_feed_data || [])]
+                                  data[i] = { ...data[i], flips: parseInt(e.target.value) || 3 }
+                                  updateGame('simulated_feed_data', data)
+                                }} />
+                              <button
+                                onClick={() => {
+                                  const data = [...(s.game.simulated_feed_data || [])]
+                                  data[i] = { ...data[i], won: !data[i].won }
+                                  updateGame('simulated_feed_data', data)
+                                }}
+                                className={`px-2 py-1 rounded text-xs font-bold cursor-pointer ${
+                                  entry.won ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'
+                                }`}
+                              >{entry.won ? 'WIN' : 'LOSS'}</button>
+                              <button onClick={() => {
+                                const data = [...(s.game.simulated_feed_data || [])]
+                                data.splice(i, 1)
+                                updateGame('simulated_feed_data', data)
+                              }} className="text-red-400 hover:text-red-300 cursor-pointer"><Trash2 size={14} /></button>
+                            </div>
+                          ))}
+                          <button onClick={() => {
+                            const data = [...(s.game.simulated_feed_data || []), { player: `Lu**yF${Math.floor(Math.random()*90+10)}`, won: true, amount: `${Math.floor(Math.random()*50+5)}.00`, flips: Math.floor(Math.random()*6+2) }]
+                            updateGame('simulated_feed_data', data)
+                          }} className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-white cursor-pointer">
+                            <Plus size={14} /> Add simulated entry
+                          </button>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}

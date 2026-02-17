@@ -420,7 +420,11 @@ def live_feed(request):
     Public live feed of recent game results (Aviator-style).
     Returns last 20 completed sessions with masked player names.
     No auth required — visible to everyone for credibility.
+    Includes simulated entries when admin enables demo mode.
     """
+    import random
+    from datetime import timedelta
+
     sessions = GameSession.objects.filter(
         status__in=['cashed_out', 'lost']
     ).select_related('player', 'currency').order_by('-ended_at')[:20]
@@ -442,5 +446,28 @@ def live_feed(request):
             'symbol': s.currency.symbol if s.currency else 'GH₵',
             'time': s.ended_at.isoformat() if s.ended_at else '',
         })
+
+    # Merge simulated feed entries if demo mode is enabled
+    try:
+        config = GameConfig.objects.filter(is_active=True).first()
+        if config and config.simulated_feed_enabled and config.simulated_feed_data:
+            now = timezone.now()
+            for i, item in enumerate(config.simulated_feed_data):
+                sim_time = now - timedelta(seconds=random.randint(5, 300 + i * 30))
+                sym = config.currency.symbol if config.currency else 'GH₵'
+                feed.append({
+                    'player': item.get('player', f'Pl**er{random.randint(10,99)}'),
+                    'stake': item.get('stake', item.get('amount', '5.00')),
+                    'won': item.get('won', random.choice([True, True, False])),
+                    'amount': item.get('amount', '10.00'),
+                    'flips': item.get('flips', random.randint(2, 8)),
+                    'symbol': item.get('symbol', sym),
+                    'time': sim_time.isoformat(),
+                })
+            # Sort by time descending and limit to 20
+            feed.sort(key=lambda x: x.get('time', ''), reverse=True)
+            feed = feed[:20]
+    except Exception:
+        pass
 
     return Response({'feed': feed})

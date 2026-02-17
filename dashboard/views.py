@@ -831,6 +831,8 @@ def settings_view(request):
                 'zero_growth_rate': str(game_config.zero_growth_rate),
                 'min_flips_before_zero': game_config.min_flips_before_zero,
                 'max_session_duration_minutes': game_config.max_session_duration_minutes,
+                'simulated_feed_enabled': game_config.simulated_feed_enabled,
+                'simulated_feed_data': game_config.simulated_feed_data or [],
                 'is_active': game_config.is_active,
             }
         else:
@@ -846,6 +848,8 @@ def settings_view(request):
                 'zero_growth_rate': '0.0800',
                 'min_flips_before_zero': 2,
                 'max_session_duration_minutes': 120,
+                'simulated_feed_enabled': False,
+                'simulated_feed_data': [],
                 'is_active': True,
             }
 
@@ -893,7 +897,8 @@ def settings_view(request):
     if game_data and game_config:
         game_fields = ['house_edge_percent', 'min_deposit', 'max_cashout', 'min_stake',
                        'pause_cost_percent', 'zero_base_rate', 'zero_growth_rate',
-                       'min_flips_before_zero', 'max_session_duration_minutes']
+                       'min_flips_before_zero', 'max_session_duration_minutes',
+                       'simulated_feed_enabled', 'simulated_feed_data']
         updated = []
         for field in game_fields:
             if field in game_data:

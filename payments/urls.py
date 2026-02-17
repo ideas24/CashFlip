@@ -22,6 +22,8 @@ urlpatterns = [
 
     # Wallet
     path('wallet/', views.wallet_balance, name='wallet_balance'),
+    path('wallet/summary/', views.wallet_summary, name='wallet_summary'),
+    path('wallet/transfer/', views.transfer_to_player, name='transfer'),
     path('transactions/', views.transaction_history, name='transactions'),
 
     # Payment status checks (via Orchard verification proxy)

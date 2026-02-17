@@ -32,6 +32,8 @@ class WalletTransaction(models.Model):
         ('pause_fee', 'Pause Fee'),
         ('referral_bonus', 'Referral Bonus'),
         ('ad_bonus', 'Ad Bonus'),
+        ('transfer_out', 'Transfer Out'),
+        ('transfer_in', 'Transfer In'),
         ('admin_credit', 'Admin Credit'),
         ('admin_debit', 'Admin Debit'),
     ]

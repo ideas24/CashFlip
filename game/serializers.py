@@ -30,7 +30,8 @@ class GameConfigPublicSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = GameConfig
-        fields = ['currency', 'min_deposit', 'max_cashout', 'min_stake', 'pause_cost_percent']
+        fields = ['currency', 'min_deposit', 'max_cashout', 'min_stake', 'pause_cost_percent',
+                  'simulated_feed_enabled']
 
 
 class StartGameSerializer(serializers.Serializer):

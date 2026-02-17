@@ -12,6 +12,7 @@
         refreshToken: localStorage.getItem('cf_refresh_token') || null,
         player: null,
         session: null,
+        gameConfig: null,
         isFlipping: false,
         otpChannel: 'sms',
         otpPhone: '',
@@ -627,9 +628,26 @@
     }
 
     // ==================== LOBBY ====================
+    async function loadGameConfig() {
+        try {
+            const resp = await fetch('/api/game/config/');
+            if (resp.ok) {
+                state.gameConfig = await resp.json();
+                const c = state.gameConfig;
+                const sym = c.currency?.symbol || 'GH₵';
+                // Update CTA hint dynamically
+                const ctaHint = document.getElementById('cta-hint');
+                if (ctaHint) ctaHint.textContent = `Min ${sym}${parseFloat(c.min_stake).toFixed(0)} to play \u2022 Instant mobile money`;
+                // Update stake input min/placeholder
+                const stakeInput = document.getElementById('stake-input');
+                if (stakeInput) { stakeInput.min = c.min_stake; stakeInput.value = c.min_stake; stakeInput.placeholder = c.min_stake; }
+            }
+        } catch (e) { /* silent */ }
+    }
+
     async function enterLobby() {
         showScreen('lobby-screen');
-        await Promise.all([loadProfile(), loadWalletBalance()]);
+        await Promise.all([loadProfile(), loadWalletBalance(), loadGameConfig()]);
         startLiveFeed();
         checkActiveSession();
     }
@@ -1280,6 +1298,51 @@
         }
     }
 
+    // ==================== TRANSFER ====================
+    async function doTransfer() {
+        const phone = document.getElementById('trf-phone')?.value?.trim();
+        const amount = document.getElementById('trf-amount')?.value;
+        const statusEl = document.getElementById('trf-status');
+        const btn = document.getElementById('trf-btn');
+
+        if (!phone || !amount) {
+            statusEl.textContent = 'Phone and amount required';
+            statusEl.className = 'status-msg error';
+            return;
+        }
+
+        btn.disabled = true;
+        btn.textContent = 'Sending...';
+        statusEl.textContent = '';
+
+        try {
+            const resp = await API.post('/payments/wallet/transfer/', { phone, amount });
+            const data = await resp.json();
+
+            if (resp.ok && data.success) {
+                statusEl.textContent = data.message;
+                statusEl.className = 'status-msg success';
+                loadWalletBalance();
+                setTimeout(() => {
+                    hideModal('transfer-modal');
+                    document.getElementById('trf-phone').value = '';
+                    document.getElementById('trf-amount').value = '';
+                    statusEl.textContent = '';
+                }, 2500);
+            } else {
+                const errMsg = parseApiError(resp, data);
+                statusEl.textContent = errMsg;
+                statusEl.className = 'status-msg error';
+            }
+        } catch (e) {
+            statusEl.textContent = 'Network error';
+            statusEl.className = 'status-msg error';
+        }
+
+        btn.disabled = false;
+        btn.textContent = 'Send Funds';
+    }
+
     // ==================== LIVE FEED ====================
 
     let _feedInterval = null;
@@ -1499,6 +1562,8 @@
         document.getElementById('deposit-btn')?.addEventListener('click', () => showModal('deposit-modal'));
         document.getElementById('cta-deposit-btn')?.addEventListener('click', () => showModal('deposit-modal'));
         document.getElementById('withdraw-btn')?.addEventListener('click', () => showModal('withdraw-modal'));
+        document.getElementById('transfer-btn')?.addEventListener('click', () => showModal('transfer-modal'));
+        document.getElementById('trf-btn')?.addEventListener('click', doTransfer);
         document.getElementById('history-btn')?.addEventListener('click', () => {
             showModal('history-modal');
             loadHistory();

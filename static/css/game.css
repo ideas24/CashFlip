@@ -126,23 +126,45 @@ html, body {
     background: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.03'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
     opacity: 0.5;
 }
+.casino-bg::after {
+    content: ''; position: absolute; inset: 0;
+    background:
+        radial-gradient(circle at 20% 80%, rgba(0,191,166,0.06) 0%, transparent 40%),
+        radial-gradient(circle at 80% 20%, rgba(245,200,66,0.04) 0%, transparent 40%),
+        radial-gradient(circle at 50% 50%, rgba(139,92,246,0.03) 0%, transparent 50%);
+    animation: ambientShift 12s ease-in-out infinite alternate;
+}
+@keyframes ambientShift {
+    0% { opacity: 0.6; }
+    50% { opacity: 1; }
+    100% { opacity: 0.7; }
+}
 
 /* ==================== LOADING ==================== */
 #loading-screen {
     align-items: center; justify-content: center;
     background: var(--casino-dark); flex-direction: column;
+    overflow: hidden;
 }
-.loader-container { text-align: center; }
+#loading-screen::before {
+    content: ''; position: absolute; width: 300px; height: 300px;
+    border-radius: 50%; background: radial-gradient(circle, rgba(0,191,166,0.15), transparent 70%);
+    animation: loadOrb 3s ease-in-out infinite alternate;
+    filter: blur(40px);
+}
+@keyframes loadOrb { from { transform: scale(0.8); } to { transform: scale(1.3); } }
+.loader-container { text-align: center; position: relative; z-index: 1; }
 .logo-glow {
     font-family: 'Orbitron', sans-serif;
     font-size: 3rem; font-weight: 900;
     color: var(--teal);
     text-shadow: 0 0 20px rgba(0,191,166,0.5), 0 0 40px rgba(0,191,166,0.3);
     animation: glow 2s ease-in-out infinite alternate;
+    letter-spacing: 4px;
 }
 @keyframes glow {
-    from { text-shadow: 0 0 20px rgba(0,191,166,0.5); }
-    to { text-shadow: 0 0 40px rgba(0,191,166,0.8), 0 0 60px rgba(0,191,166,0.4); }
+    from { text-shadow: 0 0 20px rgba(0,191,166,0.5), 0 0 60px rgba(0,191,166,0.15); }
+    to { text-shadow: 0 0 40px rgba(0,191,166,0.8), 0 0 80px rgba(0,191,166,0.3), 0 0 120px rgba(0,191,166,0.1); }
 }
 .loader-bar {
     width: 200px; height: 4px; background: var(--casino-border);
@@ -159,10 +181,11 @@ html, body {
 #auth-screen { align-items: center; justify-content: center; }
 .auth-panel {
     position: relative; z-index: 1;
-    background: var(--casino-card); border: 1px solid var(--casino-border);
-    border-radius: 16px; padding: 2rem;
+    background: rgba(28,35,51,0.85); border: 1px solid rgba(42,51,69,0.6);
+    border-radius: 20px; padding: 2rem;
     width: 90%; max-width: 400px;
-    box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+    box-shadow: 0 20px 60px rgba(0,0,0,0.5), 0 0 0 1px rgba(0,191,166,0.08), inset 0 1px 0 rgba(255,255,255,0.04);
+    backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
 }
 .logo-title {
     font-family: 'Orbitron', sans-serif;
@@ -194,10 +217,19 @@ html, body {
 
 .btn-primary {
     width: 100%; padding: 0.85rem; background: linear-gradient(135deg, var(--teal), var(--teal-dark));
-    border: none; border-radius: 10px; color: #fff; font-weight: 700;
-    font-size: 1rem; cursor: pointer; transition: transform 0.1s, box-shadow 0.2s;
+    border: none; border-radius: 12px; color: #fff; font-weight: 700;
+    font-size: 1rem; cursor: pointer; transition: transform 0.15s, box-shadow 0.2s;
+    box-shadow: 0 4px 16px rgba(0,191,166,0.2), inset 0 1px 0 rgba(255,255,255,0.15);
+    position: relative; overflow: hidden;
 }
-.btn-primary:hover { transform: translateY(-1px); box-shadow: 0 4px 20px rgba(0,191,166,0.3); }
+.btn-primary::after {
+    content: ''; position: absolute; top: -50%; left: -50%; width: 200%; height: 200%;
+    background: linear-gradient(45deg, transparent 40%, rgba(255,255,255,0.1) 50%, transparent 60%);
+    transition: transform 0.5s;
+    transform: translateX(-100%);
+}
+.btn-primary:hover { transform: translateY(-2px); box-shadow: 0 6px 24px rgba(0,191,166,0.35); }
+.btn-primary:hover::after { transform: translateX(100%); }
 .btn-primary:active { transform: translateY(0); }
 .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
 
@@ -240,8 +272,9 @@ html, body {
     position: relative; z-index: 1;
     display: flex; align-items: center; justify-content: space-between;
     padding: 0.75rem 1.5rem;
-    background: rgba(22,27,38,0.95); border-bottom: 1px solid var(--casino-border);
-    backdrop-filter: blur(10px);
+    background: rgba(22,27,38,0.85); border-bottom: 1px solid rgba(0,191,166,0.12);
+    backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+    box-shadow: 0 4px 20px rgba(0,0,0,0.3);
 }
 .lobby-left, .lobby-right { display: flex; align-items: center; gap: 0.75rem; }
 .lobby-center { position: absolute; left: 50%; transform: translateX(-50%); }
@@ -249,14 +282,25 @@ html, body {
 
 .avatar-circle {
     width: 36px; height: 36px; border-radius: 50%;
-    background: var(--casino-surface); border: 2px solid var(--teal);
+    background: linear-gradient(135deg, var(--casino-surface), rgba(0,191,166,0.1));
+    border: 2px solid var(--teal);
     display: flex; align-items: center; justify-content: center; font-size: 1rem;
+    box-shadow: 0 0 12px rgba(0,191,166,0.2);
 }
 .player-info .player-name { font-weight: 600; font-size: 0.9rem; }
 .wallet-display {
-    background: var(--casino-surface); border: 1px solid var(--teal);
-    border-radius: 10px; padding: 0.4rem 1rem; text-align: center;
+    background: linear-gradient(135deg, rgba(22,27,38,0.9), rgba(0,191,166,0.06));
+    border: 1px solid rgba(0,191,166,0.35);
+    border-radius: 12px; padding: 0.4rem 1rem; text-align: center;
+    box-shadow: 0 0 16px rgba(0,191,166,0.1), inset 0 1px 0 rgba(255,255,255,0.04);
+    position: relative; overflow: hidden;
 }
+.wallet-display::before {
+    content: ''; position: absolute; inset: 0; border-radius: 12px;
+    background: linear-gradient(135deg, transparent, rgba(0,191,166,0.05), transparent);
+    animation: walletShimmer 4s ease-in-out infinite;
+}
+@keyframes walletShimmer { 0%,100% { opacity: 0; } 50% { opacity: 1; } }
 .wallet-label { display: block; font-size: 0.65rem; color: var(--text-secondary); text-transform: uppercase; }
 .wallet-amount { font-family: 'Orbitron', sans-serif; font-size: 1rem; color: var(--gold); font-weight: 700; }
 
@@ -266,10 +310,17 @@ html, body {
     align-items: center; justify-content: center; padding: 1rem; gap: 1rem;
 }
 .lobby-card {
-    background: var(--casino-card); border: 1px solid var(--casino-border);
-    border-radius: 16px; padding: 1.5rem; width: 100%; max-width: 420px;
+    background: rgba(28,35,51,0.7); border: 1px solid rgba(42,51,69,0.5);
+    border-radius: 20px; padding: 1.5rem; width: 100%; max-width: 420px;
+    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.04);
+    position: relative; overflow: hidden;
 }
-.lobby-card h2 { font-family: 'Orbitron', sans-serif; font-size: 1.1rem; margin-bottom: 1rem; color: var(--teal); }
+.lobby-card::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(0,191,166,0.3), rgba(245,200,66,0.2), transparent);
+}
+.lobby-card h2 { font-family: 'Orbitron', sans-serif; font-size: 1.1rem; margin-bottom: 1rem; color: var(--teal); letter-spacing: 1px; }
 
 .currency-selector select {
     width: 100%; padding: 0.6rem 1rem; background: var(--casino-surface);
@@ -288,22 +339,32 @@ html, body {
 
 .quick-stakes { display: flex; gap: 0.4rem; margin-bottom: 1rem; flex-wrap: wrap; }
 .quick-stake {
-    padding: 0.4rem 0.75rem; background: var(--casino-surface);
-    border: 1px solid var(--casino-border); border-radius: 6px;
+    padding: 0.4rem 0.75rem; background: rgba(22,27,38,0.6);
+    border: 1px solid var(--casino-border); border-radius: 8px;
     color: var(--text-secondary); cursor: pointer; font-size: 0.8rem; transition: all 0.2s;
+    position: relative; overflow: hidden;
 }
-.quick-stake:hover { border-color: var(--teal); color: var(--teal); }
+.quick-stake:hover { border-color: var(--teal); color: var(--teal); background: rgba(0,191,166,0.08); box-shadow: 0 0 8px rgba(0,191,166,0.15); }
+.quick-stake:active { transform: scale(0.95); }
 
 .btn-large { padding: 1rem; font-size: 1.1rem; }
 
 .lobby-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; justify-content: center; }
 .btn-action {
-    padding: 0.6rem 1.2rem; background: var(--casino-card);
-    border: 1px solid var(--casino-border); border-radius: 10px;
+    padding: 0.6rem 1.2rem; background: rgba(28,35,51,0.6);
+    border: 1px solid rgba(42,51,69,0.5); border-radius: 12px;
     color: var(--text-primary); cursor: pointer; font-size: 0.85rem;
-    transition: all 0.2s;
+    transition: all 0.2s; backdrop-filter: blur(8px);
+    position: relative; overflow: hidden;
 }
-.btn-action:hover { border-color: var(--teal); color: var(--teal); }
+.btn-action::before {
+    content: ''; position: absolute; inset: 0;
+    background: linear-gradient(135deg, transparent, rgba(0,191,166,0.04), transparent);
+    opacity: 0; transition: opacity 0.2s;
+}
+.btn-action:hover { border-color: rgba(0,191,166,0.4); color: var(--teal); box-shadow: 0 4px 16px rgba(0,191,166,0.1); }
+.btn-action:hover::before { opacity: 1; }
+.btn-action:active { transform: scale(0.97); }
 
 /* ==================== GAME SCREEN ==================== */
 #game-screen { background: #000; }
@@ -317,15 +378,19 @@ html, body {
     display: flex; align-items: center; gap: 0.75rem;
 }
 .icon-btn {
-    background: rgba(22,27,38,0.8); border: 1px solid var(--casino-border);
+    background: rgba(22,27,38,0.7); border: 1px solid rgba(42,51,69,0.5);
     border-radius: 50%; width: 40px; height: 40px;
     display: flex; align-items: center; justify-content: center;
     cursor: pointer; font-size: 1.1rem; color: var(--text-primary);
+    backdrop-filter: blur(8px); transition: all 0.2s;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
 }
+.icon-btn:hover { border-color: var(--teal); box-shadow: 0 0 12px rgba(0,191,166,0.2); }
 .icon-btn.small { width: 32px; height: 32px; font-size: 0.9rem; }
 .stake-display, .flip-counter {
-    background: rgba(22,27,38,0.8); border: 1px solid var(--casino-border);
-    border-radius: 8px; padding: 0.3rem 0.75rem; text-align: center;
+    background: rgba(22,27,38,0.7); border: 1px solid rgba(42,51,69,0.5);
+    border-radius: 10px; padding: 0.3rem 0.75rem; text-align: center;
+    backdrop-filter: blur(10px); box-shadow: 0 2px 10px rgba(0,0,0,0.3);
 }
 .hud-label { display: block; font-size: 0.6rem; color: var(--text-secondary); text-transform: uppercase; }
 .stake-display span:last-child, .flip-counter span:last-child {
@@ -336,11 +401,13 @@ html, body {
     position: absolute; top: 0.75rem; left: 50%; transform: translateX(-50%);
 }
 .denomination-display {
-    background: rgba(22,27,38,0.8); border: 1px solid var(--teal);
-    border-radius: 12px; padding: 0.4rem 1.5rem; text-align: center;
-    min-width: 100px; opacity: 0; transition: opacity 0.3s;
+    background: rgba(22,27,38,0.7); border: 1px solid rgba(0,191,166,0.4);
+    border-radius: 14px; padding: 0.4rem 1.5rem; text-align: center;
+    min-width: 100px; opacity: 0; transition: opacity 0.3s, transform 0.3s;
+    backdrop-filter: blur(12px); box-shadow: 0 4px 20px rgba(0,191,166,0.15);
+    transform: translateY(-4px);
 }
-.denomination-display.show { opacity: 1; }
+.denomination-display.show { opacity: 1; transform: translateY(0); }
 #denom-value {
     font-family: 'Orbitron', sans-serif; font-size: 1.4rem; font-weight: 900; color: var(--gold);
 }
@@ -348,11 +415,18 @@ html, body {
 .hud-top-right { position: absolute; top: 0.75rem; right: 0.75rem; }
 .cashout-button {
     background: linear-gradient(135deg, var(--neon-green), #00C853);
-    border: none; border-radius: 12px; padding: 0.5rem 1.2rem;
+    border: none; border-radius: 14px; padding: 0.5rem 1.2rem;
     cursor: pointer; text-align: center; transition: all 0.2s;
-    box-shadow: 0 0 20px rgba(0,230,118,0.3);
+    box-shadow: 0 0 20px rgba(0,230,118,0.3), inset 0 1px 0 rgba(255,255,255,0.2);
     animation: cashout-pulse 2s ease-in-out infinite;
+    position: relative; overflow: hidden;
 }
+.cashout-button::after {
+    content: ''; position: absolute; top: -50%; left: -50%; width: 200%; height: 200%;
+    background: linear-gradient(45deg, transparent 40%, rgba(255,255,255,0.15) 50%, transparent 60%);
+    animation: cashoutShine 3s ease-in-out infinite;
+}
+@keyframes cashoutShine { 0% { transform: translateX(-100%); } 100% { transform: translateX(100%); } }
 .cashout-button:disabled { opacity: 0.4; animation: none; box-shadow: none; cursor: not-allowed; }
 .cashout-label { display: block; font-size: 0.65rem; color: #000; font-weight: 700; text-transform: uppercase; }
 .cashout-amount {
@@ -368,24 +442,37 @@ html, body {
     display: flex; align-items: center; justify-content: center; gap: 1rem;
 }
 .btn-game-action {
-    padding: 0.6rem 1rem; background: rgba(22,27,38,0.8);
-    border: 1px solid var(--casino-border); border-radius: 10px;
+    padding: 0.6rem 1rem; background: rgba(22,27,38,0.7);
+    border: 1px solid rgba(42,51,69,0.5); border-radius: 12px;
     color: var(--text-primary); cursor: pointer; font-size: 0.8rem;
+    backdrop-filter: blur(8px); transition: all 0.2s;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
 }
+.btn-game-action:hover:not(:disabled) { border-color: var(--teal); box-shadow: 0 0 10px rgba(0,191,166,0.15); }
 .btn-game-action:disabled { opacity: 0.4; cursor: not-allowed; }
 
 .flip-button {
-    width: 80px; height: 80px; border-radius: 50%;
+    width: 84px; height: 84px; border-radius: 50%;
     background: linear-gradient(135deg, var(--gold), var(--gold-dark));
-    border: 3px solid rgba(255,255,255,0.2); cursor: pointer;
+    border: 3px solid rgba(255,255,255,0.25); cursor: pointer;
     display: flex; align-items: center; justify-content: center;
-    box-shadow: 0 0 30px rgba(245,200,66,0.4);
+    box-shadow: 0 0 30px rgba(245,200,66,0.4), 0 6px 20px rgba(0,0,0,0.4), inset 0 2px 0 rgba(255,255,255,0.3), inset 0 -2px 4px rgba(0,0,0,0.15);
     transition: all 0.15s;
+    position: relative;
+    transform: perspective(200px) rotateX(5deg);
 }
-.flip-button:hover:not(:disabled) { transform: scale(1.05); box-shadow: 0 0 50px rgba(245,200,66,0.6); }
-.flip-button:active:not(:disabled) { transform: scale(0.95); }
+.flip-button::before {
+    content: ''; position: absolute; inset: -4px; border-radius: 50%;
+    background: conic-gradient(var(--gold), var(--teal), var(--gold), var(--teal), var(--gold));
+    z-index: -1; opacity: 0.5; filter: blur(6px);
+    animation: flipRingRotate 4s linear infinite;
+}
+@keyframes flipRingRotate { to { transform: rotate(360deg); } }
+.flip-button:hover:not(:disabled) { transform: perspective(200px) rotateX(0deg) scale(1.08); box-shadow: 0 0 50px rgba(245,200,66,0.6), 0 8px 24px rgba(0,0,0,0.4); }
+.flip-button:active:not(:disabled) { transform: perspective(200px) scale(0.93); }
 .flip-button:disabled { opacity: 0.4; cursor: not-allowed; box-shadow: none; }
-.flip-text { font-family: 'Orbitron', sans-serif; font-size: 1rem; font-weight: 900; color: #000; }
+.flip-button:disabled::before { display: none; }
+.flip-text { font-family: 'Orbitron', sans-serif; font-size: 1rem; font-weight: 900; color: #000; text-shadow: 0 1px 0 rgba(255,255,255,0.3); }
 
 .pulse-btn { animation: pulse 2s ease-in-out infinite; }
 @keyframes pulse {
@@ -397,7 +484,7 @@ html, body {
 .result-overlay, .loss-overlay, .cashout-overlay {
     position: absolute; inset: 0; z-index: 20;
     display: flex; align-items: center; justify-content: center;
-    background: rgba(0,0,0,0.7); backdrop-filter: blur(4px);
+    background: rgba(0,0,0,0.75); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
 }
 .hidden { display: none !important; }
 
@@ -408,8 +495,14 @@ html, body {
 .result-balance { font-size: 0.9rem; color: var(--text-secondary); margin-top: 0.3rem; }
 
 .loss-content, .cashout-content {
-    text-align: center; background: var(--casino-card); border: 1px solid var(--casino-border);
-    border-radius: 20px; padding: 2rem 3rem; animation: resultPop 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    text-align: center; background: rgba(28,35,51,0.9); border: 1px solid rgba(42,51,69,0.5);
+    border-radius: 24px; padding: 2rem 3rem; animation: resultPop 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    backdrop-filter: blur(16px); box-shadow: 0 20px 60px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.04);
+    position: relative; overflow: hidden;
+}
+.loss-content::before, .cashout-content::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
 }
 .loss-icon { font-size: 4rem; }
 .loss-content h2 { font-family: 'Orbitron', sans-serif; font-size: 2rem; color: var(--danger); margin: 0.5rem 0; }
@@ -443,10 +536,12 @@ html, body {
 .modal-backdrop { position: absolute; inset: 0; background: rgba(0,0,0,0.7); backdrop-filter: blur(4px); }
 .modal-content {
     position: relative; z-index: 1;
-    background: var(--casino-card); border: 1px solid var(--casino-border);
-    border-radius: 16px; padding: 1.5rem; width: 90%; max-width: 420px;
+    background: rgba(28,35,51,0.9); border: 1px solid rgba(42,51,69,0.5);
+    border-radius: 20px; padding: 1.5rem; width: 90%; max-width: 420px;
     max-height: 90vh; overflow-y: auto;
     animation: modalIn 0.3s ease;
+    backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+    box-shadow: 0 20px 60px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.04);
 }
 .modal-content.wide { max-width: 600px; }
 @keyframes modalIn { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
@@ -477,9 +572,10 @@ html, body {
 /* ==================== SLIDE PANEL ==================== */
 .slide-panel {
     position: fixed; top: 0; left: 0; bottom: 0; width: 300px; z-index: 60;
-    background: var(--casino-card); border-right: 1px solid var(--casino-border);
+    background: rgba(28,35,51,0.95); border-right: 1px solid rgba(0,191,166,0.1);
     transform: translateX(-100%); transition: transform 0.3s ease;
-    overflow-y: auto;
+    overflow-y: auto; backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+    box-shadow: 10px 0 40px rgba(0,0,0,0.4);
 }
 .slide-panel.show { transform: translateX(0); }
 .panel-header {
@@ -538,10 +634,11 @@ html, body {
 /* ==================== TOAST ==================== */
 .toast {
     position: fixed; bottom: 1.5rem; left: 50%; transform: translateX(-50%);
-    background: var(--casino-card); border: 1px solid var(--casino-border);
-    border-radius: 10px; padding: 0.75rem 1.5rem; z-index: 100;
-    font-size: 0.9rem; box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+    background: rgba(28,35,51,0.95); border: 1px solid rgba(0,191,166,0.2);
+    border-radius: 12px; padding: 0.75rem 1.5rem; z-index: 100;
+    font-size: 0.9rem; box-shadow: 0 8px 32px rgba(0,0,0,0.4), 0 0 0 1px rgba(0,191,166,0.05);
     animation: toastIn 0.3s ease;
+    backdrop-filter: blur(12px);
 }
 @keyframes toastIn { from { transform: translateX(-50%) translateY(20px); opacity: 0; } to { transform: translateX(-50%) translateY(0); opacity: 1; } }
 

@@ -104,6 +104,10 @@ class GameConfig(models.Model):
     min_flips_before_zero = models.PositiveIntegerField(default=2,
                                                          help_text='Guaranteed safe flips before zero can appear')
     max_session_duration_minutes = models.PositiveIntegerField(default=120)
+    simulated_feed_enabled = models.BooleanField(default=False,
+        help_text='Enable simulated live feed for demo/pitching (fake leaderboard entries)')
+    simulated_feed_data = models.JSONField(default=list, blank=True,
+        help_text='Simulated feed entries: [{"player":"Luc**er","won":true,"amount":"50.00","flips":5}]')
     is_active = models.BooleanField(default=True)
     updated_at = models.DateTimeField(auto_now=True)
 

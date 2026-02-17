@@ -152,18 +152,23 @@ def add_momo_account(request):
     verified_name = result['name'].strip().upper()
     network = result['network']
 
-    # SECURITY: Strict name matching against existing accounts
+    # SECURITY: Strict name matching — both first AND last name must match
     if existing_accounts.exists():
-        first_name = existing_accounts.first().verified_name.strip().upper()
-        if verified_name != first_name:
+        existing_name = existing_accounts.first().verified_name.strip().upper()
+        existing_parts = set(existing_name.split())
+        new_parts = set(verified_name.split())
+
+        # All name parts from the existing account must appear in the new name and vice versa
+        if existing_parts != new_parts:
             logger.warning(
                 f'Name mismatch for player {request.user.id}: '
-                f'existing="{first_name}", new="{verified_name}" ({normalized})'
+                f'existing="{existing_name}" parts={existing_parts}, '
+                f'new="{verified_name}" parts={new_parts} ({normalized})'
             )
             return Response({
                 'error': f'Account name "{result["name"]}" does not match your '
                          f'registered name "{existing_accounts.first().verified_name}". '
-                         f'All payment accounts must be in the same name for security.'
+                         f'Both first and last names must match for security.'
             }, status=status.HTTP_403_FORBIDDEN)
 
     # Create the account
@@ -561,6 +566,128 @@ def paystack_success(request):
             return JsonResponse({'status': 'success', 'message': f'Payment of GHS {deposit.amount} received.', 'reference': reference})
 
     return JsonResponse({'status': 'pending', 'message': 'Payment is being processed.', 'reference': reference})
+
+
+class TransferThrottle(UserRateThrottle):
+    rate = '5/min'
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+@throttle_classes([TransferThrottle])
+def transfer_to_player(request):
+    """
+    Transfer funds from your wallet to another player by phone number.
+    Casino-style peer transfer with min/max limits.
+    """
+    from accounts.models import Player
+    from wallet.models import Wallet, WalletTransaction
+
+    phone = request.data.get('phone', '').strip()
+    amount = request.data.get('amount')
+
+    if not phone or not amount:
+        return Response({'error': 'Phone and amount required'}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        amount = round(float(amount), 2)
+    except (ValueError, TypeError):
+        return Response({'error': 'Invalid amount'}, status=status.HTTP_400_BAD_REQUEST)
+
+    if amount < 1:
+        return Response({'error': 'Minimum transfer is GH₵1.00'}, status=status.HTTP_400_BAD_REQUEST)
+    if amount > 500:
+        return Response({'error': 'Maximum transfer is GH₵500.00'}, status=status.HTTP_400_BAD_REQUEST)
+
+    normalized = normalize_phone(phone)
+    if normalized == request.user.phone:
+        return Response({'error': 'Cannot transfer to yourself'}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        recipient = Player.objects.get(phone=normalized, is_active=True)
+    except Player.DoesNotExist:
+        return Response({'error': 'Recipient not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    from decimal import Decimal
+    amount_dec = Decimal(str(amount))
+
+    with db_transaction.atomic():
+        sender_wallet = Wallet.objects.select_for_update().get(player=request.user)
+        if sender_wallet.available_balance < amount_dec:
+            return Response({'error': 'Insufficient balance'}, status=status.HTTP_400_BAD_REQUEST)
+
+        recipient_wallet = Wallet.objects.select_for_update().get(player=recipient)
+        ref = f'TRF-{uuid.uuid4().hex[:12].upper()}'
+
+        # Debit sender
+        sender_before = sender_wallet.balance
+        sender_wallet.balance -= amount_dec
+        sender_wallet.save(update_fields=['balance', 'updated_at'])
+        WalletTransaction.objects.create(
+            wallet=sender_wallet, amount=-amount_dec, tx_type='transfer_out',
+            reference=f'{ref}-OUT', status='completed',
+            balance_before=sender_before, balance_after=sender_wallet.balance,
+            metadata={'type': 'transfer_out', 'to_phone': normalized, 'to_name': recipient.get_display_name()},
+        )
+
+        # Credit recipient
+        recip_before = recipient_wallet.balance
+        recipient_wallet.balance += amount_dec
+        recipient_wallet.save(update_fields=['balance', 'updated_at'])
+        WalletTransaction.objects.create(
+            wallet=recipient_wallet, amount=amount_dec, tx_type='transfer_in',
+            reference=f'{ref}-IN', status='completed',
+            balance_before=recip_before, balance_after=recipient_wallet.balance,
+            metadata={'type': 'transfer_in', 'from_phone': request.user.phone, 'from_name': request.user.get_display_name()},
+        )
+
+    return Response({
+        'success': True,
+        'message': f'Sent GH₵{amount:.2f} to {recipient.get_display_name()}',
+        'reference': ref,
+        'new_balance': str(sender_wallet.balance),
+    })
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def wallet_summary(request):
+    """
+    Enhanced wallet summary: balance, locked, available, recent transactions, limits.
+    Casino-style wallet dashboard data.
+    """
+    from wallet.models import Wallet, WalletTransaction
+    from game.models import GameConfig
+
+    try:
+        wallet = Wallet.objects.select_related('currency').get(player=request.user)
+    except Wallet.DoesNotExist:
+        return Response({'error': 'Wallet not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    config = GameConfig.objects.filter(currency=wallet.currency, is_active=True).first()
+
+    recent_txns = WalletTransaction.objects.filter(wallet=wallet).order_by('-created_at')[:10]
+    txn_list = [{
+        'id': str(t.id),
+        'type': t.tx_type,
+        'amount': str(t.amount),
+        'status': t.status,
+        'reference': t.reference,
+        'time': t.created_at.isoformat(),
+        'meta': t.metadata,
+    } for t in recent_txns]
+
+    return Response({
+        'balance': str(wallet.balance),
+        'locked': str(wallet.locked_balance),
+        'available': str(wallet.available_balance),
+        'currency_code': wallet.currency.code,
+        'currency_symbol': wallet.currency.symbol,
+        'min_deposit': str(config.min_deposit) if config else '1.00',
+        'min_stake': str(config.min_stake) if config else '1.00',
+        'max_cashout': str(config.max_cashout) if config else '10000.00',
+        'recent_transactions': txn_list,
+    })
 
 
 @csrf_exempt

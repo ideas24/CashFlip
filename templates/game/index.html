@@ -11,7 +11,7 @@
     {% load static %}
     <link rel="icon" type="image/svg+xml" href="{% static 'images/cashflip-favicon.svg' %}">
     <meta name="theme-color" content="#0D1117">
-    <link rel="stylesheet" href="{% static 'css/game.css' %}?v=20260217f2">
+    <link rel="stylesheet" href="{% static 'css/game.css' %}?v=20260217h">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
 <body>
@@ -126,7 +126,7 @@
                     <span class="cta-btn-glow"></span>
                     <span class="cta-btn-text">💰 Deposit Now</span>
                 </button>
-                <p class="cta-hint">Min ₵1 to play &bull; Instant mobile money</p>
+                <p class="cta-hint" id="cta-hint">Loading...</p>
             </div>
         </div>
 
@@ -159,6 +159,7 @@
             <div class="lobby-actions">
                 <button id="deposit-btn" class="btn-action">💰 Deposit</button>
                 <button id="withdraw-btn" class="btn-action">💸 Withdraw</button>
+                <button id="transfer-btn" class="btn-action">🔄 Transfer</button>
                 <button id="history-btn" class="btn-action">📊 History</button>
                 <button id="referral-btn" class="btn-action">🔗 Refer & Earn</button>
             </div>
@@ -348,6 +349,30 @@
         </div>
     </div>
 
+    <!-- Transfer Modal -->
+    <div id="transfer-modal" class="modal hidden">
+        <div class="modal-backdrop"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>🔄 Transfer</h3>
+                <button class="modal-close" data-modal="transfer-modal">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="input-group">
+                    <label>Recipient Phone</label>
+                    <input type="tel" id="trf-phone" placeholder="0241234567" maxlength="12" autocomplete="off">
+                </div>
+                <div class="input-group">
+                    <label>Amount (GH₵)</label>
+                    <input type="number" id="trf-amount" min="1" max="500" step="0.5" placeholder="Enter amount">
+                </div>
+                <p class="text-muted small">Min GH₵1 · Max GH₵500 per transfer</p>
+                <button id="trf-btn" class="btn-primary">Send Funds</button>
+                <div id="trf-status" class="status-msg"></div>
+            </div>
+        </div>
+    </div>
+
     <!-- Pause Modal -->
     <div id="pause-modal" class="modal hidden">
         <div class="modal-backdrop"></div>
@@ -469,6 +494,6 @@
         <span id="toast-message"></span>
     </div>
 
-    <script src="{% static 'js/game.js' %}?v=20260217g2"></script>
+    <script src="{% static 'js/game.js' %}?v=20260217h"></script>
 </body>
 </html>
