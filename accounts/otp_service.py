@@ -88,9 +88,23 @@ def verify_otp(phone, code):
 
 
 def _send_whatsapp_otp(phone, code):
-    """Send OTP via WhatsApp using reachmint bot's Graph API credentials."""
+    """
+    Send OTP via WhatsApp using Meta Authentication template with copy-code button.
+    
+    Authentication template guidelines (Meta):
+    - Category: AUTHENTICATION
+    - No URLs, media, or emojis in content or parameters
+    - Parameters restricted to 15 characters (6-digit code = OK)
+    - Uses copy-code button so user can tap to copy the OTP
+    
+    Template must be pre-registered on Meta Business Manager:
+      Name: cashflip_auth_otp (or WHATSAPP_AUTH_TEMPLATE_NAME env)
+      Body: {{1}} is your verification code.
+      Button: Copy code
+    """
     access_token = settings.WHATSAPP_ACCESS_TOKEN
     phone_number_id = settings.WHATSAPP_PHONE_NUMBER_ID
+    template_name = getattr(settings, 'WHATSAPP_AUTH_TEMPLATE_NAME', 'cashflip_auth_otp')
     
     if not access_token or not phone_number_id:
         logger.error('WhatsApp credentials not configured for OTP')
@@ -111,19 +125,36 @@ def _send_whatsapp_otp(phone, code):
         'messaging_product': 'whatsapp',
         'recipient_type': 'individual',
         'to': normalized,
-        'type': 'text',
-        'text': {
-            'body': f'🎰 *Cashflip* - Your verification code is: *{code}*\n\nThis code expires in {OTP_EXPIRY_MINUTES} minutes. Do not share it with anyone.'
+        'type': 'template',
+        'template': {
+            'name': template_name,
+            'language': {'code': 'en_US'},
+            'components': [
+                {
+                    'type': 'body',
+                    'parameters': [
+                        {'type': 'text', 'text': code}
+                    ]
+                },
+                {
+                    'type': 'button',
+                    'sub_type': 'copy_code',
+                    'index': '0',
+                    'parameters': [
+                        {'type': 'coupon_code', 'coupon_code': code}
+                    ]
+                }
+            ]
         }
     }
     
     try:
         response = requests.post(url, json=payload, headers=headers, timeout=30)
-        if response.status_code == 200:
-            logger.info(f'WhatsApp OTP sent to {normalized}')
+        if response.status_code in [200, 201]:
+            logger.info(f'WhatsApp auth template OTP sent to {normalized}')
             return True
         else:
-            logger.error(f'WhatsApp OTP failed: {response.text}')
+            logger.error(f'WhatsApp auth template OTP failed: {response.status_code} {response.text}')
             return False
     except Exception as e:
         logger.error(f'WhatsApp OTP error: {e}')

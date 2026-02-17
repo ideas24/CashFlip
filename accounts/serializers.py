@@ -11,6 +11,10 @@ class RequestOTPSerializer(serializers.Serializer):
     channel = serializers.ChoiceField(choices=['sms', 'whatsapp'], default='sms')
 
 
+class PhoneOnlySerializer(serializers.Serializer):
+    phone = serializers.CharField(max_length=20)
+
+
 class VerifyOTPSerializer(serializers.Serializer):
     phone = serializers.CharField(max_length=20)
     code = serializers.CharField(max_length=6, min_length=6)

@@ -29,7 +29,7 @@ class OTPThrottle(AnonRateThrottle):
 @permission_classes([AllowAny])
 @throttle_classes([OTPThrottle])
 def request_otp(request):
-    """Send OTP to phone number."""
+    """Send OTP to phone number (generic — channel via request body)."""
     serializer = RequestOTPSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
 
@@ -40,7 +40,53 @@ def request_otp(request):
     result = send_otp(phone, channel=channel, ip_address=ip)
     
     if result['success']:
-        return Response({'message': result['message']}, status=status.HTTP_200_OK)
+        return Response({'message': result['message'], 'channel': channel}, status=status.HTTP_200_OK)
+    return Response({'error': result['message']}, status=status.HTTP_429_TOO_MANY_REQUESTS)
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+@throttle_classes([OTPThrottle])
+def request_sms_otp(request):
+    """
+    Request OTP via SMS.
+    Dedicated endpoint for the SMS login button.
+    Body: {"phone": "0241234567"}
+    """
+    from accounts.serializers import PhoneOnlySerializer
+    serializer = PhoneOnlySerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+
+    phone = serializer.validated_data['phone']
+    ip = request.META.get('HTTP_X_FORWARDED_FOR', request.META.get('REMOTE_ADDR', ''))
+
+    result = send_otp(phone, channel='sms', ip_address=ip)
+
+    if result['success']:
+        return Response({'message': result['message'], 'channel': 'sms'}, status=status.HTTP_200_OK)
+    return Response({'error': result['message']}, status=status.HTTP_429_TOO_MANY_REQUESTS)
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+@throttle_classes([OTPThrottle])
+def request_whatsapp_otp(request):
+    """
+    Request OTP via WhatsApp Authentication template (copy-code button).
+    Dedicated endpoint for the WhatsApp login button.
+    Body: {"phone": "0241234567"}
+    """
+    from accounts.serializers import PhoneOnlySerializer
+    serializer = PhoneOnlySerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+
+    phone = serializer.validated_data['phone']
+    ip = request.META.get('HTTP_X_FORWARDED_FOR', request.META.get('REMOTE_ADDR', ''))
+
+    result = send_otp(phone, channel='whatsapp', ip_address=ip)
+
+    if result['success']:
+        return Response({'message': result['message'], 'channel': 'whatsapp'}, status=status.HTTP_200_OK)
     return Response({'error': result['message']}, status=status.HTTP_429_TOO_MANY_REQUESTS)
 
 

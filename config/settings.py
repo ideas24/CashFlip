@@ -183,9 +183,11 @@ PAYSTACK_PUBLIC_KEY = os.getenv('PAYSTACK_PUBLIC_KEY')
 PAYSTACK_CALLBACK_URL = os.getenv('PAYSTACK_CALLBACK_URL')
 PAYSTACK_WEBHOOK_URL = os.getenv('PAYSTACK_WEBHOOK_URL')
 
-# ============ WhatsApp OTP (reachmint bot) ============
+# ============ WhatsApp OTP (reachmint bot — authentication template) ============
 WHATSAPP_ACCESS_TOKEN = os.getenv('WHATSAPP_ACCESS_TOKEN')
 WHATSAPP_PHONE_NUMBER_ID = os.getenv('WHATSAPP_PHONE_NUMBER_ID')
+WHATSAPP_BUSINESS_ACCOUNT_ID = os.getenv('WHATSAPP_BUSINESS_ACCOUNT_ID')
+WHATSAPP_AUTH_TEMPLATE_NAME = os.getenv('WHATSAPP_AUTH_TEMPLATE_NAME', 'cashflip_auth_otp')
 
 # ============ Twilio SMS OTP ============
 TWILIO_ACCOUNT_SID = os.getenv('TWILIO_ACCOUNT_SID')
