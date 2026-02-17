@@ -360,21 +360,18 @@ resource "azurerm_private_dns_zone_virtual_network_link" "postgres" {
 }
 
 resource "azurerm_postgresql_flexible_server" "main" {
-  name                   = "cashflip-postgres"
-  resource_group_name    = azurerm_resource_group.main.name
-  location               = azurerm_resource_group.main.location
-  version                = "14"
-  delegated_subnet_id    = azurerm_subnet.db.id
-  private_dns_zone_id    = azurerm_private_dns_zone.postgres.id
-  administrator_login    = "cashflip_admin"
-  administrator_password = var.db_admin_password
+  name                          = "cashflip-postgres"
+  resource_group_name           = azurerm_resource_group.main.name
+  location                      = azurerm_resource_group.main.location
+  version                       = "14"
+  delegated_subnet_id           = azurerm_subnet.db.id
+  private_dns_zone_id           = azurerm_private_dns_zone.postgres.id
+  public_network_access_enabled = false
+  administrator_login           = "cashflip_admin"
+  administrator_password        = var.db_admin_password
 
   storage_mb = 65536
   sku_name   = "GP_Standard_D2s_v3"
-
-  high_availability {
-    mode = "ZoneRedundant"
-  }
 
   depends_on = [azurerm_private_dns_zone_virtual_network_link.postgres]
 }

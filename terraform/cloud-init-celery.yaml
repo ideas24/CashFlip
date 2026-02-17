@@ -72,11 +72,26 @@ write_files:
       "$VENV_DIR/bin/pip" install --quiet --upgrade pip
       "$VENV_DIR/bin/pip" install --quiet -r "$APP_DIR/requirements.txt"
       
+      # Ensure logs directory exists
+      mkdir -p "$APP_DIR/logs"
+      chown -R cashflip:cashflip "$APP_DIR/logs"
+      
       # Restart celery
       log "Restarting cashflip-celery.service..."
       systemctl restart cashflip-celery.service
       
       log "=== CashFlip Celery Deploy COMPLETE ==="
+
+  # ---- Celery wrapper (sources .env properly) ----
+  - path: /opt/cashflip/start-celery.sh
+    permissions: '0755'
+    content: |
+      #!/bin/bash
+      set -a
+      source /opt/cashflip/.env
+      set +a
+      cd /opt/cashflip/app
+      exec /opt/cashflip/venv/bin/celery -A config worker -l info -c 4 -Q default,game --without-heartbeat
 
   # ---- Systemd: Celery worker ----
   - path: /etc/systemd/system/cashflip-celery.service
@@ -89,9 +104,7 @@ write_files:
       User=cashflip
       Group=cashflip
       WorkingDirectory=/opt/cashflip/app
-      Environment="PATH=/opt/cashflip/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-      EnvironmentFile=/opt/cashflip/.env
-      ExecStart=/opt/cashflip/venv/bin/celery -A config worker -l info -c 4 -Q default,game --without-heartbeat
+      ExecStart=/opt/cashflip/start-celery.sh
       Restart=always
       RestartSec=10
       StandardOutput=append:/opt/cashflip/logs/celery_worker.log
