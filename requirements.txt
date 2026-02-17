@@ -1,0 +1,38 @@
+# Django Core
+Django==5.2.9
+djangorestframework==3.16.1
+django-cors-headers==4.6.0
+django-filter==25.2
+
+# Database
+psycopg2-binary==2.9.11
+dj-database-url==3.0.1
+
+# Celery & Redis
+celery==5.6.1
+redis==7.1.0
+
+# Server
+gunicorn==23.0.0
+
+# Environment
+python-dotenv==1.2.1
+
+# HTTP
+requests==2.32.5
+
+# Auth
+PyJWT==2.10.1
+social-auth-app-django==5.4.2
+
+# SMS OTP
+twilio==9.4.3
+
+# Image handling
+Pillow==10.1.0
+
+# Admin extras
+django-import-export==4.3.4
+
+# Utilities
+python-dateutil==2.9.0.post0

@@ -1,0 +1,167 @@
+"""
+Accounts API Views - OTP Auth, Profile, Token Refresh
+"""
+
+import logging
+
+from rest_framework import status
+from rest_framework.decorators import api_view, permission_classes, throttle_classes
+from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.response import Response
+from rest_framework.throttling import AnonRateThrottle
+
+from accounts.authentication import generate_access_token, generate_refresh_token, verify_refresh_token
+from accounts.models import Player, PlayerProfile
+from accounts.otp_service import send_otp, verify_otp
+from accounts.serializers import (
+    RequestOTPSerializer, VerifyOTPSerializer, RefreshTokenSerializer,
+    PlayerSerializer, PlayerUpdateSerializer,
+)
+
+logger = logging.getLogger(__name__)
+
+
+class OTPThrottle(AnonRateThrottle):
+    rate = '3/minute'
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+@throttle_classes([OTPThrottle])
+def request_otp(request):
+    """Send OTP to phone number."""
+    serializer = RequestOTPSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+
+    phone = serializer.validated_data['phone']
+    channel = serializer.validated_data['channel']
+    ip = request.META.get('HTTP_X_FORWARDED_FOR', request.META.get('REMOTE_ADDR', ''))
+
+    result = send_otp(phone, channel=channel, ip_address=ip)
+    
+    if result['success']:
+        return Response({'message': result['message']}, status=status.HTTP_200_OK)
+    return Response({'error': result['message']}, status=status.HTTP_429_TOO_MANY_REQUESTS)
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def verify_otp_view(request):
+    """Verify OTP and return JWT tokens. Auto-creates player on first login."""
+    serializer = VerifyOTPSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+
+    phone = serializer.validated_data['phone']
+    code = serializer.validated_data['code']
+
+    result = verify_otp(phone, code)
+    
+    if not result['success']:
+        return Response({'error': result['message']}, status=status.HTTP_400_BAD_REQUEST)
+
+    # Get or create player
+    player, created = Player.objects.get_or_create(
+        phone=phone,
+        defaults={'is_verified': True, 'auth_provider': 'phone'}
+    )
+    
+    if not player.is_verified:
+        player.is_verified = True
+        player.save(update_fields=['is_verified'])
+
+    # Ensure profile exists
+    PlayerProfile.objects.get_or_create(player=player)
+
+    # Ensure referral code exists
+    from referrals.models import ReferralCode
+    if not hasattr(player, 'referral_code'):
+        ReferralCode.objects.create(
+            player=player,
+            code=ReferralCode.generate_unique_code()
+        )
+
+    # Ensure wallet exists
+    from wallet.models import Wallet
+    from game.models import Currency
+    if not hasattr(player, 'wallet'):
+        default_currency = Currency.objects.filter(is_default=True).first()
+        if default_currency:
+            Wallet.objects.create(player=player, currency=default_currency)
+
+    # Handle referral if provided
+    ref_code = request.data.get('ref_code')
+    if created and ref_code:
+        _process_referral(player, ref_code)
+
+    # Generate tokens
+    access_token = generate_access_token(player)
+    refresh_token = generate_refresh_token(player)
+
+    return Response({
+        'access_token': access_token,
+        'refresh_token': refresh_token,
+        'is_new': created,
+        'player': PlayerSerializer(player).data,
+    })
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def refresh_token_view(request):
+    """Refresh JWT access token."""
+    serializer = RefreshTokenSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+
+    payload = verify_refresh_token(serializer.validated_data['refresh_token'])
+    
+    try:
+        player = Player.objects.get(id=payload['user_id'], is_active=True)
+    except Player.DoesNotExist:
+        return Response({'error': 'Player not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    access_token = generate_access_token(player)
+    return Response({'access_token': access_token})
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def player_profile(request):
+    """Get current player profile."""
+    PlayerProfile.objects.get_or_create(player=request.user)
+    return Response(PlayerSerializer(request.user).data)
+
+
+@api_view(['PATCH'])
+@permission_classes([IsAuthenticated])
+def update_profile(request):
+    """Update player profile."""
+    serializer = PlayerUpdateSerializer(request.user, data=request.data, partial=True)
+    serializer.is_valid(raise_exception=True)
+    serializer.save()
+    return Response(PlayerSerializer(request.user).data)
+
+
+def _process_referral(new_player, ref_code):
+    """Process referral for new player."""
+    try:
+        from referrals.models import ReferralConfig, ReferralCode, Referral
+        config = ReferralConfig.get_config()
+        if not config.is_enabled:
+            return
+        
+        ref = ReferralCode.objects.filter(code=ref_code, is_active=True).first()
+        if not ref or ref.player == new_player:
+            return
+        
+        if ref.total_referrals >= config.max_referrals_per_user:
+            return
+        
+        Referral.objects.create(
+            referrer=ref.player,
+            referee=new_player,
+            referral_code=ref_code,
+            status='pending',
+        )
+        logger.info(f'Referral created: {ref.player} referred {new_player}')
+    except Exception as e:
+        logger.error(f'Error processing referral: {e}')
