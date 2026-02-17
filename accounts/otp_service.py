@@ -17,18 +17,35 @@ OTP_EXPIRY_MINUTES = 5
 MAX_OTP_PER_PHONE_PER_HOUR = 6
 
 
+def normalize_phone(phone):
+    """
+    Normalize phone to canonical format: +233XXXXXXXXX
+    Accepts: 0241234567, 233241234567, +233241234567, +233 24 123 4567
+    """
+    cleaned = phone.replace(' ', '').replace('-', '')
+    if cleaned.startswith('+'):
+        return cleaned
+    if cleaned.startswith('0') and len(cleaned) == 10:
+        return '+233' + cleaned[1:]
+    if cleaned.startswith('233'):
+        return '+' + cleaned
+    return '+' + cleaned
+
+
 def send_otp(phone, channel='sms', ip_address=None):
     """
     Generate and send OTP to phone number.
     
     Args:
-        phone: Phone number (e.g., '0241234567' or '233241234567')
+        phone: Phone number (e.g., '0241234567' or '+233241234567')
         channel: 'sms' or 'whatsapp'
         ip_address: Request IP for rate limiting
     
     Returns:
         dict: {'success': bool, 'message': str}
     """
+    phone = normalize_phone(phone)
+
     # Rate limiting
     one_hour_ago = timezone.now() - timedelta(hours=1)
     recent_count = OTPToken.objects.filter(
@@ -71,6 +88,7 @@ def verify_otp(phone, code):
     Returns:
         dict: {'success': bool, 'message': str}
     """
+    phone = normalize_phone(phone)
     otp = OTPToken.objects.filter(
         phone=phone,
         code=code,
@@ -128,7 +146,7 @@ def _send_whatsapp_otp(phone, code):
         'type': 'template',
         'template': {
             'name': template_name,
-            'language': {'code': 'en_US'},
+            'language': {'code': 'en'},
             'components': [
                 {
                     'type': 'body',

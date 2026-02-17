@@ -325,11 +325,17 @@
 
         // Send OTP
         document.getElementById('send-otp-btn')?.addEventListener('click', async () => {
-            const phone = document.getElementById('phone-input')?.value?.trim();
-            if (!phone || phone.length < 9) {
+            const rawPhone = document.getElementById('phone-input')?.value?.trim();
+            if (!rawPhone || rawPhone.length < 7) {
                 showError('Enter a valid phone number');
                 return;
             }
+
+            // Build full phone: country code + local number (strip leading 0)
+            const countryCode = document.getElementById('country-code')?.value || '+233';
+            let local = rawPhone.replace(/[\s\-]/g, '');
+            if (local.startsWith('0')) local = local.substring(1);
+            const phone = countryCode + local;
 
             const btn = document.getElementById('send-otp-btn');
             btn.disabled = true;

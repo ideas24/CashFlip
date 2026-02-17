@@ -36,9 +36,9 @@ html, body {
     -webkit-tap-highlight-color: transparent;
 }
 
-/* Force landscape prompt */
+/* Force landscape ONLY during gameplay */
 @media (orientation: portrait) and (max-width: 768px) {
-    body::after {
+    #game-screen.active::after {
         content: '📱 Please rotate your device to landscape mode';
         position: fixed; inset: 0; z-index: 99999;
         background: var(--casino-dark);
@@ -47,6 +47,32 @@ html, body {
         font-family: 'Orbitron', sans-serif;
     }
 }
+
+/* Auth & lobby: allow portrait scrolling */
+#auth-screen, #lobby-screen {
+    overflow-y: auto; -webkit-overflow-scrolling: touch;
+}
+@media (orientation: portrait) and (max-width: 768px) {
+    #auth-screen { align-items: flex-start; padding-top: 3rem; }
+    .auth-panel { margin-bottom: 2rem; }
+}
+
+/* Country code picker row */
+.phone-row {
+    display: flex; gap: 0.5rem; align-items: center;
+}
+.country-select {
+    width: 110px; flex-shrink: 0;
+    padding: 0.75rem 0.4rem;
+    background: var(--casino-surface); border: 1px solid var(--casino-border);
+    border-radius: 8px; color: var(--text-primary); font-size: 0.95rem;
+    outline: none; cursor: pointer; appearance: none;
+    -webkit-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%238b95a5'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 8px center;
+}
+.country-select:focus { border-color: var(--teal); }
+.phone-row #phone-input { flex: 1; }
 
 /* ==================== SCREENS ==================== */
 .screen { position: fixed; inset: 0; display: none; z-index: 1; }

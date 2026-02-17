@@ -12,7 +12,7 @@ from rest_framework.throttling import AnonRateThrottle
 
 from accounts.authentication import generate_access_token, generate_refresh_token, verify_refresh_token
 from accounts.models import Player, PlayerProfile, AuthConfig
-from accounts.otp_service import send_otp, verify_otp
+from accounts.otp_service import send_otp, verify_otp, normalize_phone
 from accounts.serializers import (
     RequestOTPSerializer, VerifyOTPSerializer, RefreshTokenSerializer,
     PlayerSerializer, PlayerUpdateSerializer,
@@ -120,6 +120,9 @@ def verify_otp_view(request):
 
     phone = serializer.validated_data['phone']
     code = serializer.validated_data['code']
+
+    # Normalize phone to canonical +233... format
+    phone = normalize_phone(phone)
 
     result = verify_otp(phone, code)
     

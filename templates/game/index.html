@@ -36,7 +36,22 @@
             <!-- Phone OTP Login -->
             <div id="otp-step-1" class="auth-step active">
                 <div class="input-group">
-                    <input type="tel" id="phone-input" placeholder="Phone number (e.g. 0241234567)" maxlength="15">
+                    <div class="phone-row">
+                        <select id="country-code" class="country-select">
+                            <option value="+233" data-flag="🇬🇭" selected>🇬🇭 +233</option>
+                            <option value="+234" data-flag="🇳🇬">🇳🇬 +234</option>
+                            <option value="+254" data-flag="🇰🇪">🇰🇪 +254</option>
+                            <option value="+256" data-flag="🇺🇬">🇺🇬 +256</option>
+                            <option value="+255" data-flag="🇹🇿">🇹🇿 +255</option>
+                            <option value="+27" data-flag="🇿🇦">🇿🇦 +27</option>
+                            <option value="+225" data-flag="🇨🇮">🇨🇮 +225</option>
+                            <option value="+221" data-flag="🇸🇳">🇸🇳 +221</option>
+                            <option value="+237" data-flag="🇨🇲">🇨🇲 +237</option>
+                            <option value="+44" data-flag="🇬🇧">🇬🇧 +44</option>
+                            <option value="+1" data-flag="🇺🇸">🇺🇸 +1</option>
+                        </select>
+                        <input type="tel" id="phone-input" placeholder="24 123 4567" maxlength="15">
+                    </div>
                 </div>
                 <div class="otp-channels">
                     <button class="channel-btn active" data-channel="sms">📱 SMS</button>
