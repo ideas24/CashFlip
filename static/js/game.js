@@ -250,21 +250,242 @@
         });
     }
 
-    function winCelebration() {
-        // Flash green particles
-        if (particles && particles.material) {
-            const origOpacity = particles.material.opacity;
-            particles.material.opacity = 1;
-            particles.material.size = 0.12;
-            setTimeout(() => {
-                particles.material.opacity = origOpacity;
-                particles.material.size = 0.05;
-            }, 500);
+    // ==================== SIGNATURE FEATURES ====================
+
+    // --- 1. CONFETTI PARTICLE SYSTEM ---
+    const confettiCanvas = document.createElement('canvas');
+    confettiCanvas.id = 'confetti-canvas';
+    confettiCanvas.style.cssText = 'position:fixed;inset:0;z-index:99;pointer-events:none;';
+    document.body.appendChild(confettiCanvas);
+    const confettiCtx = confettiCanvas.getContext('2d');
+    let confettiParticles = [];
+    let confettiAnimId = null;
+
+    function resizeConfetti() {
+        confettiCanvas.width = window.innerWidth;
+        confettiCanvas.height = window.innerHeight;
+    }
+    resizeConfetti();
+    window.addEventListener('resize', resizeConfetti);
+
+    function spawnConfetti(count, colors, originY) {
+        const cy = originY || confettiCanvas.height * 0.3;
+        for (let i = 0; i < count; i++) {
+            confettiParticles.push({
+                x: confettiCanvas.width * 0.5 + (Math.random() - 0.5) * 200,
+                y: cy,
+                vx: (Math.random() - 0.5) * 12,
+                vy: -Math.random() * 14 - 4,
+                w: Math.random() * 8 + 4,
+                h: Math.random() * 6 + 3,
+                color: colors[Math.floor(Math.random() * colors.length)],
+                rot: Math.random() * Math.PI * 2,
+                rv: (Math.random() - 0.5) * 0.3,
+                gravity: 0.25 + Math.random() * 0.1,
+                life: 1,
+                decay: 0.008 + Math.random() * 0.006,
+            });
+        }
+        if (!confettiAnimId) tickConfetti();
+    }
+
+    function tickConfetti() {
+        confettiCtx.clearRect(0, 0, confettiCanvas.width, confettiCanvas.height);
+        confettiParticles.forEach(p => {
+            p.vy += p.gravity;
+            p.x += p.vx;
+            p.y += p.vy;
+            p.rot += p.rv;
+            p.life -= p.decay;
+            p.vx *= 0.99;
+            confettiCtx.save();
+            confettiCtx.translate(p.x, p.y);
+            confettiCtx.rotate(p.rot);
+            confettiCtx.globalAlpha = Math.max(0, p.life);
+            confettiCtx.fillStyle = p.color;
+            confettiCtx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
+            confettiCtx.restore();
+        });
+        confettiParticles = confettiParticles.filter(p => p.life > 0 && p.y < confettiCanvas.height + 50);
+        if (confettiParticles.length > 0) {
+            confettiAnimId = requestAnimationFrame(tickConfetti);
+        } else {
+            confettiCtx.clearRect(0, 0, confettiCanvas.width, confettiCanvas.height);
+            confettiAnimId = null;
         }
     }
 
+    // --- 2. STREAK FIRE SYSTEM ---
+    let currentStreak = 0;
+
+    function updateStreakBadge(won) {
+        if (won) {
+            currentStreak++;
+        } else {
+            currentStreak = 0;
+        }
+        const badge = document.getElementById('streak-badge');
+        if (!badge) return;
+
+        if (currentStreak >= 2) {
+            badge.classList.remove('hidden');
+            const fireEmoji = currentStreak >= 7 ? '🔥🔥🔥' : currentStreak >= 5 ? '🔥🔥' : '🔥';
+            const label = currentStreak >= 7 ? 'INFERNO!' : currentStreak >= 5 ? 'ON FIRE!' : 'STREAK';
+            badge.innerHTML = `${fireEmoji} <span class="streak-count">×${currentStreak}</span> <span class="streak-label">${label}</span>`;
+            badge.className = 'streak-badge';
+            if (currentStreak >= 7) badge.classList.add('inferno');
+            else if (currentStreak >= 5) badge.classList.add('fire');
+            else if (currentStreak >= 3) badge.classList.add('hot');
+        } else {
+            badge.classList.add('hidden');
+        }
+    }
+
+    // --- 3. HAPTIC FEEDBACK ---
+    function haptic(pattern) {
+        if (navigator.vibrate) {
+            try { navigator.vibrate(pattern); } catch(e) {}
+        }
+    }
+
+    // --- 4. CASINO SOUND ENGINE (Web Audio API, inline generated) ---
+    let audioCtx = null;
+    function getAudio() {
+        if (!audioCtx) {
+            try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch(e) {}
+        }
+        return audioCtx;
+    }
+
+    function playTone(freq, duration, type, vol, ramp) {
+        const ctx = getAudio(); if (!ctx) return;
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = type || 'sine';
+        osc.frequency.setValueAtTime(freq, ctx.currentTime);
+        if (ramp) osc.frequency.linearRampToValueAtTime(ramp, ctx.currentTime + duration);
+        gain.gain.setValueAtTime(vol || 0.15, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.start(); osc.stop(ctx.currentTime + duration);
+    }
+
+    function sfxFlip() {
+        playTone(800, 0.08, 'square', 0.08);
+        setTimeout(() => playTone(1200, 0.06, 'square', 0.06), 50);
+        setTimeout(() => playTone(600, 0.06, 'square', 0.05), 100);
+    }
+
+    function sfxWin() {
+        playTone(523, 0.12, 'sine', 0.15);
+        setTimeout(() => playTone(659, 0.12, 'sine', 0.15), 100);
+        setTimeout(() => playTone(784, 0.15, 'sine', 0.18), 200);
+        setTimeout(() => playTone(1047, 0.2, 'sine', 0.12), 320);
+    }
+
+    function sfxBigWin() {
+        sfxWin();
+        setTimeout(() => {
+            playTone(1047, 0.15, 'sine', 0.12);
+            setTimeout(() => playTone(1319, 0.15, 'sine', 0.12), 80);
+            setTimeout(() => playTone(1568, 0.25, 'sine', 0.15), 160);
+        }, 450);
+    }
+
+    function sfxLoss() {
+        playTone(400, 0.15, 'sawtooth', 0.1);
+        setTimeout(() => playTone(300, 0.2, 'sawtooth', 0.08), 120);
+        setTimeout(() => playTone(200, 0.35, 'sawtooth', 0.06), 250);
+    }
+
+    function sfxCashout() {
+        for (let i = 0; i < 6; i++) {
+            setTimeout(() => playTone(800 + i * 200, 0.1, 'sine', 0.1), i * 60);
+        }
+        setTimeout(() => playTone(2000, 0.4, 'sine', 0.15), 400);
+    }
+
+    // --- 5. SOCIAL PROOF TOASTS ---
+    let _socialProofInterval = null;
+    let _lastFeedIds = new Set();
+
+    function startSocialProof() {
+        _socialProofInterval = setInterval(checkForBigWins, 8000);
+    }
+    function stopSocialProof() {
+        if (_socialProofInterval) { clearInterval(_socialProofInterval); _socialProofInterval = null; }
+    }
+
+    async function checkForBigWins() {
+        try {
+            const resp = await fetch('/api/game/live-feed/');
+            if (!resp.ok) return;
+            const data = await resp.json();
+            const feed = data.feed || [];
+            for (const item of feed) {
+                const key = `${item.player}-${item.time}`;
+                if (_lastFeedIds.has(key)) continue;
+                _lastFeedIds.add(key);
+                if (_lastFeedIds.size > 100) {
+                    const arr = [..._lastFeedIds]; _lastFeedIds = new Set(arr.slice(-60));
+                }
+                if (item.won && parseFloat(item.amount) >= 10) {
+                    showSocialToast(item);
+                    break;
+                }
+            }
+        } catch(e) {}
+    }
+
+    function showSocialToast(item) {
+        const existing = document.getElementById('social-toast');
+        if (existing) existing.remove();
+
+        const el = document.createElement('div');
+        el.id = 'social-toast';
+        el.className = 'social-toast';
+        const sym = item.symbol || 'GH₵';
+        el.innerHTML = `<span class="social-emoji">🎉</span> <strong>${item.player}</strong> just won <span class="social-amount">${sym}${parseFloat(item.amount).toFixed(2)}</span>!`;
+        document.body.appendChild(el);
+        setTimeout(() => el.classList.add('show'), 50);
+        setTimeout(() => { el.classList.remove('show'); setTimeout(() => el.remove(), 400); }, 4000);
+    }
+
+    // --- ENHANCED CELEBRATIONS ---
+    const WIN_COLORS = ['#ffd700', '#ffec8b', '#00e676', '#00bfa6', '#4dd9c0', '#fff'];
+    const CASHOUT_COLORS = ['#ffd700', '#ff9800', '#ffeb3b', '#fff176', '#00e676', '#76ff03', '#fff'];
+    const LOSS_COLORS = ['#ff6b6b', '#ff4444', '#cc0000', '#990000'];
+
+    function winCelebration() {
+        spawnConfetti(35, WIN_COLORS);
+        sfxWin();
+        haptic([30, 30, 60]);
+        updateStreakBadge(true);
+
+        // Three.js green flash
+        if (particles && particles.material) {
+            const orig = particles.material.opacity;
+            particles.material.opacity = 1;
+            particles.material.size = 0.12;
+            setTimeout(() => { particles.material.opacity = orig; particles.material.size = 0.05; }, 500);
+        }
+    }
+
+    function bigCashoutCelebration() {
+        spawnConfetti(100, CASHOUT_COLORS, confettiCanvas.height * 0.2);
+        setTimeout(() => spawnConfetti(80, CASHOUT_COLORS, confettiCanvas.height * 0.15), 200);
+        setTimeout(() => spawnConfetti(60, CASHOUT_COLORS, confettiCanvas.height * 0.25), 400);
+        sfxCashout();
+        haptic([50, 50, 50, 50, 100]);
+    }
+
     function lossBurst() {
-        // Flash red
+        spawnConfetti(15, LOSS_COLORS);
+        sfxLoss();
+        haptic([100, 50, 200]);
+        updateStreakBadge(false);
+
+        // Three.js red flash
         if (scene) {
             const flash = new THREE.PointLight(0xff0000, 3, 20);
             flash.position.set(0, 2, 3);
@@ -649,6 +870,7 @@
         showScreen('lobby-screen');
         await Promise.all([loadProfile(), loadWalletBalance(), loadGameConfig()]);
         startLiveFeed();
+        startSocialProof();
         checkActiveSession();
     }
 
@@ -758,6 +980,8 @@
 
     function enterGame() {
         stopLiveFeed();
+        stopSocialProof();
+        currentStreak = 0;
         showScreen('game-screen');
         initScene();
         updateGameHUD();
@@ -795,7 +1019,8 @@
                 return;
             }
 
-            // Animate the flip
+            // Sound + animate the flip
+            sfxFlip();
             await flipAnimation(data.is_zero, data.value);
 
             // Update session state
@@ -863,7 +1088,7 @@
                 document.getElementById('cashout-total').textContent =
                     `${sym}${parseFloat(data.cashout_amount).toFixed(2)}`;
                 document.getElementById('cashout-overlay').classList.remove('hidden');
-                winCelebration();
+                bigCashoutCelebration();
             } else {
                 showToast(data.error || 'Cashout failed');
                 btn.disabled = false;
@@ -1705,6 +1930,16 @@
     }
 
     // ==================== INIT ====================
+    // Initialize AudioContext on first user interaction (browser requirement)
+    function initAudioOnInteraction() {
+        getAudio();
+        if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+        document.removeEventListener('touchstart', initAudioOnInteraction);
+        document.removeEventListener('click', initAudioOnInteraction);
+    }
+    document.addEventListener('touchstart', initAudioOnInteraction, { once: true });
+    document.addEventListener('click', initAudioOnInteraction, { once: true });
+
     async function init() {
         bindEvents();
         initAuth();

@@ -11,7 +11,7 @@
     {% load static %}
     <link rel="icon" type="image/svg+xml" href="{% static 'images/cashflip-favicon.svg' %}">
     <meta name="theme-color" content="#0D1117">
-    <link rel="stylesheet" href="{% static 'css/game.css' %}?v=20260217h3">
+    <link rel="stylesheet" href="{% static 'css/game.css' %}?v=20260217j">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
 <body>
@@ -200,6 +200,7 @@
                 <div class="denomination-display" id="denom-display">
                     <span id="denom-value"></span>
                 </div>
+                <div id="streak-badge" class="streak-badge hidden"></div>
             </div>
 
             <div class="hud-top-right">
@@ -494,6 +495,6 @@
         <span id="toast-message"></span>
     </div>
 
-    <script src="{% static 'js/game.js' %}?v=20260217h3"></script>
+    <script src="{% static 'js/game.js' %}?v=20260217j"></script>
 </body>
 </html>
