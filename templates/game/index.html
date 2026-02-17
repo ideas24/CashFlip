@@ -11,7 +11,7 @@
     {% load static %}
     <link rel="icon" type="image/svg+xml" href="{% static 'images/cashflip-favicon.svg' %}">
     <meta name="theme-color" content="#0D1117">
-    <link rel="stylesheet" href="{% static 'css/game.css' %}?v=20260217e">
+    <link rel="stylesheet" href="{% static 'css/game.css' %}?v=20260217f2">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
 <body>
@@ -161,6 +161,17 @@
                 <button id="withdraw-btn" class="btn-action">💸 Withdraw</button>
                 <button id="history-btn" class="btn-action">📊 History</button>
                 <button id="referral-btn" class="btn-action">🔗 Refer & Earn</button>
+            </div>
+
+            <!-- Live Feed Ticker (Aviator-style) -->
+            <div class="live-feed-container">
+                <div class="live-feed-header">
+                    <span class="live-dot"></span>
+                    <span class="live-label">LIVE</span>
+                </div>
+                <div id="live-feed" class="live-feed">
+                    <div class="feed-placeholder">Loading live results...</div>
+                </div>
             </div>
         </div>
     </div>
@@ -366,8 +377,16 @@
         </div>
         <div class="panel-body">
             <div class="profile-section">
-                <div class="profile-avatar-large">👤</div>
-                <h4 id="profile-name">Player</h4>
+                <div class="profile-avatar-large" id="profile-avatar-display">👤</div>
+                <div id="profile-name-display">
+                    <h4 id="profile-name">Player</h4>
+                    <button id="edit-name-btn" class="btn-tiny" title="Edit username">✏️</button>
+                </div>
+                <div id="profile-name-edit" style="display:none;" class="name-edit-row">
+                    <input type="text" id="profile-name-input" maxlength="30" placeholder="Your username">
+                    <button id="save-name-btn" class="btn-tiny">Save</button>
+                    <button id="cancel-name-btn" class="btn-tiny">Cancel</button>
+                </div>
                 <p id="profile-phone" class="text-muted"></p>
             </div>
             <div class="profile-stats">
@@ -450,6 +469,6 @@
         <span id="toast-message"></span>
     </div>
 
-    <script src="{% static 'js/game.js' %}?v=20260217g"></script>
+    <script src="{% static 'js/game.js' %}?v=20260217g2"></script>
 </body>
 </html>

@@ -3,6 +3,7 @@ Accounts API Views - OTP Auth, Profile, Token Refresh
 """
 
 import logging
+import random
 
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes, throttle_classes
@@ -19,6 +20,27 @@ from accounts.serializers import (
 )
 
 logger = logging.getLogger(__name__)
+
+_ADJECTIVES = [
+    'Lucky', 'Swift', 'Bold', 'Mighty', 'Clever', 'Brave', 'Fierce', 'Sharp',
+    'Cool', 'Slick', 'Quick', 'Bright', 'Grand', 'Epic', 'Noble', 'Wise',
+    'Flash', 'Turbo', 'Rapid', 'Gold', 'Silver', 'Iron', 'Steel', 'Storm',
+    'Blaze', 'Frost', 'Thunder', 'Shadow', 'Cosmic', 'Royal', 'Ultra', 'Mega',
+]
+_NOUNS = [
+    'Flipper', 'Stacker', 'Roller', 'Winner', 'Player', 'Ace', 'Star', 'King',
+    'Queen', 'Champ', 'Boss', 'Chief', 'Legend', 'Hero', 'Ninja', 'Tiger',
+    'Eagle', 'Hawk', 'Lion', 'Wolf', 'Fox', 'Bear', 'Shark', 'Cobra',
+    'Phoenix', 'Dragon', 'Falcon', 'Panther', 'Viper', 'Jaguar', 'Titan', 'Bolt',
+]
+
+def _generate_username():
+    """Generate a fun unique username like 'LuckyFlipper42'."""
+    for _ in range(10):
+        name = random.choice(_ADJECTIVES) + random.choice(_NOUNS) + str(random.randint(10, 99))
+        if not Player.objects.filter(display_name=name).exists():
+            return name
+    return f'Player{random.randint(1000, 9999)}'
 
 
 class OTPThrottle(AnonRateThrottle):
@@ -134,10 +156,15 @@ def verify_otp_view(request):
         phone=phone,
         defaults={'is_verified': True, 'auth_provider': 'phone'}
     )
-    
+
     if not player.is_verified:
         player.is_verified = True
         player.save(update_fields=['is_verified'])
+
+    # Auto-generate display name for new players
+    if created and not player.display_name:
+        player.display_name = _generate_username()
+        player.save(update_fields=['display_name'])
 
     # Ensure profile exists
     PlayerProfile.objects.get_or_create(player=player)

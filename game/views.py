@@ -411,3 +411,36 @@ def verify_session(request, session_id):
         'cashout_balance': str(session.cashout_balance),
         'flips': flips_data,
     })
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def live_feed(request):
+    """
+    Public live feed of recent game results (Aviator-style).
+    Returns last 20 completed sessions with masked player names.
+    No auth required — visible to everyone for credibility.
+    """
+    sessions = GameSession.objects.filter(
+        status__in=['cashed_out', 'lost']
+    ).select_related('player', 'currency').order_by('-ended_at')[:20]
+
+    def mask_name(player):
+        name = player.display_name or player.get_display_name()
+        if len(name) <= 3:
+            return name[0] + '**'
+        return name[:2] + '*' * (len(name) - 4) + name[-2:]
+
+    feed = []
+    for s in sessions:
+        feed.append({
+            'player': mask_name(s.player),
+            'stake': str(s.stake_amount),
+            'won': s.status == 'cashed_out',
+            'amount': str(s.cashout_balance if s.status == 'cashed_out' else s.stake_amount),
+            'flips': s.flip_count,
+            'symbol': s.currency.symbol if s.currency else 'GH₵',
+            'time': s.ended_at.isoformat() if s.ended_at else '',
+        })
+
+    return Response({'feed': feed})

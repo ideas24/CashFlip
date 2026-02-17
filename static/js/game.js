@@ -630,6 +630,7 @@
     async function enterLobby() {
         showScreen('lobby-screen');
         await Promise.all([loadProfile(), loadWalletBalance()]);
+        startLiveFeed();
         checkActiveSession();
     }
 
@@ -738,6 +739,7 @@
     }
 
     function enterGame() {
+        stopLiveFeed();
         showScreen('game-screen');
         initScene();
         updateGameHUD();
@@ -1278,6 +1280,58 @@
         }
     }
 
+    // ==================== LIVE FEED ====================
+
+    let _feedInterval = null;
+
+    async function loadLiveFeed() {
+        const feedEl = document.getElementById('live-feed');
+        if (!feedEl) return;
+
+        try {
+            const resp = await fetch('/api/game/live-feed/');
+            if (!resp.ok) return;
+            const data = await resp.json();
+            const items = data.feed || [];
+
+            if (items.length === 0) {
+                feedEl.innerHTML = '<div class="feed-placeholder">No games yet — be the first!</div>';
+                return;
+            }
+
+            feedEl.innerHTML = items.map(item => {
+                const cls = item.won ? 'won' : 'lost';
+                const icon = item.won ? '🏆' : '💀';
+                const label = item.won ? `+${item.symbol}${parseFloat(item.amount).toFixed(2)}` : `-${item.symbol}${parseFloat(item.amount).toFixed(2)}`;
+                const ago = item.time ? _timeAgo(new Date(item.time)) : '';
+                return `<div class="feed-item">
+                    <span class="feed-player">${item.player}</span>
+                    <span class="feed-result ${cls}">${icon} ${label}</span>
+                    <span class="feed-flips">${item.flips}x</span>
+                    <span class="feed-time">${ago}</span>
+                </div>`;
+            }).join('');
+        } catch (e) { /* silent */ }
+    }
+
+    function _timeAgo(date) {
+        const secs = Math.floor((Date.now() - date.getTime()) / 1000);
+        if (secs < 60) return 'now';
+        if (secs < 3600) return `${Math.floor(secs / 60)}m`;
+        if (secs < 86400) return `${Math.floor(secs / 3600)}h`;
+        return `${Math.floor(secs / 86400)}d`;
+    }
+
+    function startLiveFeed() {
+        loadLiveFeed();
+        if (_feedInterval) clearInterval(_feedInterval);
+        _feedInterval = setInterval(loadLiveFeed, 5000);
+    }
+
+    function stopLiveFeed() {
+        if (_feedInterval) { clearInterval(_feedInterval); _feedInterval = null; }
+    }
+
     // ==================== MOMO ACCOUNT MANAGEMENT ====================
 
     async function loadMomoAccounts() {
@@ -1479,6 +1533,36 @@
             document.getElementById('add-momo-btn').style.display = 'block';
         });
         document.getElementById('profile-momo-phone')?.addEventListener('input', handleProfileMomoPhoneInput);
+
+        // Username edit
+        document.getElementById('edit-name-btn')?.addEventListener('click', () => {
+            document.getElementById('profile-name-display').style.display = 'none';
+            document.getElementById('profile-name-edit').style.display = 'flex';
+            const input = document.getElementById('profile-name-input');
+            input.value = state.player?.display_name || '';
+            input.focus();
+        });
+        document.getElementById('cancel-name-btn')?.addEventListener('click', () => {
+            document.getElementById('profile-name-edit').style.display = 'none';
+            document.getElementById('profile-name-display').style.display = 'flex';
+        });
+        document.getElementById('save-name-btn')?.addEventListener('click', async () => {
+            const newName = document.getElementById('profile-name-input').value.trim();
+            if (!newName || newName.length < 2) { alert('Name must be at least 2 characters'); return; }
+            try {
+                const resp = await API.patch('/accounts/profile/update/', { display_name: newName });
+                const data = await resp.json();
+                if (resp.ok) {
+                    state.player.display_name = newName;
+                    document.getElementById('profile-name').textContent = newName;
+                    document.getElementById('lobby-player-name').textContent = newName;
+                    document.getElementById('profile-name-edit').style.display = 'none';
+                    document.getElementById('profile-name-display').style.display = 'flex';
+                } else {
+                    alert(data.error || data.display_name?.[0] || 'Failed to update name');
+                }
+            } catch (e) { alert('Network error'); }
+        });
         document.getElementById('close-profile')?.addEventListener('click', () => {
             document.getElementById('profile-panel')?.classList.remove('show');
         });

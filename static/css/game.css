@@ -572,6 +572,44 @@ html, body {
 }
 .verified-icon { font-weight: bold; font-size: 1rem; }
 
+/* ==================== LIVE FEED TICKER ==================== */
+.live-feed-container {
+    margin-top: 12px; border-radius: 10px;
+    background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06);
+    overflow: hidden; max-width: 480px; width: 100%; align-self: center;
+}
+.live-feed-header {
+    display: flex; align-items: center; gap: 6px;
+    padding: 6px 12px; background: rgba(255,255,255,0.04);
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.live-dot {
+    width: 8px; height: 8px; border-radius: 50%; background: #e74c3c;
+    animation: livePulse 1.5s ease-in-out infinite;
+}
+@keyframes livePulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+.live-label { font-size: 0.65rem; font-weight: 800; color: #e74c3c; letter-spacing: 1px; }
+.live-feed {
+    max-height: 140px; overflow-y: auto; scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+.live-feed::-webkit-scrollbar { display: none; }
+.feed-placeholder { padding: 12px; text-align: center; color: #555; font-size: 0.8rem; }
+.feed-item {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 5px 12px; font-size: 0.78rem;
+    border-bottom: 1px solid rgba(255,255,255,0.03);
+    animation: feedSlideIn 0.3s ease-out;
+}
+@keyframes feedSlideIn { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
+.feed-item:last-child { border-bottom: none; }
+.feed-player { color: #888; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.feed-result { font-weight: 700; margin-left: 8px; white-space: nowrap; }
+.feed-result.won { color: #27ae60; }
+.feed-result.lost { color: #e74c3c; }
+.feed-flips { color: #555; font-size: 0.7rem; margin-left: 6px; }
+.feed-time { color: #444; font-size: 0.65rem; margin-left: 6px; white-space: nowrap; }
+
 /* ==================== DEPOSIT CTA OVERLAY ==================== */
 .deposit-cta-overlay {
     position: absolute; inset: 0; z-index: 50;
@@ -667,6 +705,11 @@ html, body {
 .btn-outline { font-size: 0.8rem; padding: 4px 12px; border: 1px dashed rgba(255,255,255,0.2); background: transparent; color: #aaa; border-radius: 6px; cursor: pointer; width: 100%; }
 .btn-outline:hover { border-color: rgba(255,255,255,0.4); color: #fff; }
 .small { font-size: 0.75rem; margin-top: 4px; }
+
+/* Profile name edit */
+#profile-name-display { display: flex; align-items: center; gap: 6px; justify-content: center; }
+.name-edit-row { display: flex; align-items: center; gap: 4px; justify-content: center; margin-bottom: 4px; }
+.name-edit-row input { padding: 4px 8px; font-size: 0.85rem; border-radius: 6px; border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.05); color: #fff; width: 140px; text-align: center; }
 
 /* ==================== RESPONSIVE ==================== */
 @media (max-height: 500px) {

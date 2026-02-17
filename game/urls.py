@@ -14,4 +14,5 @@ urlpatterns = [
     path('state/', views.game_state, name='game_state'),
     path('history/', views.game_history, name='game_history'),
     path('verify/<uuid:session_id>/', views.verify_session, name='verify_session'),
+    path('live-feed/', views.live_feed, name='live_feed'),
 ]
