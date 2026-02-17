@@ -39,6 +39,18 @@ class VerificationThrottle(UserRateThrottle):
     rate = '5/min'
 
 
+class DepositThrottle(UserRateThrottle):
+    rate = '10/min'
+
+
+class WithdrawThrottle(UserRateThrottle):
+    rate = '5/min'
+
+
+class AddAccountThrottle(UserRateThrottle):
+    rate = '5/min'
+
+
 # ==================== Mobile Money Verification ====================
 
 @api_view(['POST'])
@@ -122,6 +134,16 @@ def add_momo_account(request):
             }
         })
 
+    # Max 3 accounts per player
+    existing_accounts = MobileMoneyAccount.objects.filter(
+        player=request.user, is_active=True
+    )
+    if existing_accounts.count() >= 3:
+        return Response(
+            {'error': 'Maximum 3 mobile money accounts allowed. Remove one to add a new account.'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
     # Verify name via Orchard AII
     result = verify_mobile_money_name(mobile_number)
     if not result['success']:
@@ -131,9 +153,6 @@ def add_momo_account(request):
     network = result['network']
 
     # SECURITY: Strict name matching against existing accounts
-    existing_accounts = MobileMoneyAccount.objects.filter(
-        player=request.user, is_active=True
-    )
     if existing_accounts.exists():
         first_name = existing_accounts.first().verified_name.strip().upper()
         if verified_name != first_name:
@@ -209,15 +228,14 @@ def remove_momo_account(request):
     if active_count <= 1:
         return Response({'error': 'Cannot remove your only payment method'}, status=status.HTTP_400_BAD_REQUEST)
 
+    if account.is_primary:
+        return Response(
+            {'error': 'Cannot remove your primary account. Switch primary to another account first.'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
     account.is_active = False
     account.save(update_fields=['is_active'])
-
-    # If primary was removed, promote another
-    if account.is_primary:
-        next_account = MobileMoneyAccount.objects.filter(player=request.user, is_active=True).first()
-        if next_account:
-            next_account.is_primary = True
-            next_account.save(update_fields=['is_primary'])
 
     return Response({'success': True, 'message': 'Account removed'})
 
@@ -226,6 +244,7 @@ def remove_momo_account(request):
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
+@throttle_classes([DepositThrottle])
 def deposit_mobile_money(request):
     """
     Initiate mobile money deposit.
@@ -296,6 +315,7 @@ def deposit_mobile_money(request):
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
+@throttle_classes([DepositThrottle])
 def deposit_card(request):
     """Initiate card deposit via Paystack."""
     amount = request.data.get('amount')
@@ -319,6 +339,7 @@ def deposit_card(request):
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
+@throttle_classes([WithdrawThrottle])
 def withdraw(request):
     """
     Initiate withdrawal to mobile money.
