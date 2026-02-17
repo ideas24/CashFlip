@@ -11,7 +11,7 @@ def health_check(request):
 
 
 urlpatterns = [
-    # Admin
+    # Admin — access restricted to ADMIN_DOMAIN by AdminHostRestrictionMiddleware
     path('admin/', admin.site.urls),
 
     # Health check
