@@ -14,7 +14,7 @@ from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
 
 from game.engine import execute_flip
-from game.models import Currency, GameConfig, GameSession
+from game.models import Currency, CurrencyDenomination, GameConfig, SimulatedGameConfig, GameSession, FlipResult
 from game.serializers import (
     StartGameSerializer, GameSessionSerializer, GameSessionListSerializer,
     GameConfigPublicSerializer, CurrencySerializer, PauseSerializer,
@@ -72,9 +72,16 @@ def start_game(request):
     except (Currency.DoesNotExist, GameConfig.DoesNotExist):
         return Response({'error': 'Currency not available'}, status=status.HTTP_400_BAD_REQUEST)
 
-    if stake_amount < config.min_stake:
+    # Check for active simulation config
+    sim = SimulatedGameConfig.get_active_config()
+    sim_active = sim and sim.applies_to_player(player)
+
+    # Apply limit overrides from simulation
+    effective_min_stake = sim.override_min_stake if (sim_active and sim.override_min_stake is not None) else config.min_stake
+
+    if stake_amount < effective_min_stake:
         return Response(
-            {'error': f'Minimum stake is {currency.symbol}{config.min_stake}'},
+            {'error': f'Minimum stake is {currency.symbol}{effective_min_stake}'},
             status=status.HTTP_400_BAD_REQUEST
         )
 
@@ -84,6 +91,25 @@ def start_game(request):
         wallet = Wallet.objects.select_for_update().get(player=player)
     except Wallet.DoesNotExist:
         return Response({'error': 'Wallet not found. Please make a deposit first.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    # Grant test balance if simulation is active and configured
+    if sim_active and sim.grant_test_balance > 0:
+        grant_amount = sim.grant_test_balance
+        if wallet.balance < grant_amount:
+            balance_before = wallet.balance
+            wallet.balance = grant_amount
+            wallet.save(update_fields=['balance', 'updated_at'])
+            tx_ref = f'CF-TEST-{uuid.uuid4().hex[:8].upper()}'
+            WalletTransaction.objects.create(
+                wallet=wallet,
+                amount=grant_amount - balance_before,
+                tx_type='test_credit',
+                reference=tx_ref,
+                balance_before=balance_before,
+                balance_after=wallet.balance,
+                metadata={'sim_config': sim.name},
+            )
+            logger.info(f'[SIM] Granted test balance {grant_amount} to {player.phone}')
 
     if wallet.available_balance < stake_amount:
         return Response(
@@ -119,12 +145,21 @@ def start_game(request):
         )
         session.generate_seeds()
 
-    return Response({
+        # Track simulation usage
+        if sim_active:
+            sim.increment_usage()
+
+    response_data = {
         'session_id': str(session.id),
         'server_seed_hash': session.server_seed_hash,
         'stake_amount': str(stake_amount),
         'currency': CurrencySerializer(currency).data,
-    }, status=status.HTTP_201_CREATED)
+    }
+    if sim_active:
+        response_data['simulation_active'] = True
+        response_data['simulation_mode'] = sim.get_outcome_mode_display()
+
+    return Response(response_data, status=status.HTTP_201_CREATED)
 
 
 @api_view(['POST'])

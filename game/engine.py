@@ -13,7 +13,7 @@ import secrets
 import logging
 from decimal import Decimal
 
-from game.models import Currency, CurrencyDenomination, GameConfig, GameSession, FlipResult
+from game.models import Currency, CurrencyDenomination, GameConfig, SimulatedGameConfig, GameSession, FlipResult
 
 logger = logging.getLogger(__name__)
 
@@ -93,6 +93,47 @@ def select_denomination(currency, result_hash, is_zero):
     return denoms[-1], denoms[-1].value
 
 
+def get_simulated_outcome(session, flip_number, roll):
+    """
+    Check if a SimulatedGameConfig overrides the normal flip outcome.
+    
+    Returns:
+        (is_zero, zero_prob, forced_denom_value) or None if no simulation active.
+    """
+    sim = SimulatedGameConfig.get_active_config()
+    if not sim or not sim.applies_to_player(session.player):
+        return None
+
+    mode = sim.outcome_mode
+    forced_denom_value = sim.force_denomination_value  # may be None
+
+    if mode == 'normal':
+        return None
+
+    elif mode == 'always_win':
+        return (False, 0.0, forced_denom_value)
+
+    elif mode == 'always_lose':
+        return (True, 1.0, None)
+
+    elif mode == 'force_zero_at':
+        if flip_number == sim.force_zero_at_flip:
+            return (True, 1.0, None)
+        return (False, 0.0, forced_denom_value)
+
+    elif mode == 'fixed_probability':
+        prob = float(sim.fixed_zero_probability)
+        is_zero = roll < prob
+        return (is_zero, prob, forced_denom_value if not is_zero else None)
+
+    elif mode == 'streak_then_lose':
+        if flip_number <= sim.win_streak_length:
+            return (False, 0.0, forced_denom_value)
+        return (True, 1.0, None)
+
+    return None
+
+
 def execute_flip(session):
     """
     Execute a single flip for a game session.
@@ -121,14 +162,30 @@ def execute_flip(session):
     
     # Generate provably fair result
     result_hash = generate_result_hash(session.server_seed, session.client_seed, session.nonce)
-    
-    # Determine if this flip is zero (loss)
-    zero_prob = calculate_zero_probability(flip_number, config)
     roll = hash_to_float(result_hash)
-    is_zero = roll < zero_prob
     
-    # Select denomination
-    denomination, value = select_denomination(session.currency, result_hash, is_zero)
+    # Check simulation override first
+    simulated = get_simulated_outcome(session, flip_number, roll)
+    if simulated is not None:
+        is_zero, zero_prob, forced_denom_value = simulated
+        logger.info(f'[SIM] session={session.id} flip={flip_number} mode override -> is_zero={is_zero}')
+    else:
+        # Normal probability curve
+        zero_prob = calculate_zero_probability(flip_number, config)
+        is_zero = roll < zero_prob
+        forced_denom_value = None
+    
+    # Select denomination (with optional forced value from simulation)
+    if forced_denom_value is not None and not is_zero:
+        forced_denom = CurrencyDenomination.objects.filter(
+            currency=session.currency, value=forced_denom_value, is_active=True
+        ).first()
+        if forced_denom:
+            denomination, value = forced_denom, forced_denom.value
+        else:
+            denomination, value = select_denomination(session.currency, result_hash, is_zero)
+    else:
+        denomination, value = select_denomination(session.currency, result_hash, is_zero)
     
     if is_zero:
         # Player loses

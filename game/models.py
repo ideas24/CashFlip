@@ -79,6 +79,96 @@ class GameConfig(models.Model):
         return f'Config: {self.currency.code}'
 
 
+class SimulatedGameConfig(models.Model):
+    """
+    Admin-toggleable simulation/test config that overrides normal game behaviour.
+    Only one active config is used at a time (singleton pattern via get_config).
+    When enabled, the game engine checks this before the normal probability curve.
+    """
+    OUTCOME_CHOICES = [
+        ('normal', 'Normal (no override)'),
+        ('always_win', 'Always Win (never zero)'),
+        ('always_lose', 'Always Lose (always zero)'),
+        ('force_zero_at', 'Force Zero at Specific Flip Number'),
+        ('fixed_probability', 'Fixed Zero Probability (override curve)'),
+        ('streak_then_lose', 'Win Streak Then Lose (win N flips, then zero)'),
+    ]
+
+    name = models.CharField(max_length=100, default='Default Test Config',
+                            help_text='Label for this test scenario')
+    is_enabled = models.BooleanField(default=False, db_index=True,
+                                     help_text='Master switch — enable to activate simulation mode')
+
+    # Outcome control
+    outcome_mode = models.CharField(max_length=20, choices=OUTCOME_CHOICES, default='normal',
+                                    help_text='How flip outcomes are determined')
+    force_zero_at_flip = models.PositiveIntegerField(default=0, blank=True,
+                                                     help_text='Force zero on this flip number (for force_zero_at mode)')
+    fixed_zero_probability = models.DecimalField(max_digits=5, decimal_places=4, default=0,
+                                                  help_text='Fixed probability 0.0–1.0 (for fixed_probability mode)')
+    win_streak_length = models.PositiveIntegerField(default=5,
+                                                     help_text='Number of guaranteed wins before forced loss (streak_then_lose mode)')
+
+    # Denomination control
+    force_denomination_value = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True,
+                                                    help_text='Force this denomination value on every win flip (blank = random)')
+
+    # Targeting
+    apply_to_all_players = models.BooleanField(default=True,
+                                               help_text='Apply to all players, or only targeted players below')
+    targeted_players = models.ManyToManyField(settings.AUTH_USER_MODEL, blank=True,
+                                             related_name='simulated_configs',
+                                             help_text='If not apply_to_all, only these players get simulation')
+
+    # Limit overrides for testing
+    override_min_stake = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True,
+                                             help_text='Override min stake for test (blank = use normal config)')
+    override_max_cashout = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True,
+                                               help_text='Override max cashout for test (blank = use normal config)')
+
+    # Test wallet
+    grant_test_balance = models.DecimalField(max_digits=12, decimal_places=2, default=0,
+                                             help_text='Auto-grant this balance to targeted players on session start (0 = disabled)')
+
+    # Safety
+    auto_disable_after = models.PositiveIntegerField(default=0,
+                                                      help_text='Auto-disable after N game sessions (0 = never)')
+    sessions_used = models.PositiveIntegerField(default=0, editable=False,
+                                                help_text='Sessions played under this config')
+
+    notes = models.TextField(blank=True, default='',
+                             help_text='Internal notes about this test scenario')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Simulated Game Config'
+        verbose_name_plural = 'Simulated Game Configs'
+        ordering = ['-is_enabled', '-updated_at']
+
+    def __str__(self):
+        status = 'ACTIVE' if self.is_enabled else 'OFF'
+        return f'[{status}] {self.name} ({self.get_outcome_mode_display()})'
+
+    @classmethod
+    def get_active_config(cls):
+        """Return the first enabled config, or None."""
+        return cls.objects.filter(is_enabled=True).first()
+
+    def applies_to_player(self, player):
+        """Check if this config applies to the given player."""
+        if self.apply_to_all_players:
+            return True
+        return self.targeted_players.filter(pk=player.pk).exists()
+
+    def increment_usage(self):
+        """Track usage and auto-disable if limit reached."""
+        self.sessions_used += 1
+        if self.auto_disable_after > 0 and self.sessions_used >= self.auto_disable_after:
+            self.is_enabled = False
+        self.save(update_fields=['sessions_used', 'is_enabled'])
+
+
 class GameSession(models.Model):
     STATUS_CHOICES = [
         ('active', 'Active'),
