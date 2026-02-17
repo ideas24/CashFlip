@@ -361,18 +361,55 @@ def transaction_list(request):
 @api_view(['GET'])
 @permission_classes([IsStaffAdmin])
 def finance_overview(request):
+    # Query params for sorting and filtering
+    sort_by = request.query_params.get('sort', '-created_at')
+    tx_filter = request.query_params.get('type', 'all')  # all, deposits, withdrawals
+    period = request.query_params.get('period', '30d')
+    days = {'7d': 7, '30d': 30, '90d': 90, 'all': 365}.get(period, 30)
+    start_date = timezone.now().date() - timedelta(days=days - 1)
+
+    # All-time totals
     total_deposits = Deposit.objects.filter(status='completed').aggregate(s=Sum('amount'))['s'] or Decimal('0')
     total_withdrawals = Withdrawal.objects.filter(status='completed').aggregate(s=Sum('amount'))['s'] or Decimal('0')
 
+    # Period totals
+    period_deps = Deposit.objects.filter(status='completed', created_at__date__gte=start_date)
+    period_wdrs_completed = Withdrawal.objects.filter(status='completed', created_at__date__gte=start_date)
+    period_dep_total = period_deps.aggregate(s=Sum('amount'))['s'] or Decimal('0')
+    period_wdr_total = period_wdrs_completed.aggregate(s=Sum('amount'))['s'] or Decimal('0')
+
+    # GGR for the period (stakes - payouts)
+    period_sessions = GameSession.objects.filter(created_at__date__gte=start_date)
+    total_stakes = period_sessions.aggregate(s=Sum('stake_amount'))['s'] or Decimal('0')
+    total_payouts = period_sessions.filter(
+        status__in=['cashed_out', 'completed']
+    ).aggregate(s=Sum('cashout_balance'))['s'] or Decimal('0')
+    ggr = total_stakes - total_payouts
+    ggr_margin = round(float(ggr) / max(float(total_stakes), 1) * 100, 1)
+
+    # Pending withdrawals
     pending_wdrs = Withdrawal.objects.filter(status='pending')
     pending_total = pending_wdrs.aggregate(s=Sum('amount'))['s'] or Decimal('0')
     pending_count = pending_wdrs.count()
 
+    # Withdrawal pipeline (by status)
+    from collections import Counter
+    wdr_pipeline = dict(
+        Withdrawal.objects.filter(created_at__date__gte=start_date)
+        .values('status').annotate(cnt=Count('id'), total=Sum('amount'))
+        .values_list('status', 'total')
+    )
+
+    valid_sort_fields = {'created_at', '-created_at', 'amount', '-amount', 'player__phone', '-player__phone'}
+    if sort_by not in valid_sort_fields:
+        sort_by = '-created_at'
+
     pending_list = []
-    for w in pending_wdrs.select_related('player').order_by('-created_at')[:20]:
+    for w in pending_wdrs.select_related('player').order_by(sort_by)[:30]:
         pending_list.append({
             'id': str(w.id),
             'player_name': w.player.get_display_name(),
+            'player_phone': w.player.phone,
             'type': 'withdrawal',
             'amount': str(w.amount),
             'status': w.status,
@@ -380,22 +417,68 @@ def finance_overview(request):
             'created_at': w.created_at.isoformat(),
         })
 
+    # Recent transactions with filtering
     recent = []
-    for d in Deposit.objects.select_related('player').filter(status='completed').order_by('-created_at')[:5]:
-        recent.append({
-            'id': str(d.id), 'player_name': d.player.get_display_name(),
-            'type': 'deposit', 'amount': str(d.amount), 'status': d.status,
-            'provider': getattr(d, 'provider', 'mobile_money'),
-            'created_at': d.created_at.isoformat(),
+    if tx_filter in ('all', 'deposits'):
+        for d in Deposit.objects.select_related('player').filter(status='completed').order_by(sort_by)[:15]:
+            recent.append({
+                'id': str(d.id), 'player_name': d.player.get_display_name(),
+                'player_phone': d.player.phone,
+                'type': 'deposit', 'amount': str(d.amount), 'status': d.status,
+                'provider': getattr(d, 'provider', 'mobile_money'),
+                'created_at': d.created_at.isoformat(),
+            })
+    if tx_filter in ('all', 'withdrawals'):
+        for w in Withdrawal.objects.select_related('player').filter(status='completed').order_by(sort_by)[:15]:
+            recent.append({
+                'id': str(w.id), 'player_name': w.player.get_display_name(),
+                'player_phone': w.player.phone,
+                'type': 'withdrawal', 'amount': str(w.amount), 'status': w.status,
+                'provider': getattr(w, 'provider', 'mobile_money'),
+                'created_at': w.created_at.isoformat(),
+            })
+
+    if sort_by in ('-amount', 'amount'):
+        recent.sort(key=lambda x: float(x['amount']), reverse=sort_by.startswith('-'))
+    else:
+        recent.sort(key=lambda x: x['created_at'], reverse=sort_by.startswith('-'))
+
+    # Daily P&L chart
+    daily_deps = dict(
+        period_deps.annotate(day=TruncDate('created_at'))
+        .values('day').annotate(total=Sum('amount'))
+        .values_list('day', 'total')
+    )
+    daily_wdrs = dict(
+        period_wdrs_completed.annotate(day=TruncDate('created_at'))
+        .values('day').annotate(total=Sum('amount'))
+        .values_list('day', 'total')
+    )
+    daily_stakes_map = dict(
+        period_sessions.annotate(day=TruncDate('created_at'))
+        .values('day').annotate(total=Sum('stake_amount'))
+        .values_list('day', 'total')
+    )
+    daily_payouts_map = dict(
+        period_sessions.filter(status__in=['cashed_out', 'completed'])
+        .annotate(day=TruncDate('created_at'))
+        .values('day').annotate(total=Sum('cashout_balance'))
+        .values_list('day', 'total')
+    )
+    daily_pnl = []
+    for i in range(days):
+        d = start_date + timedelta(days=i)
+        dep = float(daily_deps.get(d, 0) or 0)
+        wdr = float(daily_wdrs.get(d, 0) or 0)
+        stk = float(daily_stakes_map.get(d, 0) or 0)
+        pay = float(daily_payouts_map.get(d, 0) or 0)
+        daily_pnl.append({
+            'date': d.strftime('%b %d'),
+            'deposits': round(dep, 2),
+            'withdrawals': round(wdr, 2),
+            'ggr': round(stk - pay, 2),
+            'net_flow': round(dep - wdr, 2),
         })
-    for w in Withdrawal.objects.select_related('player').filter(status='completed').order_by('-created_at')[:5]:
-        recent.append({
-            'id': str(w.id), 'player_name': w.player.get_display_name(),
-            'type': 'withdrawal', 'amount': str(w.amount), 'status': w.status,
-            'provider': getattr(w, 'provider', 'mobile_money'),
-            'created_at': w.created_at.isoformat(),
-        })
-    recent.sort(key=lambda x: x['created_at'], reverse=True)
 
     return Response({
         'stats': {
@@ -404,9 +487,16 @@ def finance_overview(request):
             'net_revenue': str(total_deposits - total_withdrawals),
             'pending_withdrawals': str(pending_total),
             'pending_count': pending_count,
+            'period_deposits': str(period_dep_total),
+            'period_withdrawals': str(period_wdr_total),
+            'ggr': str(ggr),
+            'ggr_margin': str(ggr_margin),
+            'total_stakes': str(total_stakes),
+            'total_payouts': str(total_payouts),
         },
         'pending_withdrawals': pending_list,
-        'recent': recent[:10],
+        'recent': recent[:20],
+        'daily_pnl': daily_pnl,
     })
 
 
@@ -732,17 +822,88 @@ def analytics_overview(request):
             'active_players': daily_active.get(d, 0),
         })
 
+    # Win rate
+    won_sessions = sessions.filter(status='cashed_out').count()
+    lost_sessions = sessions.filter(status='lost').count()
+    win_rate = round(won_sessions / max(won_sessions + lost_sessions, 1) * 100, 1)
+
+    # Top players by GGR contribution (stake - payout)
+    from django.db.models import F
+    top_players = (
+        sessions.values('player__phone')
+        .annotate(
+            total_staked=Sum('stake_amount'),
+            total_won=Sum('cashout_balance'),
+            games=Count('id'),
+        )
+        .order_by('-total_staked')[:10]
+    )
+    top_players_list = [{
+        'player': p['player__phone'],
+        'staked': str(p['total_staked'] or 0),
+        'won': str(p['total_won'] or 0),
+        'ggr': str((p['total_staked'] or 0) - (p['total_won'] or 0)),
+        'games': p['games'],
+    } for p in top_players]
+
+    # Deposit / withdrawal volumes for the period
+    period_deposits = Deposit.objects.filter(status='completed', created_at__date__gte=start_date)
+    period_withdrawals = Withdrawal.objects.filter(status='completed', created_at__date__gte=start_date)
+    total_dep_volume = period_deposits.aggregate(s=Sum('amount'))['s'] or Decimal('0')
+    total_wdr_volume = period_withdrawals.aggregate(s=Sum('amount'))['s'] or Decimal('0')
+    dep_count = period_deposits.count()
+    wdr_count = period_withdrawals.count()
+
+    # Daily deposits chart
+    daily_deps = dict(
+        period_deposits.annotate(day=TruncDate('created_at'))
+        .values('day').annotate(total=Sum('amount'))
+        .values_list('day', 'total')
+    )
+    daily_wdrs = dict(
+        period_withdrawals.annotate(day=TruncDate('created_at'))
+        .values('day').annotate(total=Sum('amount'))
+        .values_list('day', 'total')
+    )
+    finance_chart = []
+    for i in range(days):
+        d = start_date + timedelta(days=i)
+        dep = float(daily_deps.get(d, 0) or 0)
+        wdr = float(daily_wdrs.get(d, 0) or 0)
+        finance_chart.append({'date': d.strftime('%b %d'), 'deposits': round(dep, 2), 'withdrawals': round(wdr, 2)})
+
+    # Top denominations
+    top_denoms = (
+        FlipResult.objects.filter(session__in=sessions, is_zero=False)
+        .values('value')
+        .annotate(count=Count('id'))
+        .order_by('-count')[:8]
+    )
+    top_denom_list = [{'value': str(d['value']), 'count': d['count']} for d in top_denoms]
+
     return Response({
         'summary': {
             'total_ggr': str(total_ggr),
+            'total_stakes': str(total_stakes),
+            'total_payouts': str(total_payouts),
             'avg_session_value': str(round(avg_session, 2)),
             'avg_flips_per_session': round(avg_flips, 1),
+            'total_sessions': session_count,
+            'won_sessions': won_sessions,
+            'lost_sessions': lost_sessions,
+            'win_rate': str(win_rate),
             'house_edge_actual': str(round(float(total_ggr) / max(float(total_stakes), 1) * 100, 1)),
             'retention_7d': str(retention),
+            'deposit_volume': str(total_dep_volume),
+            'withdrawal_volume': str(total_wdr_volume),
+            'deposit_count': dep_count,
+            'withdrawal_count': wdr_count,
         },
         'daily_revenue': revenue_chart,
         'daily_players': player_chart,
-        'top_denominations': [],
+        'daily_finance': finance_chart,
+        'top_players': top_players_list,
+        'top_denominations': top_denom_list,
     })
 
 
@@ -875,9 +1036,36 @@ def settings_view(request):
                 'updated_at': sc.updated_at.isoformat(),
             })
 
+        # Feature config
+        from game.models import FeatureConfig, DailyBonusConfig
+        fc = FeatureConfig.get_config()
+        feature_data = {
+            'badges_enabled': fc.badges_enabled,
+            'daily_wheel_enabled': fc.daily_wheel_enabled,
+            'sounds_enabled': fc.sounds_enabled,
+            'haptics_enabled': fc.haptics_enabled,
+            'social_proof_enabled': fc.social_proof_enabled,
+            'streak_badge_enabled': fc.streak_badge_enabled,
+            'confetti_enabled': fc.confetti_enabled,
+            'deposit_sound_enabled': fc.deposit_sound_enabled,
+            'social_proof_min_amount': str(fc.social_proof_min_amount),
+        }
+
+        # Daily wheel config
+        wc = DailyBonusConfig.get_config()
+        wheel_data = {
+            'is_enabled': wc.is_enabled if wc else True,
+            'segments': wc.segments if wc else [],
+            'cooldown_hours': wc.cooldown_hours if wc else 24,
+            'max_spins_per_day': wc.max_spins_per_day if wc else 1,
+            'require_deposit': wc.require_deposit if wc else False,
+        }
+
         return Response({
             'auth': AuthSettingsSerializer(auth_config).data,
             'game': game_data,
+            'features': feature_data,
+            'wheel': wheel_data,
             'simulated_configs': sim_list,
             'outcome_mode_choices': [
                 {'value': c[0], 'label': c[1]} for c in SimulatedGameConfig.OUTCOME_CHOICES
@@ -906,6 +1094,37 @@ def settings_view(request):
                 updated.append(field)
         if updated:
             game_config.save(update_fields=updated + ['updated_at'])
+
+    # Save feature config
+    from game.models import FeatureConfig, DailyBonusConfig
+    feat_data = request.data.get('features', {})
+    if feat_data:
+        fc = FeatureConfig.get_config()
+        feat_fields = ['badges_enabled', 'daily_wheel_enabled', 'sounds_enabled',
+                       'haptics_enabled', 'social_proof_enabled', 'streak_badge_enabled',
+                       'confetti_enabled', 'deposit_sound_enabled', 'social_proof_min_amount']
+        updated = []
+        for field in feat_fields:
+            if field in feat_data:
+                setattr(fc, field, feat_data[field])
+                updated.append(field)
+        if updated:
+            fc.save(update_fields=updated + ['updated_at'])
+
+    # Save daily wheel config
+    wheel_data = request.data.get('wheel', {})
+    if wheel_data:
+        wc = DailyBonusConfig.get_config()
+        if not wc:
+            wc = DailyBonusConfig(pk=1)
+        wheel_fields = ['is_enabled', 'segments', 'cooldown_hours', 'max_spins_per_day', 'require_deposit']
+        updated = []
+        for field in wheel_fields:
+            if field in wheel_data:
+                setattr(wc, field, wheel_data[field])
+                updated.append(field)
+        if updated:
+            wc.save(update_fields=updated + ['updated_at'])
 
     return Response({'status': 'saved'})
 

@@ -808,6 +808,77 @@ html, body {
 .name-edit-row { display: flex; align-items: center; gap: 4px; justify-content: center; margin-bottom: 4px; }
 .name-edit-row input { padding: 4px 8px; font-size: 0.85rem; border-radius: 6px; border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.05); color: #fff; width: 140px; text-align: center; }
 
+/* ==================== DAILY WHEEL ==================== */
+.wheel-modal-content { max-width: 360px; }
+.wheel-container {
+    position: relative; display: inline-block; margin: 0.5rem 0;
+}
+.wheel-pointer {
+    position: absolute; top: -6px; left: 50%; transform: translateX(-50%);
+    font-size: 1.6rem; color: #ffd700; z-index: 2;
+    text-shadow: 0 2px 8px rgba(0,0,0,0.6);
+    filter: drop-shadow(0 0 6px rgba(255,215,0,0.5));
+}
+.btn-spin {
+    margin-top: 0.75rem; padding: 0.75rem 3rem;
+    font-family: 'Orbitron', sans-serif; font-size: 1.1rem; letter-spacing: 2px;
+}
+.wheel-result {
+    margin-top: 0.75rem; font-size: 1.2rem; font-weight: 700; color: #ffd700;
+    font-family: 'Orbitron', sans-serif;
+    animation: streakPop 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+.wheel-result.hidden { display: none; }
+.btn-wheel-glow {
+    animation: wheelGlow 2s ease-in-out infinite;
+}
+@keyframes wheelGlow {
+    0%, 100% { box-shadow: 0 0 8px rgba(255,215,0,0.2); }
+    50% { box-shadow: 0 0 16px rgba(255,215,0,0.5), 0 0 30px rgba(255,215,0,0.15); }
+}
+
+/* ==================== BADGES ==================== */
+.badges-xp-bar {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 0.5rem 0.75rem; margin-bottom: 0.75rem;
+    background: rgba(139,92,246,0.1); border: 1px solid rgba(139,92,246,0.25);
+    border-radius: 10px; font-size: 0.85rem;
+}
+.xp-label { color: #ffd700; font-weight: 700; font-family: 'Orbitron', sans-serif; }
+.xp-count { color: var(--text-secondary); font-size: 0.8rem; }
+.badges-grid {
+    display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.5rem;
+    max-height: 380px; overflow-y: auto;
+}
+.badge-card {
+    position: relative; padding: 0.75rem 0.5rem; text-align: center;
+    border-radius: 10px; border: 1px solid rgba(255,255,255,0.08);
+    background: rgba(22,27,38,0.6); transition: all 0.2s;
+}
+.badge-card.earned {
+    background: rgba(0,191,166,0.08); border-color: rgba(0,191,166,0.25);
+}
+.badge-card.locked { opacity: 0.5; }
+.badge-emoji { display: block; font-size: 1.6rem; margin-bottom: 4px; }
+.badge-name { display: block; font-size: 0.75rem; font-weight: 700; color: #fff; margin-bottom: 2px; }
+.badge-desc { display: block; font-size: 0.6rem; color: var(--text-secondary); line-height: 1.3; }
+.badge-check { position: absolute; top: 4px; right: 6px; color: var(--success); font-weight: bold; font-size: 0.75rem; }
+.badge-lock { position: absolute; top: 4px; right: 6px; font-size: 0.7rem; }
+
+/* ==================== BADGE NOTIFICATION ==================== */
+.badge-notification {
+    position: fixed; top: -70px; left: 50%; transform: translateX(-50%);
+    z-index: 210; padding: 12px 24px;
+    background: linear-gradient(135deg, rgba(139,92,246,0.95), rgba(0,191,166,0.9));
+    border: 1px solid rgba(255,255,255,0.2);
+    border-radius: 30px; font-size: 0.9rem; color: #fff; font-weight: 600;
+    box-shadow: 0 8px 30px rgba(139,92,246,0.4), 0 0 40px rgba(0,191,166,0.15);
+    white-space: nowrap;
+    transition: top 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+.badge-notification.show { top: 20px; }
+.badge-notif-emoji { margin-right: 6px; font-size: 1.1rem; }
+
 /* ==================== STREAK FIRE BADGE ==================== */
 .streak-badge {
     margin-top: 6px; padding: 4px 14px;

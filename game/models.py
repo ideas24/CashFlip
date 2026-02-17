@@ -267,3 +267,121 @@ class FlipResult(models.Model):
         if self.is_zero:
             return f'Flip #{self.flip_number} - ZERO (loss)'
         return f'Flip #{self.flip_number} - {self.value}'
+
+
+class Badge(models.Model):
+    """Achievement badges that players can earn."""
+    BADGE_TYPES = [
+        ('first_win', 'First Win'),
+        ('streak_3', '3-Win Streak'),
+        ('streak_5', '5-Win Streak'),
+        ('streak_7', '7-Win Streak'),
+        ('high_roller', 'High Roller (₵100+ stake)'),
+        ('big_cashout', 'Big Cashout (₵50+)'),
+        ('mega_cashout', 'Mega Cashout (₵200+)'),
+        ('flip_master', 'Flip Master (100 flips)'),
+        ('veteran', 'Veteran (50 sessions)'),
+        ('daily_player', 'Daily Player (7 day streak)'),
+        ('lucky_7', 'Lucky 7 (won on flip #7)'),
+        ('whale', 'Whale (₵500+ single stake)'),
+        ('social', 'Social (referred a friend)'),
+        ('depositor', 'First Deposit'),
+    ]
+
+    code = models.CharField(max_length=30, unique=True, choices=BADGE_TYPES)
+    name = models.CharField(max_length=50)
+    description = models.CharField(max_length=200)
+    emoji = models.CharField(max_length=10, default='🏆')
+    xp_value = models.PositiveIntegerField(default=10, help_text='XP points awarded')
+    is_active = models.BooleanField(default=True)
+    display_order = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ['display_order', 'code']
+
+    def __str__(self):
+        return f'{self.emoji} {self.name}'
+
+
+class PlayerBadge(models.Model):
+    """Track which badges a player has earned."""
+    player = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='badges')
+    badge = models.ForeignKey(Badge, on_delete=models.CASCADE, related_name='awards')
+    earned_at = models.DateTimeField(auto_now_add=True)
+    session = models.ForeignKey('GameSession', on_delete=models.SET_NULL, null=True, blank=True)
+
+    class Meta:
+        unique_together = ['player', 'badge']
+        ordering = ['-earned_at']
+
+    def __str__(self):
+        return f'{self.player} - {self.badge.name}'
+
+
+class DailyBonusConfig(models.Model):
+    """Admin-configurable daily bonus wheel settings."""
+    is_enabled = models.BooleanField(default=True)
+    segments = models.JSONField(default=list, blank=True,
+        help_text='Wheel segments: [{"label":"₵0.50","value":0.50,"color":"#ffd700","weight":30}, ...]')
+    cooldown_hours = models.PositiveIntegerField(default=24, help_text='Hours between spins')
+    max_spins_per_day = models.PositiveIntegerField(default=1)
+    require_deposit = models.BooleanField(default=False, help_text='Require at least one deposit to spin')
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Daily Bonus Config'
+
+    def __str__(self):
+        return f'Daily Bonus ({"Enabled" if self.is_enabled else "Disabled"})'
+
+    @classmethod
+    def get_config(cls):
+        return cls.objects.first()
+
+    def save(self, *args, **kwargs):
+        self.pk = 1
+        super().save(*args, **kwargs)
+
+
+class DailyBonusSpin(models.Model):
+    """Track daily bonus wheel spins."""
+    player = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='bonus_spins')
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    segment_label = models.CharField(max_length=50)
+    spun_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-spun_at']
+
+    def __str__(self):
+        return f'{self.player} - {self.segment_label} ({self.amount})'
+
+
+class FeatureConfig(models.Model):
+    """Global feature toggles manageable from admin console."""
+    badges_enabled = models.BooleanField(default=True, help_text='Achievement badges system')
+    daily_wheel_enabled = models.BooleanField(default=True, help_text='Daily bonus wheel')
+    sounds_enabled = models.BooleanField(default=True, help_text='Casino sound effects')
+    haptics_enabled = models.BooleanField(default=True, help_text='Mobile haptic feedback')
+    social_proof_enabled = models.BooleanField(default=True, help_text='Live win toast notifications')
+    streak_badge_enabled = models.BooleanField(default=True, help_text='Win streak fire badge')
+    confetti_enabled = models.BooleanField(default=True, help_text='Win/loss confetti particles')
+    deposit_sound_enabled = models.BooleanField(default=True, help_text='Soothing sound on deposit CTA')
+    social_proof_min_amount = models.DecimalField(max_digits=10, decimal_places=2, default=10.00,
+        help_text='Minimum win amount to show social proof toast')
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Feature Configuration'
+
+    def __str__(self):
+        return 'Feature Configuration'
+
+    @classmethod
+    def get_config(cls):
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj
+
+    def save(self, *args, **kwargs):
+        self.pk = 1
+        super().save(*args, **kwargs)

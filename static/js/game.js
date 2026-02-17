@@ -139,14 +139,16 @@
         table.position.y = -2;
         scene.add(table);
 
-        // Banknote card
+        // Banknote card with branded textures
         noteGeometry = new THREE.BoxGeometry(3, 1.8, 0.02);
+        const brandedTex = createBrandedTexture();
+        const cediTex = createCediTexture();
         noteFrontMat = new THREE.MeshStandardMaterial({
-            color: 0xffd700, roughness: 0.3, metalness: 0.6,
+            map: brandedTex, roughness: 0.3, metalness: 0.6,
             emissive: 0x332200, emissiveIntensity: 0.2,
         });
         noteBackMat = new THREE.MeshStandardMaterial({
-            color: 0x1a3a2a, roughness: 0.4, metalness: 0.3,
+            map: cediTex, roughness: 0.4, metalness: 0.3,
         });
         const sideMat = new THREE.MeshStandardMaterial({ color: 0xb8860b });
 
@@ -868,7 +870,7 @@
 
     async function enterLobby() {
         showScreen('lobby-screen');
-        await Promise.all([loadProfile(), loadWalletBalance(), loadGameConfig()]);
+        await Promise.all([loadProfile(), loadWalletBalance(), loadGameConfig(), loadFeatureConfig()]);
         startLiveFeed();
         startSocialProof();
         checkActiveSession();
@@ -897,7 +899,9 @@
                 const ctaOverlay = document.getElementById('deposit-cta-overlay');
                 if (ctaOverlay) {
                     if (balance <= 0) {
+                        const wasHidden = ctaOverlay.classList.contains('hidden');
                         ctaOverlay.classList.remove('hidden');
+                        if (wasHidden) sfxDeposit();
                     } else {
                         ctaOverlay.classList.add('hidden');
                     }
@@ -1061,6 +1065,11 @@
                 updateGameHUD();
                 flipBtn.disabled = false;
 
+                // Badge notifications
+                if (data.new_badges) {
+                    data.new_badges.forEach((b, i) => setTimeout(() => showBadgeNotification(b), 1200 + i * 1500));
+                }
+
                 // Check for ad
                 if (data.ad_due) {
                     showAd();
@@ -1089,6 +1098,9 @@
                     `${sym}${parseFloat(data.cashout_amount).toFixed(2)}`;
                 document.getElementById('cashout-overlay').classList.remove('hidden');
                 bigCashoutCelebration();
+                if (data.new_badges) {
+                    data.new_badges.forEach((b, i) => setTimeout(() => showBadgeNotification(b), 2000 + i * 1500));
+                }
             } else {
                 showToast(data.error || 'Cashout failed');
                 btn.disabled = false;
@@ -1568,6 +1580,303 @@
         btn.textContent = 'Send Funds';
     }
 
+    // ==================== FEATURE CONFIG ====================
+    let featureFlags = {};
+
+    async function loadFeatureConfig() {
+        try {
+            const resp = await fetch('/api/game/features/');
+            if (resp.ok) featureFlags = await resp.json();
+        } catch(e) {}
+    }
+
+    // ==================== DAILY BONUS WHEEL ====================
+    let wheelSegments = [];
+    let wheelAngle = 0;
+    let wheelSpinning = false;
+
+    function drawWheel(segments, highlight) {
+        const canvas = document.getElementById('wheel-canvas');
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        const cx = canvas.width / 2, cy = canvas.height / 2, r = 130;
+        const count = segments.length;
+        if (count === 0) return;
+        const arc = (Math.PI * 2) / count;
+
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.rotate(wheelAngle);
+
+        for (let i = 0; i < count; i++) {
+            const angle = i * arc;
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.arc(0, 0, r, angle, angle + arc);
+            ctx.closePath();
+            ctx.fillStyle = segments[i].color || '#333';
+            if (highlight === i) { ctx.fillStyle = '#fff'; }
+            ctx.fill();
+            ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            // Label
+            ctx.save();
+            ctx.rotate(angle + arc / 2);
+            ctx.textAlign = 'right';
+            ctx.fillStyle = highlight === i ? '#000' : '#fff';
+            ctx.font = 'bold 13px Orbitron, sans-serif';
+            ctx.fillText(segments[i].label, r - 12, 5);
+            ctx.restore();
+        }
+
+        // Center circle
+        ctx.beginPath();
+        ctx.arc(0, 0, 22, 0, Math.PI * 2);
+        ctx.fillStyle = '#0D1117';
+        ctx.fill();
+        ctx.strokeStyle = '#ffd700';
+        ctx.lineWidth = 3;
+        ctx.stroke();
+        ctx.fillStyle = '#ffd700';
+        ctx.font = 'bold 11px Orbitron';
+        ctx.textAlign = 'center';
+        ctx.fillText('CF', 0, 4);
+
+        ctx.restore();
+    }
+
+    async function openWheel() {
+        showModal('wheel-modal');
+        const statusEl = document.getElementById('wheel-status');
+        const spinBtn = document.getElementById('spin-btn');
+        const resultEl = document.getElementById('wheel-result');
+        resultEl.classList.add('hidden');
+        statusEl.textContent = '';
+        spinBtn.disabled = true;
+
+        try {
+            const resp = await API.get('/game/wheel/status/');
+            const data = await resp.json();
+            wheelSegments = data.segments || [];
+            drawWheel(wheelSegments);
+
+            if (!data.enabled) {
+                statusEl.textContent = 'Daily wheel is currently disabled';
+            } else if (data.available) {
+                spinBtn.disabled = false;
+                statusEl.textContent = 'Spin to win a bonus!';
+                statusEl.className = 'status-msg';
+            } else {
+                const next = data.next_spin ? new Date(data.next_spin) : null;
+                const hrs = next ? Math.max(0, Math.ceil((next - Date.now()) / 3600000)) : 24;
+                statusEl.textContent = `Next spin in ~${hrs}h`;
+                statusEl.className = 'status-msg';
+            }
+        } catch(e) {
+            statusEl.textContent = 'Error loading wheel';
+        }
+    }
+
+    async function doSpin() {
+        if (wheelSpinning) return;
+        const spinBtn = document.getElementById('spin-btn');
+        const resultEl = document.getElementById('wheel-result');
+        const statusEl = document.getElementById('wheel-status');
+        spinBtn.disabled = true;
+        wheelSpinning = true;
+        statusEl.textContent = '';
+
+        try {
+            const resp = await API.post('/game/wheel/spin/', {});
+            const data = await resp.json();
+
+            if (!resp.ok || !data.success) {
+                statusEl.textContent = data.error || 'Spin failed';
+                statusEl.className = 'status-msg error';
+                wheelSpinning = false;
+                return;
+            }
+
+            // Animate spin
+            const count = wheelSegments.length;
+            const arc = (Math.PI * 2) / count;
+            const targetIdx = data.segment_index;
+            // We want the pointer (top) to land on targetIdx
+            // Pointer is at top (angle 0 = right, so -PI/2 for top)
+            const targetAngle = -(targetIdx * arc + arc / 2) - Math.PI / 2;
+            const totalSpin = Math.PI * 2 * 6 + targetAngle; // 6 full rotations + target
+            const startAngle = wheelAngle;
+            const startTime = Date.now();
+            const duration = 4000;
+
+            sfxFlip();
+
+            function animateSpin() {
+                const elapsed = Date.now() - startTime;
+                const progress = Math.min(elapsed / duration, 1);
+                const eased = 1 - Math.pow(1 - progress, 3);
+                wheelAngle = startAngle + eased * totalSpin;
+                drawWheel(wheelSegments);
+
+                if (progress < 1) {
+                    requestAnimationFrame(animateSpin);
+                } else {
+                    // Done
+                    wheelSpinning = false;
+                    drawWheel(wheelSegments, targetIdx);
+                    sfxBigWin();
+                    haptic([50, 30, 80]);
+                    spawnConfetti(50, CASHOUT_COLORS);
+
+                    resultEl.innerHTML = `🎉 You won <strong>${data.label}</strong>!`;
+                    resultEl.classList.remove('hidden');
+                    statusEl.textContent = `Credited to your wallet`;
+                    statusEl.className = 'status-msg success';
+                    loadWalletBalance();
+                }
+            }
+            animateSpin();
+        } catch(e) {
+            statusEl.textContent = 'Network error';
+            statusEl.className = 'status-msg error';
+            wheelSpinning = false;
+        }
+    }
+
+    // ==================== BADGES ====================
+    async function loadBadges() {
+        const grid = document.getElementById('badges-grid');
+        const xpBar = document.getElementById('badges-xp');
+        if (!grid) return;
+
+        try {
+            const resp = await API.get('/game/badges/');
+            const data = await resp.json();
+            const badges = data.badges || [];
+
+            xpBar.innerHTML = `<span class="xp-label">⭐ ${data.total_xp} XP</span> <span class="xp-count">${data.earned_count}/${badges.length} earned</span>`;
+
+            grid.innerHTML = badges.map(b => `
+                <div class="badge-card ${b.earned ? 'earned' : 'locked'}">
+                    <span class="badge-emoji">${b.emoji}</span>
+                    <span class="badge-name">${b.name}</span>
+                    <span class="badge-desc">${b.description}</span>
+                    ${b.earned ? '<span class="badge-check">✓</span>' : '<span class="badge-lock">🔒</span>'}
+                </div>
+            `).join('');
+        } catch(e) {
+            grid.innerHTML = '<p class="text-muted">Error loading badges</p>';
+        }
+    }
+
+    function showBadgeNotification(badge) {
+        const el = document.createElement('div');
+        el.className = 'badge-notification';
+        el.innerHTML = `<span class="badge-notif-emoji">${badge.emoji}</span> <strong>Badge Unlocked!</strong> ${badge.name}`;
+        document.body.appendChild(el);
+        setTimeout(() => el.classList.add('show'), 50);
+        sfxBigWin();
+        spawnConfetti(40, ['#ffd700', '#8B5CF6', '#fff', '#00e676']);
+        setTimeout(() => { el.classList.remove('show'); setTimeout(() => el.remove(), 400); }, 4000);
+    }
+
+    // ==================== DEPOSIT SOUND ====================
+    function sfxDeposit() {
+        if (!featureFlags.deposit_sound_enabled) return;
+        const ctx = getAudio(); if (!ctx) return;
+        // Warm ambient chord: C major 7th
+        const freqs = [261, 329, 392, 494];
+        freqs.forEach((f, i) => {
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(f, ctx.currentTime);
+            gain.gain.setValueAtTime(0, ctx.currentTime);
+            gain.gain.linearRampToValueAtTime(0.06, ctx.currentTime + 0.3 + i * 0.1);
+            gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 2.5);
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start(ctx.currentTime + i * 0.15);
+            osc.stop(ctx.currentTime + 2.5);
+        });
+    }
+
+    // ==================== BRANDED COIN FACE ====================
+    function createBrandedTexture() {
+        const canvas = document.createElement('canvas');
+        canvas.width = 512; canvas.height = 512;
+        const ctx = canvas.getContext('2d');
+
+        // Gold gradient background
+        const grad = ctx.createRadialGradient(256, 256, 50, 256, 256, 256);
+        grad.addColorStop(0, '#ffe066');
+        grad.addColorStop(0.5, '#ffd700');
+        grad.addColorStop(1, '#b8860b');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, 512, 512);
+
+        // Embossed border ring
+        ctx.beginPath();
+        ctx.arc(256, 256, 240, 0, Math.PI * 2);
+        ctx.strokeStyle = '#8B6914';
+        ctx.lineWidth = 8;
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(256, 256, 225, 0, Math.PI * 2);
+        ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // CF logo
+        ctx.fillStyle = '#1a1a2e';
+        ctx.font = 'bold 120px Orbitron, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('CF', 256, 230);
+
+        // CASHFLIP text
+        ctx.fillStyle = '#1a1a2e';
+        ctx.font = 'bold 32px Orbitron, sans-serif';
+        ctx.fillText('CASHFLIP', 256, 330);
+
+        // Stars
+        ctx.fillStyle = '#8B6914';
+        ctx.font = '28px sans-serif';
+        ctx.fillText('★ ★ ★', 256, 380);
+
+        return new THREE.CanvasTexture(canvas);
+    }
+
+    function createCediTexture() {
+        const canvas = document.createElement('canvas');
+        canvas.width = 512; canvas.height = 512;
+        const ctx = canvas.getContext('2d');
+
+        const grad = ctx.createRadialGradient(256, 256, 50, 256, 256, 256);
+        grad.addColorStop(0, '#2d5a3d');
+        grad.addColorStop(0.5, '#1a3a2a');
+        grad.addColorStop(1, '#0d2018');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, 512, 512);
+
+        ctx.beginPath();
+        ctx.arc(256, 256, 240, 0, Math.PI * 2);
+        ctx.strokeStyle = 'rgba(0,191,166,0.3)';
+        ctx.lineWidth = 4;
+        ctx.stroke();
+
+        ctx.fillStyle = '#ffd700';
+        ctx.font = 'bold 160px serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('₵', 256, 256);
+
+        return new THREE.CanvasTexture(canvas);
+    }
+
     // ==================== LIVE FEED ====================
 
     let _feedInterval = null;
@@ -1789,6 +2098,12 @@
         document.getElementById('withdraw-btn')?.addEventListener('click', () => showModal('withdraw-modal'));
         document.getElementById('transfer-btn')?.addEventListener('click', () => showModal('transfer-modal'));
         document.getElementById('trf-btn')?.addEventListener('click', doTransfer);
+        document.getElementById('wheel-btn')?.addEventListener('click', openWheel);
+        document.getElementById('spin-btn')?.addEventListener('click', doSpin);
+        document.getElementById('badges-btn')?.addEventListener('click', () => {
+            showModal('badges-modal');
+            loadBadges();
+        });
         document.getElementById('history-btn')?.addEventListener('click', () => {
             showModal('history-modal');
             loadHistory();

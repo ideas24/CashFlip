@@ -15,4 +15,8 @@ urlpatterns = [
     path('history/', views.game_history, name='game_history'),
     path('verify/<uuid:session_id>/', views.verify_session, name='verify_session'),
     path('live-feed/', views.live_feed, name='live_feed'),
+    path('features/', views.feature_config, name='feature_config'),
+    path('badges/', views.player_badges, name='player_badges'),
+    path('wheel/status/', views.daily_wheel_status, name='daily_wheel_status'),
+    path('wheel/spin/', views.daily_wheel_spin, name='daily_wheel_spin'),
 ]

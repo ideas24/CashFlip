@@ -11,7 +11,7 @@
     {% load static %}
     <link rel="icon" type="image/svg+xml" href="{% static 'images/cashflip-favicon.svg' %}">
     <meta name="theme-color" content="#0D1117">
-    <link rel="stylesheet" href="{% static 'css/game.css' %}?v=20260217j">
+    <link rel="stylesheet" href="{% static 'css/game.css' %}?v=20260217k">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
 <body>
@@ -141,8 +141,10 @@
                 <button id="deposit-btn" class="btn-action">💰 Deposit</button>
                 <button id="withdraw-btn" class="btn-action">💸 Withdraw</button>
                 <button id="transfer-btn" class="btn-action">🔄 Transfer</button>
+                <button id="wheel-btn" class="btn-action btn-wheel-glow">🎰 Daily Bonus</button>
+                <button id="badges-btn" class="btn-action">🏆 Badges</button>
                 <button id="history-btn" class="btn-action">📊 History</button>
-                <button id="referral-btn" class="btn-action">🔗 Refer & Earn</button>
+                <button id="referral-btn" class="btn-action">🔗 Refer</button>
             </div>
 
             <!-- Live Feed Ticker (Aviator-style) -->
@@ -374,6 +376,43 @@
         </div>
     </div>
 
+    <!-- Daily Wheel Modal -->
+    <div id="wheel-modal" class="modal hidden">
+        <div class="modal-backdrop"></div>
+        <div class="modal-content wheel-modal-content">
+            <div class="modal-header">
+                <h3>🎰 Daily Bonus Wheel</h3>
+                <button class="modal-close" data-modal="wheel-modal">✕</button>
+            </div>
+            <div class="modal-body" style="text-align:center;">
+                <div class="wheel-container">
+                    <canvas id="wheel-canvas" width="280" height="280"></canvas>
+                    <div class="wheel-pointer">▼</div>
+                </div>
+                <button id="spin-btn" class="btn-primary btn-spin" disabled>SPIN!</button>
+                <div id="wheel-result" class="wheel-result hidden"></div>
+                <div id="wheel-status" class="status-msg"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Badges Modal -->
+    <div id="badges-modal" class="modal hidden">
+        <div class="modal-backdrop"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>🏆 Achievements</h3>
+                <button class="modal-close" data-modal="badges-modal">✕</button>
+            </div>
+            <div class="modal-body">
+                <div id="badges-xp" class="badges-xp-bar"></div>
+                <div id="badges-grid" class="badges-grid">
+                    <p class="text-muted">Loading badges...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Pause Modal -->
     <div id="pause-modal" class="modal hidden">
         <div class="modal-backdrop"></div>
@@ -495,6 +534,6 @@
         <span id="toast-message"></span>
     </div>
 
-    <script src="{% static 'js/game.js' %}?v=20260217j"></script>
+    <script src="{% static 'js/game.js' %}?v=20260217k"></script>
 </body>
 </html>

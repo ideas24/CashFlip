@@ -14,7 +14,11 @@ from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
 
 from game.engine import execute_flip
-from game.models import Currency, CurrencyDenomination, GameConfig, SimulatedGameConfig, GameSession, FlipResult
+from game.models import (
+    Currency, CurrencyDenomination, GameConfig, SimulatedGameConfig,
+    GameSession, FlipResult, Badge, PlayerBadge, DailyBonusConfig,
+    DailyBonusSpin, FeatureConfig,
+)
 from game.serializers import (
     StartGameSerializer, GameSessionSerializer, GameSessionListSerializer,
     GameConfigPublicSerializer, CurrencySerializer, PauseSerializer,
@@ -204,6 +208,14 @@ def flip(request):
         except Wallet.DoesNotExist:
             pass
 
+    # Check for badge awards
+    try:
+        new_badges = check_and_award_badges(player, session=session, flip_data=result)
+        if new_badges:
+            result['new_badges'] = new_badges
+    except Exception:
+        pass
+
     return Response(result)
 
 
@@ -258,11 +270,22 @@ def cashout(request):
             profile.highest_cashout = cashout_amount
         profile.save()
 
-    return Response({
+    # Check for badge awards on cashout
+    resp_data = {
         'cashout_amount': str(cashout_amount),
         'new_balance': str(wallet.balance),
         'session_id': str(session.id),
-    })
+    }
+    try:
+        new_badges = check_and_award_badges(player, session=session, flip_data={
+            'cashout_amount': float(cashout_amount),
+        })
+        if new_badges:
+            resp_data['new_badges'] = new_badges
+    except Exception:
+        pass
+
+    return Response(resp_data)
 
 
 @api_view(['POST'])
@@ -471,3 +494,209 @@ def live_feed(request):
         pass
 
     return Response({'feed': feed})
+
+
+# ==================== FEATURE CONFIG ====================
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def feature_config(request):
+    """Return global feature toggles for frontend."""
+    fc = FeatureConfig.get_config()
+    return Response({
+        'badges_enabled': fc.badges_enabled,
+        'daily_wheel_enabled': fc.daily_wheel_enabled,
+        'sounds_enabled': fc.sounds_enabled,
+        'haptics_enabled': fc.haptics_enabled,
+        'social_proof_enabled': fc.social_proof_enabled,
+        'streak_badge_enabled': fc.streak_badge_enabled,
+        'confetti_enabled': fc.confetti_enabled,
+        'deposit_sound_enabled': fc.deposit_sound_enabled,
+        'social_proof_min_amount': str(fc.social_proof_min_amount),
+    })
+
+
+# ==================== BADGES ====================
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def player_badges(request):
+    """Return all badges with player's earned status."""
+    all_badges = Badge.objects.filter(is_active=True)
+    earned = set(PlayerBadge.objects.filter(player=request.user).values_list('badge__code', flat=True))
+
+    result = []
+    for b in all_badges:
+        result.append({
+            'code': b.code,
+            'name': b.name,
+            'description': b.description,
+            'emoji': b.emoji,
+            'xp': b.xp_value,
+            'earned': b.code in earned,
+        })
+    total_xp = sum(b.xp_value for b in all_badges if b.code in earned)
+    return Response({'badges': result, 'total_xp': total_xp, 'earned_count': len(earned)})
+
+
+def check_and_award_badges(player, session=None, flip_data=None):
+    """Check conditions and award badges. Called after flips/cashouts."""
+    import random
+    awarded = []
+
+    def award(code):
+        try:
+            badge = Badge.objects.get(code=code, is_active=True)
+            _, created = PlayerBadge.objects.get_or_create(
+                player=player, badge=badge, defaults={'session': session}
+            )
+            if created:
+                awarded.append({'code': code, 'name': badge.name, 'emoji': badge.emoji})
+        except Badge.DoesNotExist:
+            pass
+
+    # First win
+    if flip_data and not flip_data.get('is_zero'):
+        if not PlayerBadge.objects.filter(player=player, badge__code='first_win').exists():
+            award('first_win')
+
+    # Streak badges (check consecutive wins in current session)
+    if session and flip_data and not flip_data.get('is_zero'):
+        flips = FlipResult.objects.filter(session=session).order_by('-flip_number')
+        streak = 0
+        for f in flips:
+            if f.is_zero:
+                break
+            streak += 1
+        if streak >= 3:
+            award('streak_3')
+        if streak >= 5:
+            award('streak_5')
+        if streak >= 7:
+            award('streak_7')
+
+    # Lucky 7 (won on flip #7)
+    if flip_data and flip_data.get('flip_number') == 7 and not flip_data.get('is_zero'):
+        award('lucky_7')
+
+    # High roller / Whale
+    if session:
+        stake = float(session.stake_amount)
+        if stake >= 100:
+            award('high_roller')
+        if stake >= 500:
+            award('whale')
+
+    # Cashout badges
+    if flip_data and flip_data.get('cashout_amount'):
+        ca = float(flip_data['cashout_amount'])
+        if ca >= 50:
+            award('big_cashout')
+        if ca >= 200:
+            award('mega_cashout')
+
+    # Flip master (100 total flips)
+    total_flips = FlipResult.objects.filter(session__player=player).count()
+    if total_flips >= 100:
+        award('flip_master')
+
+    # Veteran (50 sessions)
+    total_sessions = GameSession.objects.filter(player=player).count()
+    if total_sessions >= 50:
+        award('veteran')
+
+    return awarded
+
+
+# ==================== DAILY BONUS WHEEL ====================
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def daily_wheel_status(request):
+    """Check if player can spin the daily wheel."""
+    config = DailyBonusConfig.get_config()
+    if not config or not config.is_enabled:
+        return Response({'available': False, 'reason': 'Daily wheel is disabled'})
+
+    now = timezone.now()
+    last_spin = DailyBonusSpin.objects.filter(player=request.user).order_by('-spun_at').first()
+
+    can_spin = True
+    next_spin = None
+    if last_spin:
+        cooldown = timezone.timedelta(hours=config.cooldown_hours)
+        next_spin_time = last_spin.spun_at + cooldown
+        if now < next_spin_time:
+            can_spin = False
+            next_spin = next_spin_time.isoformat()
+
+    if config.require_deposit:
+        from payments.models import Deposit
+        has_deposit = Deposit.objects.filter(player=request.user, status='completed').exists()
+        if not has_deposit:
+            can_spin = False
+
+    return Response({
+        'available': can_spin,
+        'next_spin': next_spin,
+        'segments': config.segments,
+        'enabled': config.is_enabled,
+    })
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def daily_wheel_spin(request):
+    """Spin the daily bonus wheel and credit winnings."""
+    import random as rng
+
+    config = DailyBonusConfig.get_config()
+    if not config or not config.is_enabled:
+        return Response({'error': 'Daily wheel is disabled'}, status=status.HTTP_400_BAD_REQUEST)
+
+    now = timezone.now()
+    last_spin = DailyBonusSpin.objects.filter(player=request.user).order_by('-spun_at').first()
+    if last_spin:
+        cooldown = timezone.timedelta(hours=config.cooldown_hours)
+        if now < last_spin.spun_at + cooldown:
+            return Response({'error': 'Spin not available yet'}, status=status.HTTP_429_TOO_MANY_REQUESTS)
+
+    segments = config.segments
+    if not segments:
+        return Response({'error': 'No wheel segments configured'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    # Weighted random selection
+    weights = [s.get('weight', 1) for s in segments]
+    chosen = rng.choices(segments, weights=weights, k=1)[0]
+    amount = Decimal(str(chosen['value']))
+
+    # Credit wallet
+    from wallet.models import Wallet, WalletTransaction
+    try:
+        wallet = Wallet.objects.select_for_update().get(player=request.user)
+        before = wallet.balance
+        wallet.balance += amount
+        wallet.save(update_fields=['balance', 'updated_at'])
+        WalletTransaction.objects.create(
+            wallet=wallet, amount=amount, tx_type='ad_bonus',
+            reference=f'WHEEL-{uuid.uuid4().hex[:12].upper()}',
+            status='completed', balance_before=before, balance_after=wallet.balance,
+            metadata={'type': 'daily_wheel', 'segment': chosen['label']},
+        )
+    except Wallet.DoesNotExist:
+        return Response({'error': 'Wallet not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    DailyBonusSpin.objects.create(
+        player=request.user, amount=amount, segment_label=chosen['label'],
+    )
+
+    # Index of chosen segment for frontend animation
+    seg_index = segments.index(chosen)
+
+    return Response({
+        'success': True,
+        'segment_index': seg_index,
+        'label': chosen['label'],
+        'amount': str(amount),
+        'new_balance': str(wallet.balance),
+    })

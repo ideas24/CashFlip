@@ -60,11 +60,40 @@ interface SimConfig {
   updated_at: string
 }
 
+interface FeatureSettings {
+  badges_enabled: boolean
+  daily_wheel_enabled: boolean
+  sounds_enabled: boolean
+  haptics_enabled: boolean
+  social_proof_enabled: boolean
+  streak_badge_enabled: boolean
+  confetti_enabled: boolean
+  deposit_sound_enabled: boolean
+  social_proof_min_amount: string
+}
+
+interface WheelSegment {
+  label: string
+  value: number
+  color: string
+  weight: number
+}
+
+interface WheelSettings {
+  is_enabled: boolean
+  segments: WheelSegment[]
+  cooldown_hours: number
+  max_spins_per_day: number
+  require_deposit: boolean
+}
+
 interface OutcomeChoice { value: string; label: string }
 
 interface AllSettings {
   auth: AuthSettings
   game: GameSettings
+  features: FeatureSettings
+  wheel: WheelSettings
   simulated_configs: SimConfig[]
   outcome_mode_choices: OutcomeChoice[]
 }
@@ -75,7 +104,7 @@ export default function SettingsPage() {
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
-  const [tab, setTab] = useState<'auth' | 'game' | 'simulated'>('auth')
+  const [tab, setTab] = useState<'auth' | 'game' | 'features' | 'wheel' | 'simulated'>('auth')
 
   const refresh = () => {
     api.get<AllSettings>('/settings/')
@@ -91,7 +120,7 @@ export default function SettingsPage() {
     setSaving(true)
     setSaved(false)
     try {
-      await api.post('/settings/', { auth: settings.auth, game: settings.game })
+      await api.post('/settings/', { auth: settings.auth, game: settings.game, features: settings.features, wheel: settings.wheel })
       setSaved(true)
       setTimeout(() => setSaved(false), 2000)
     } catch {}
@@ -106,6 +135,16 @@ export default function SettingsPage() {
   const updateGame = (key: string, value: string | number | boolean | SimFeedEntry[]) => {
     if (!settings) return
     setSettings({ ...settings, game: { ...settings.game, [key]: value } })
+  }
+
+  const updateFeature = (key: keyof FeatureSettings, value: boolean | string) => {
+    if (!settings) return
+    setSettings({ ...settings, features: { ...settings.features, [key]: value } })
+  }
+
+  const updateWheel = (key: keyof WheelSettings, value: boolean | number | WheelSegment[]) => {
+    if (!settings) return
+    setSettings({ ...settings, wheel: { ...settings.wheel, [key]: value } })
   }
 
   const createSimConfig = async () => {
@@ -157,9 +196,11 @@ export default function SettingsPage() {
         {/* Tabs */}
         <div className="flex gap-2 border-b border-border pb-0">
           {[
-            { key: 'auth' as const, label: 'Authentication', icon: Shield },
-            { key: 'game' as const, label: 'Game Config', icon: Gamepad2 },
-            { key: 'simulated' as const, label: 'Simulation / Testing', icon: FlaskConical },
+            { key: 'auth' as const, label: 'Auth', icon: Shield },
+            { key: 'game' as const, label: 'Game', icon: Gamepad2 },
+            { key: 'features' as const, label: 'Features', icon: Gamepad2 },
+            { key: 'wheel' as const, label: 'Daily Wheel', icon: Gamepad2 },
+            { key: 'simulated' as const, label: 'Simulation', icon: FlaskConical },
           ].map(t => (
             <button
               key={t.key}
@@ -392,6 +433,120 @@ export default function SettingsPage() {
               </CardContent>
             </Card>
           </>
+        )}
+
+        {/* ===== FEATURES TAB ===== */}
+        {tab === 'features' && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Feature Toggles</CardTitle>
+              <CardDescription>Enable or disable game features globally</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {([
+                ['badges_enabled', 'Achievement Badges', 'Player badge/achievement system'],
+                ['daily_wheel_enabled', 'Daily Bonus Wheel', 'Free daily spin for bonuses'],
+                ['sounds_enabled', 'Casino Sounds', 'Sound effects on flip, win, loss, cashout'],
+                ['haptics_enabled', 'Haptic Feedback', 'Mobile vibration on game events'],
+                ['social_proof_enabled', 'Social Proof Toasts', 'Show "X just won" notifications'],
+                ['streak_badge_enabled', 'Streak Fire Badge', 'Consecutive win streak display'],
+                ['confetti_enabled', 'Confetti Particles', 'Win/loss particle effects'],
+                ['deposit_sound_enabled', 'Deposit CTA Sound', 'Soothing ambient sound on deposit overlay'],
+              ] as [keyof FeatureSettings, string, string][]).map(([key, label, desc]) => (
+                <div key={key} className="flex items-center justify-between p-3 rounded-lg bg-card border border-border">
+                  <div>
+                    <p className="text-sm font-medium text-white">{label}</p>
+                    <p className="text-xs text-muted">{desc}</p>
+                  </div>
+                  <button
+                    onClick={() => updateFeature(key, !s.features[key])}
+                    className={`w-12 h-6 rounded-full transition-colors ${s.features[key] ? 'bg-primary' : 'bg-zinc-700'}`}
+                  >
+                    <div className={`w-5 h-5 bg-white rounded-full transition-transform ${s.features[key] ? 'translate-x-6' : 'translate-x-0.5'}`} />
+                  </button>
+                </div>
+              ))}
+              <div className="flex items-center gap-3 p-3 rounded-lg bg-card border border-border">
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-white">Social Proof Min Amount</p>
+                  <p className="text-xs text-muted">Minimum win to trigger social proof toast</p>
+                </div>
+                <Input
+                  type="number" step="1" min="1" className="w-24"
+                  value={s.features.social_proof_min_amount}
+                  onChange={e => updateFeature('social_proof_min_amount', e.target.value)}
+                />
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* ===== DAILY WHEEL TAB ===== */}
+        {tab === 'wheel' && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Daily Bonus Wheel</CardTitle>
+              <CardDescription>Configure the daily spin wheel segments and rules</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between p-3 rounded-lg bg-card border border-border">
+                <div>
+                  <p className="text-sm font-medium text-white">Wheel Enabled</p>
+                </div>
+                <button
+                  onClick={() => updateWheel('is_enabled', !s.wheel.is_enabled)}
+                  className={`w-12 h-6 rounded-full transition-colors ${s.wheel.is_enabled ? 'bg-primary' : 'bg-zinc-700'}`}
+                >
+                  <div className={`w-5 h-5 bg-white rounded-full transition-transform ${s.wheel.is_enabled ? 'translate-x-6' : 'translate-x-0.5'}`} />
+                </button>
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="text-xs text-muted">Cooldown (hours)</label>
+                  <Input type="number" min="1" value={s.wheel.cooldown_hours} onChange={e => updateWheel('cooldown_hours', parseInt(e.target.value) || 24)} />
+                </div>
+                <div>
+                  <label className="text-xs text-muted">Max Spins/Day</label>
+                  <Input type="number" min="1" value={s.wheel.max_spins_per_day} onChange={e => updateWheel('max_spins_per_day', parseInt(e.target.value) || 1)} />
+                </div>
+                <div className="flex items-end">
+                  <label className="flex items-center gap-2 text-sm text-white cursor-pointer">
+                    <input type="checkbox" checked={s.wheel.require_deposit} onChange={e => updateWheel('require_deposit', e.target.checked)} className="accent-primary" />
+                    Require deposit
+                  </label>
+                </div>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-sm font-medium text-white">Wheel Segments</p>
+                  <Button size="sm" variant="outline" onClick={() => {
+                    const segs = [...s.wheel.segments, { label: '₵1.00', value: 1, color: '#ffd700', weight: 10 }]
+                    updateWheel('segments', segs)
+                  }}><Plus size={14} className="mr-1" /> Add</Button>
+                </div>
+                <div className="space-y-2">
+                  {s.wheel.segments.map((seg, i) => (
+                    <div key={i} className="flex items-center gap-2 p-2 rounded bg-zinc-800 border border-border">
+                      <input type="color" value={seg.color} className="w-8 h-8 rounded cursor-pointer border-0"
+                        onChange={e => { const segs = [...s.wheel.segments]; segs[i] = { ...seg, color: e.target.value }; updateWheel('segments', segs) }} />
+                      <Input className="w-24" placeholder="Label" value={seg.label}
+                        onChange={e => { const segs = [...s.wheel.segments]; segs[i] = { ...seg, label: e.target.value }; updateWheel('segments', segs) }} />
+                      <Input type="number" className="w-20" placeholder="Value" step="0.1" value={seg.value}
+                        onChange={e => { const segs = [...s.wheel.segments]; segs[i] = { ...seg, value: parseFloat(e.target.value) || 0 }; updateWheel('segments', segs) }} />
+                      <Input type="number" className="w-20" placeholder="Weight" value={seg.weight}
+                        onChange={e => { const segs = [...s.wheel.segments]; segs[i] = { ...seg, weight: parseInt(e.target.value) || 1 }; updateWheel('segments', segs) }} />
+                      <span className="text-xs text-muted whitespace-nowrap">wt:{seg.weight}</span>
+                      <button className="text-red-400 hover:text-red-300" onClick={() => {
+                        const segs = s.wheel.segments.filter((_, j) => j !== i)
+                        updateWheel('segments', segs)
+                      }}><Trash2 size={14} /></button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         )}
 
         {/* ===== SIMULATED / TESTING TAB ===== */}
