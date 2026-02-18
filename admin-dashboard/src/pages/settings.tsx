@@ -35,6 +35,7 @@ interface GameSettings {
   zero_growth_rate: string
   min_flips_before_zero: number
   max_session_duration_minutes: number
+  auto_flip_seconds: number
   simulated_feed_enabled: boolean
   simulated_feed_data: SimFeedEntry[]
   is_active: boolean
@@ -358,6 +359,12 @@ export default function SettingsPage() {
                           <label className="block text-xs font-medium text-slate-400 mb-1.5">Max Session Duration (minutes)</label>
                           <Input type="number" value={s.game.max_session_duration_minutes}
                             onChange={e => updateGame('max_session_duration_minutes', parseInt(e.target.value) || 120)} />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-slate-400 mb-1.5">Auto-Flip Timer (seconds)</label>
+                          <Input type="number" min="0" max="60" value={s.game.auto_flip_seconds}
+                            onChange={e => updateGame('auto_flip_seconds', parseInt(e.target.value) || 0)} />
+                          <p className="text-xs text-muted mt-1">Auto-flip if player idles (0 = disabled)</p>
                         </div>
                       </div>
                     </div>

@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table'
 import { api } from '@/lib/api'
 import { formatCurrency, formatDateTime } from '@/lib/utils'
-import { Search, ChevronLeft, ChevronRight, Eye, Ban, CheckCircle } from 'lucide-react'
+import { Search, ChevronLeft, ChevronRight, Eye, Ban, CheckCircle, X, Wallet, Gamepad2, ArrowDownRight, ArrowUpRight } from 'lucide-react'
 
 interface Player {
   id: string
@@ -17,8 +17,26 @@ interface Player {
   total_sessions: number
   total_wagered: string
   is_active: boolean
-  created_at: string
+  date_joined: string
   last_login: string
+}
+
+interface PlayerDetail {
+  id: string
+  phone: string
+  display_name: string
+  is_active: boolean
+  date_joined: string
+  last_login: string | null
+  balance: string
+  total_sessions: number
+  total_wagered: string
+  total_won: string
+  total_deposited: string
+  total_withdrawn: string
+  recent_sessions: { id: string; stake: string; payout: string; status: string; flips: number; created_at: string }[]
+  recent_deposits: { id: string; amount: string; status: string; reference: string; created_at: string }[]
+  recent_withdrawals: { id: string; amount: string; status: string; reference: string; created_at: string }[]
 }
 
 interface PlayersResponse {
@@ -33,6 +51,8 @@ export default function PlayersPage() {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
+  const [detail, setDetail] = useState<PlayerDetail | null>(null)
+  const [detailLoading, setDetailLoading] = useState(false)
 
   const fetchPlayers = (p = 1, q = '') => {
     setLoading(true)
@@ -57,6 +77,16 @@ export default function PlayersPage() {
       await api.patch(`/players/${player.id}/`, { is_active: !player.is_active })
       fetchPlayers(page, search)
     } catch {}
+  }
+
+  const viewPlayer = async (id: string) => {
+    setDetailLoading(true)
+    setDetail(null)
+    try {
+      const d = await api.get<PlayerDetail>(`/players/${id}/`)
+      setDetail(d)
+    } catch {}
+    setDetailLoading(false)
   }
 
   const totalPages = data ? Math.ceil(data.count / 25) : 0
@@ -133,10 +163,10 @@ export default function PlayersPage() {
                         {player.is_active ? 'Active' : 'Suspended'}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-muted text-xs">{formatDateTime(player.created_at)}</TableCell>
+                    <TableCell className="text-muted text-xs">{formatDateTime(player.date_joined)}</TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1">
-                        <Button variant="ghost" size="sm" title="View details">
+                        <Button variant="ghost" size="sm" title="View details" onClick={() => viewPlayer(player.id)}>
                           <Eye size={14} />
                         </Button>
                         <Button
@@ -170,6 +200,122 @@ export default function PlayersPage() {
           </div>
         )}
       </div>
+
+      {/* Player Detail Drawer */}
+      {(detail || detailLoading) && (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setDetail(null)} />
+          <div className="relative w-full max-w-lg bg-card border-l border-border overflow-y-auto">
+            <div className="sticky top-0 bg-card border-b border-border p-4 flex items-center justify-between z-10">
+              <h2 className="text-lg font-semibold text-white">Player Details</h2>
+              <button onClick={() => setDetail(null)} className="text-muted hover:text-white cursor-pointer"><X size={20} /></button>
+            </div>
+            {detailLoading ? (
+              <div className="p-6 space-y-4">{[...Array(4)].map((_, i) => <div key={i} className="h-16 bg-surface rounded-lg animate-pulse" />)}</div>
+            ) : detail && (
+              <div className="p-4 space-y-5">
+                {/* Header */}
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-full bg-primary/15 flex items-center justify-center text-primary text-lg font-bold">
+                    {detail.display_name?.[0]?.toUpperCase() || '?'}
+                  </div>
+                  <div>
+                    <div className="text-white font-semibold">{detail.display_name}</div>
+                    <div className="text-sm text-muted">{detail.phone}</div>
+                  </div>
+                  <Badge variant={detail.is_active ? 'success' : 'danger'} className="ml-auto">
+                    {detail.is_active ? 'Active' : 'Suspended'}
+                  </Badge>
+                </div>
+
+                {/* Stats Grid */}
+                <div className="grid grid-cols-2 gap-3">
+                  {[
+                    { label: 'Balance', value: formatCurrency(detail.balance), icon: Wallet, color: 'text-accent' },
+                    { label: 'Sessions', value: detail.total_sessions, icon: Gamepad2, color: 'text-primary' },
+                    { label: 'Wagered', value: formatCurrency(detail.total_wagered), icon: ArrowUpRight, color: 'text-warning' },
+                    { label: 'Won', value: formatCurrency(detail.total_won), icon: ArrowDownRight, color: 'text-success' },
+                    { label: 'Deposited', value: formatCurrency(detail.total_deposited), icon: ArrowDownRight, color: 'text-success' },
+                    { label: 'Withdrawn', value: formatCurrency(detail.total_withdrawn), icon: ArrowUpRight, color: 'text-warning' },
+                  ].map(s => (
+                    <div key={s.label} className="p-3 rounded-lg bg-surface border border-border">
+                      <div className="flex items-center gap-1.5 text-xs text-muted mb-1"><s.icon size={12} /> {s.label}</div>
+                      <div className={`text-sm font-semibold ${s.color}`}>{s.value}</div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Meta */}
+                <div className="text-xs text-muted space-y-1">
+                  <div>Joined: {formatDateTime(detail.date_joined)}</div>
+                  <div>Last login: {detail.last_login ? formatDateTime(detail.last_login) : 'Never'}</div>
+                </div>
+
+                {/* Recent Sessions */}
+                {detail.recent_sessions.length > 0 && (
+                  <div>
+                    <h3 className="text-sm font-semibold text-white mb-2">Recent Sessions</h3>
+                    <div className="space-y-1.5">
+                      {detail.recent_sessions.map(s => (
+                        <div key={s.id} className="flex items-center justify-between p-2.5 rounded-lg bg-surface border border-border text-xs">
+                          <div>
+                            <span className="text-white font-medium">Stake: {formatCurrency(s.stake)}</span>
+                            <span className="text-muted ml-2">{s.flips} flips</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className={parseFloat(s.payout) > 0 ? 'text-success font-medium' : 'text-slate-400'}>
+                              {formatCurrency(s.payout)}
+                            </span>
+                            <Badge variant={s.status === 'cashed_out' ? 'success' : s.status === 'lost' ? 'danger' : 'info'}>
+                              {s.status.replace('_', ' ')}
+                            </Badge>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Recent Deposits */}
+                {detail.recent_deposits.length > 0 && (
+                  <div>
+                    <h3 className="text-sm font-semibold text-white mb-2">Recent Deposits</h3>
+                    <div className="space-y-1.5">
+                      {detail.recent_deposits.map(d => (
+                        <div key={d.id} className="flex items-center justify-between p-2.5 rounded-lg bg-surface border border-border text-xs">
+                          <span className="text-success font-medium">+{formatCurrency(d.amount)}</span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-muted font-mono">{d.reference?.slice(0, 12) || '—'}</span>
+                            <Badge variant={d.status === 'completed' ? 'success' : d.status === 'pending' ? 'warning' : 'danger'}>{d.status}</Badge>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Recent Withdrawals */}
+                {detail.recent_withdrawals.length > 0 && (
+                  <div>
+                    <h3 className="text-sm font-semibold text-white mb-2">Recent Withdrawals</h3>
+                    <div className="space-y-1.5">
+                      {detail.recent_withdrawals.map(w => (
+                        <div key={w.id} className="flex items-center justify-between p-2.5 rounded-lg bg-surface border border-border text-xs">
+                          <span className="text-warning font-medium">-{formatCurrency(w.amount)}</span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-muted font-mono">{w.reference?.slice(0, 12) || '—'}</span>
+                            <Badge variant={w.status === 'completed' ? 'success' : w.status === 'pending' ? 'warning' : 'danger'}>{w.status}</Badge>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </>
   )
 }

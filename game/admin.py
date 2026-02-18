@@ -28,7 +28,7 @@ class SiteBrandingAdmin(admin.ModelAdmin):
 class DenominationInline(admin.TabularInline):
     model = CurrencyDenomination
     extra = 1
-    fields = ['value', 'banknote_image', 'display_order', 'weight', 'is_zero', 'is_active']
+    fields = ['value', 'front_image', 'back_image', 'display_order', 'weight', 'is_zero', 'is_active']
 
 
 @admin.register(Currency)
@@ -43,6 +43,13 @@ class CurrencyDenominationAdmin(admin.ModelAdmin):
     list_display = ['currency', 'value', 'display_order', 'weight', 'is_zero', 'is_active']
     list_filter = ['currency', 'is_zero', 'is_active']
     list_editable = ['display_order', 'weight', 'is_active']
+    fieldsets = (
+        (None, {'fields': ('currency', 'value', 'display_order', 'weight', 'is_zero', 'is_active')}),
+        ('Banknote Images', {
+            'fields': ('front_image', 'back_image'),
+            'description': 'Upload front and back images of the banknote. Both are shown during the flip animation.',
+        }),
+    )
 
 
 @admin.register(GameConfig)

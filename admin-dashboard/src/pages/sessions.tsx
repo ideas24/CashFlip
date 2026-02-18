@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table'
 import { api } from '@/lib/api'
 import { formatCurrency, formatDateTime } from '@/lib/utils'
-import { Search, ChevronLeft, ChevronRight, Eye } from 'lucide-react'
+import { Search, ChevronLeft, ChevronRight, Eye, X, Hash, Coins, Skull } from 'lucide-react'
 
 interface Session {
   id: string
@@ -22,6 +22,32 @@ interface Session {
   status: string
 }
 
+interface FlipEntry {
+  flip_number: number
+  value: string
+  is_zero: boolean
+  cumulative_balance: string
+  timestamp: string
+}
+
+interface SessionDetail {
+  id: string
+  player_name: string
+  player_phone: string
+  player_id: string
+  stake: string
+  currency: string
+  currency_symbol: string
+  flips: number
+  payout: string
+  result: string
+  status: string
+  created_at: string
+  ended_at: string | null
+  server_seed_hash: string
+  flip_history: FlipEntry[]
+}
+
 interface SessionsResponse {
   results: Session[]
   count: number
@@ -34,6 +60,8 @@ export default function SessionsPage() {
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
   const [statusFilter, setStatusFilter] = useState('')
+  const [detail, setDetail] = useState<SessionDetail | null>(null)
+  const [detailLoading, setDetailLoading] = useState(false)
 
   const fetchSessions = (p = 1, q = '', status = '') => {
     setLoading(true)
@@ -52,6 +80,16 @@ export default function SessionsPage() {
     e.preventDefault()
     setPage(1)
     fetchSessions(1, search, statusFilter)
+  }
+
+  const viewSession = async (id: string) => {
+    setDetailLoading(true)
+    setDetail(null)
+    try {
+      const d = await api.get<SessionDetail>(`/sessions/${id}/`)
+      setDetail(d)
+    } catch {}
+    setDetailLoading(false)
   }
 
   const totalPages = data ? Math.ceil(data.count / 25) : 0
@@ -143,7 +181,7 @@ export default function SessionsPage() {
                     <TableCell>{statusBadge(s.status)}</TableCell>
                     <TableCell className="text-muted text-xs">{formatDateTime(s.created_at)}</TableCell>
                     <TableCell>
-                      <Button variant="ghost" size="sm"><Eye size={14} /></Button>
+                      <Button variant="ghost" size="sm" onClick={() => viewSession(s.id)}><Eye size={14} /></Button>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -166,6 +204,89 @@ export default function SessionsPage() {
           </div>
         )}
       </div>
+
+      {/* Session Detail Drawer */}
+      {(detail || detailLoading) && (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setDetail(null)} />
+          <div className="relative w-full max-w-lg bg-card border-l border-border overflow-y-auto">
+            <div className="sticky top-0 bg-card border-b border-border p-4 flex items-center justify-between z-10">
+              <h2 className="text-lg font-semibold text-white">Session Details</h2>
+              <button onClick={() => setDetail(null)} className="text-muted hover:text-white cursor-pointer"><X size={20} /></button>
+            </div>
+            {detailLoading ? (
+              <div className="p-6 space-y-4">{[...Array(4)].map((_, i) => <div key={i} className="h-16 bg-surface rounded-lg animate-pulse" />)}</div>
+            ) : detail && (
+              <div className="p-4 space-y-5">
+                {/* Header */}
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-white font-semibold">{detail.player_name}</div>
+                    <div className="text-sm text-muted">{detail.player_phone}</div>
+                  </div>
+                  {statusBadge(detail.status)}
+                </div>
+
+                {/* Stats */}
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="p-3 rounded-lg bg-surface border border-border text-center">
+                    <div className="text-xs text-muted mb-1">Stake</div>
+                    <div className="text-sm font-semibold text-white">{detail.currency_symbol}{detail.stake}</div>
+                  </div>
+                  <div className="p-3 rounded-lg bg-surface border border-border text-center">
+                    <div className="text-xs text-muted mb-1">Flips</div>
+                    <div className="text-sm font-semibold text-primary">{detail.flips}</div>
+                  </div>
+                  <div className="p-3 rounded-lg bg-surface border border-border text-center">
+                    <div className="text-xs text-muted mb-1">Payout</div>
+                    <div className={`text-sm font-semibold ${parseFloat(detail.payout) > 0 ? 'text-success' : 'text-slate-400'}`}>
+                      {detail.currency_symbol}{detail.payout}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Meta */}
+                <div className="text-xs text-muted space-y-1">
+                  <div>Started: {formatDateTime(detail.created_at)}</div>
+                  {detail.ended_at && <div>Ended: {formatDateTime(detail.ended_at)}</div>}
+                  <div className="font-mono text-[10px] break-all">Seed hash: {detail.server_seed_hash}</div>
+                </div>
+
+                {/* Flip History */}
+                {detail.flip_history.length > 0 && (
+                  <div>
+                    <h3 className="text-sm font-semibold text-white mb-2">Flip History</h3>
+                    <div className="space-y-1">
+                      {detail.flip_history.map(f => (
+                        <div key={f.flip_number} className={`flex items-center justify-between p-2.5 rounded-lg border text-xs ${
+                          f.is_zero ? 'bg-danger/5 border-danger/20' : 'bg-surface border-border'
+                        }`}>
+                          <div className="flex items-center gap-2">
+                            <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold ${
+                              f.is_zero ? 'bg-danger/20 text-danger' : 'bg-primary/15 text-primary'
+                            }`}>
+                              {f.is_zero ? <Skull size={12} /> : <Hash size={10} />}
+                            </div>
+                            <span className="text-white font-medium">Flip #{f.flip_number}</span>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <span className={f.is_zero ? 'text-danger font-bold' : 'text-success font-medium'}>
+                              {f.is_zero ? 'ZERO' : `+${detail.currency_symbol}${f.value}`}
+                            </span>
+                            <span className="text-muted flex items-center gap-1">
+                              <Coins size={10} /> {detail.currency_symbol}{f.cumulative_balance}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </>
   )
 }

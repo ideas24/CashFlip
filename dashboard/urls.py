@@ -17,6 +17,7 @@ urlpatterns = [
 
     # Sessions
     path('sessions/', views.session_list, name='session_list'),
+    path('sessions/<uuid:session_id>/', views.session_detail, name='session_detail'),
 
     # Transactions
     path('transactions/', views.transaction_list, name='transaction_list'),

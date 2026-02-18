@@ -14,14 +14,26 @@ class CurrencySerializer(serializers.ModelSerializer):
 
 class DenominationSerializer(serializers.ModelSerializer):
     image_url = serializers.SerializerMethodField()
+    front_image_url = serializers.SerializerMethodField()
+    back_image_url = serializers.SerializerMethodField()
 
     class Meta:
         model = CurrencyDenomination
-        fields = ['id', 'value', 'image_url', 'display_order', 'is_zero']
+        fields = ['id', 'value', 'image_url', 'front_image_url', 'back_image_url', 'display_order', 'is_zero']
 
     def get_image_url(self, obj):
-        if obj.banknote_image:
-            return obj.banknote_image.url
+        if obj.front_image:
+            return obj.front_image.url
+        return None
+
+    def get_front_image_url(self, obj):
+        if obj.front_image:
+            return obj.front_image.url
+        return None
+
+    def get_back_image_url(self, obj):
+        if obj.back_image:
+            return obj.back_image.url
         return None
 
 

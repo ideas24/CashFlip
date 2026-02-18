@@ -67,9 +67,13 @@ class Currency(models.Model):
 class CurrencyDenomination(models.Model):
     currency = models.ForeignKey(Currency, on_delete=models.CASCADE, related_name='denominations')
     value = models.DecimalField(max_digits=10, decimal_places=2)
-    banknote_image = models.ImageField(
-        upload_to='banknotes/', null=True, blank=True,
-        help_text='Upload banknote image for this denomination'
+    front_image = models.ImageField(
+        upload_to='banknotes/front/', null=True, blank=True,
+        help_text='Front side of the banknote'
+    )
+    back_image = models.ImageField(
+        upload_to='banknotes/back/', null=True, blank=True,
+        help_text='Back side of the banknote'
     )
     display_order = models.PositiveIntegerField(default=0)
     is_zero = models.BooleanField(default=False, help_text='Is this the zero/loss denomination?')

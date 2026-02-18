@@ -39,7 +39,7 @@ def currencies(request):
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def game_config(request):
-    """Get game config for a currency."""
+    """Get game config for a currency, including denominations."""
     code = request.query_params.get('currency', 'GHS')
     try:
         config = GameConfig.objects.select_related('currency').get(
@@ -47,7 +47,14 @@ def game_config(request):
         )
     except GameConfig.DoesNotExist:
         return Response({'error': 'Game config not found'}, status=status.HTTP_404_NOT_FOUND)
-    return Response(GameConfigPublicSerializer(config).data)
+
+    from game.serializers import DenominationSerializer
+    denoms = CurrencyDenomination.objects.filter(
+        currency=config.currency, is_active=True
+    ).order_by('display_order', 'value')
+    data = GameConfigPublicSerializer(config).data
+    data['denominations'] = DenominationSerializer(denoms, many=True).data
+    return Response(data)
 
 
 @api_view(['POST'])

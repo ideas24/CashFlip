@@ -229,7 +229,7 @@ def player_list(request):
     })
 
 
-@api_view(['PATCH'])
+@api_view(['GET', 'PATCH'])
 @permission_classes([IsStaffAdmin])
 def player_update(request, player_id):
     try:
@@ -237,11 +237,57 @@ def player_update(request, player_id):
     except Player.DoesNotExist:
         return Response({'error': 'Player not found'}, status=404)
 
-    if 'is_active' in request.data:
-        player.is_active = request.data['is_active']
-        player.save(update_fields=['is_active'])
+    if request.method == 'PATCH':
+        if 'is_active' in request.data:
+            player.is_active = request.data['is_active']
+            player.save(update_fields=['is_active'])
+        return Response(PlayerListSerializer(player).data)
 
-    return Response(PlayerListSerializer(player).data)
+    # GET — detailed player view
+    wallet = getattr(player, 'wallet', None)
+    profile = getattr(player, 'profile', None)
+    sessions = GameSession.objects.filter(player=player).order_by('-created_at')[:10]
+    deposits = Deposit.objects.filter(player=player).order_by('-created_at')[:10]
+    withdrawals = Withdrawal.objects.filter(player=player).order_by('-created_at')[:10]
+
+    recent_sessions = [{
+        'id': str(s.id), 'stake': str(s.stake_amount), 'payout': str(s.cashout_balance or 0),
+        'status': s.status, 'flips': s.flip_count, 'created_at': s.created_at.isoformat(),
+    } for s in sessions]
+
+    recent_deposits = [{
+        'id': str(d.id), 'amount': str(d.amount), 'status': d.status,
+        'reference': d.orchard_reference or d.paystack_reference or '',
+        'created_at': d.created_at.isoformat(),
+    } for d in deposits]
+
+    recent_withdrawals = [{
+        'id': str(w.id), 'amount': str(w.amount), 'status': w.status,
+        'reference': w.payout_reference or '', 'created_at': w.created_at.isoformat(),
+    } for w in withdrawals]
+
+    total_wagered = player.game_sessions.aggregate(s=Sum('stake_amount'))['s'] or 0
+    total_won = player.game_sessions.filter(status='cashed_out').aggregate(s=Sum('cashout_balance'))['s'] or 0
+    total_deposited = Deposit.objects.filter(player=player, status='completed').aggregate(s=Sum('amount'))['s'] or 0
+    total_withdrawn = Withdrawal.objects.filter(player=player, status='completed').aggregate(s=Sum('amount'))['s'] or 0
+
+    return Response({
+        'id': str(player.id),
+        'phone': player.phone or '',
+        'display_name': player.get_display_name(),
+        'is_active': player.is_active,
+        'date_joined': player.date_joined.isoformat(),
+        'last_login': player.last_login.isoformat() if player.last_login else None,
+        'balance': str(wallet.balance) if wallet else '0.00',
+        'total_sessions': player.game_sessions.count(),
+        'total_wagered': str(total_wagered),
+        'total_won': str(total_won),
+        'total_deposited': str(total_deposited),
+        'total_withdrawn': str(total_withdrawn),
+        'recent_sessions': recent_sessions,
+        'recent_deposits': recent_deposits,
+        'recent_withdrawals': recent_withdrawals,
+    })
 
 
 # ==================== SESSIONS ====================
@@ -295,6 +341,52 @@ def session_list(request):
     })
 
 
+@api_view(['GET'])
+@permission_classes([IsStaffAdmin])
+def session_detail(request, session_id):
+    try:
+        s = GameSession.objects.select_related('player', 'currency').get(id=session_id)
+    except GameSession.DoesNotExist:
+        return Response({'error': 'Session not found'}, status=404)
+
+    flips = FlipResult.objects.filter(session=s).order_by('flip_number')
+    flip_list = [{
+        'flip_number': f.flip_number,
+        'value': str(f.value),
+        'is_zero': f.is_zero,
+        'cumulative_balance': str(f.cumulative_balance),
+        'timestamp': f.timestamp.isoformat(),
+    } for f in flips]
+
+    result = ''
+    if s.status == 'cashed_out':
+        result = 'won'
+    elif s.status in ('lost', 'completed') and (s.cashout_balance or 0) == 0:
+        result = 'lost'
+    elif s.status == 'active':
+        result = 'in play'
+    else:
+        result = 'won' if (s.cashout_balance or 0) > 0 else 'lost'
+
+    return Response({
+        'id': str(s.id),
+        'player_name': s.player.get_display_name(),
+        'player_phone': s.player.phone or '',
+        'player_id': str(s.player.id),
+        'stake': str(s.stake_amount),
+        'currency': s.currency.code if s.currency else 'GHS',
+        'currency_symbol': s.currency.symbol if s.currency else 'GH₵',
+        'flips': s.flip_count,
+        'payout': str(s.cashout_balance or 0),
+        'result': result,
+        'status': s.status,
+        'created_at': s.created_at.isoformat(),
+        'ended_at': s.ended_at.isoformat() if s.ended_at else None,
+        'server_seed_hash': s.server_seed_hash,
+        'flip_history': flip_list,
+    })
+
+
 # ==================== TRANSACTIONS ====================
 
 @api_view(['GET'])
@@ -311,7 +403,11 @@ def transaction_list(request):
     if type_filter in ('', 'deposit'):
         dep_qs = Deposit.objects.select_related('player').order_by('-created_at')
         if search:
-            dep_qs = dep_qs.filter(Q(player__phone__icontains=search) | Q(reference__icontains=search))
+            dep_qs = dep_qs.filter(
+                Q(player__phone__icontains=search) |
+                Q(orchard_reference__icontains=search) |
+                Q(paystack_reference__icontains=search)
+            )
         for d in dep_qs[:100]:
             items.append({
                 'id': str(d.id),
@@ -319,10 +415,10 @@ def transaction_list(request):
                 'player_phone': d.player.phone or '',
                 'type': 'deposit',
                 'amount': str(d.amount),
-                'currency': 'GHS',
+                'currency': d.currency_code or 'GHS',
                 'status': d.status,
-                'reference': d.reference or '',
-                'provider': d.provider if hasattr(d, 'provider') else 'mobile_money',
+                'reference': d.orchard_reference or d.paystack_reference or '',
+                'provider': d.method or 'mobile_money',
                 'created_at': d.created_at.isoformat(),
             })
 
@@ -330,7 +426,10 @@ def transaction_list(request):
     if type_filter in ('', 'withdrawal'):
         wdr_qs = Withdrawal.objects.select_related('player').order_by('-created_at')
         if search:
-            wdr_qs = wdr_qs.filter(Q(player__phone__icontains=search) | Q(reference__icontains=search))
+            wdr_qs = wdr_qs.filter(
+                Q(player__phone__icontains=search) |
+                Q(payout_reference__icontains=search)
+            )
         for w in wdr_qs[:100]:
             items.append({
                 'id': str(w.id),
@@ -338,10 +437,10 @@ def transaction_list(request):
                 'player_phone': w.player.phone or '',
                 'type': 'withdrawal',
                 'amount': str(w.amount),
-                'currency': 'GHS',
+                'currency': w.currency_code or 'GHS',
                 'status': w.status,
-                'reference': w.reference or '',
-                'provider': w.provider if hasattr(w, 'provider') else 'mobile_money',
+                'reference': w.payout_reference or '',
+                'provider': 'mobile_money',
                 'created_at': w.created_at.isoformat(),
             })
 
@@ -992,6 +1091,7 @@ def settings_view(request):
                 'zero_growth_rate': str(game_config.zero_growth_rate),
                 'min_flips_before_zero': game_config.min_flips_before_zero,
                 'max_session_duration_minutes': game_config.max_session_duration_minutes,
+                'auto_flip_seconds': game_config.auto_flip_seconds,
                 'simulated_feed_enabled': game_config.simulated_feed_enabled,
                 'simulated_feed_data': game_config.simulated_feed_data or [],
                 'is_active': game_config.is_active,
@@ -1009,6 +1109,7 @@ def settings_view(request):
                 'zero_growth_rate': '0.0800',
                 'min_flips_before_zero': 2,
                 'max_session_duration_minutes': 120,
+                'auto_flip_seconds': 8,
                 'simulated_feed_enabled': False,
                 'simulated_feed_data': [],
                 'is_active': True,
@@ -1086,7 +1187,7 @@ def settings_view(request):
         game_fields = ['house_edge_percent', 'min_deposit', 'max_cashout', 'min_stake',
                        'pause_cost_percent', 'zero_base_rate', 'zero_growth_rate',
                        'min_flips_before_zero', 'max_session_duration_minutes',
-                       'simulated_feed_enabled', 'simulated_feed_data']
+                       'auto_flip_seconds', 'simulated_feed_enabled', 'simulated_feed_data']
         updated = []
         for field in game_fields:
             if field in game_data:

@@ -181,12 +181,13 @@
         });
     }
 
-    // ==================== BOOKLET NOTE FLIPPER + SWIPE ====================
+    // ==================== STACKED BUNDLE NOTE FLIPPER + SWIPE ====================
     let _noteFlipCount = 0;
+    let _swipeStartY = 0;
     let _swipeStartX = 0;
     let _swipeDragging = false;
     let _swipeCurrentAngle = 0;
-    const SWIPE_THRESHOLD = 60; // px needed to commit the flip
+    const SWIPE_THRESHOLD = 50; // px needed to commit the flip
     let _autoFlipTimer = null;
     let _autoFlipCountdown = 0;
     let _autoFlipTick = null;
@@ -203,36 +204,77 @@
         if (total) total.classList.remove('visible');
         const nrtVal = document.getElementById('nrt-value');
         if (nrtVal) nrtVal.textContent = `${state.session?.currency?.symbol || 'GH₵'}0.00`;
+        _buildStack();
         _placeReadyCard();
         _bindSwipeEvents();
         _showTutorialIfNeeded();
     }
 
+    function _buildStack() {
+        const stage = document.getElementById('note-stage');
+        if (!stage) return;
+        // Remove old stack
+        const old = stage.querySelector('.note-stack');
+        if (old) old.remove();
+        // Build stack layers (visual depth of the bundle)
+        const stack = document.createElement('div');
+        stack.className = 'note-stack';
+        for (let i = 0; i < 4; i++) {
+            const layer = document.createElement('div');
+            layer.className = 'note-stack-layer';
+            stack.appendChild(layer);
+        }
+        stage.appendChild(stack);
+    }
+
     function _placeReadyCard() {
         const stage = document.getElementById('note-stage');
         if (!stage) return;
+        // Remove any previous active note (safety)
+        const prev = document.getElementById('active-note');
+        if (prev) prev.remove();
+
         const card = document.createElement('div');
         card.className = 'banknote-card entering';
         card.id = 'active-note';
+
+        // Use back_image from a random denomination for the face-down side
+        const denominations = state.denominations || [];
+        const nonZero = denominations.filter(d => !d.is_zero);
+        const randomDenom = nonZero.length > 0 ? nonZero[Math.floor(Math.random() * nonZero.length)] : null;
+        const backImgUrl = randomDenom?.back_image_url;
+
+        let frontHTML;
+        if (backImgUrl) {
+            frontHTML = `
+                <div class="note-face note-face-front">
+                    <img src="${backImgUrl}" alt="note back" style="width:100%;height:100%;object-fit:cover;border-radius:10px;" />
+                </div>
+            `;
+        } else {
+            frontHTML = `
+                <div class="note-face note-face-front">
+                    <div class="nf-pattern"></div>
+                    <span class="nf-logo">CF</span>
+                    <span class="nf-sub">CASHFLIP</span>
+                </div>
+            `;
+        }
+
         card.innerHTML = `
-            <div class="note-face note-face-front">
-                <div class="nf-pattern"></div>
-                <span class="nf-logo">CF</span>
-                <span class="nf-sub">CASHFLIP</span>
-            </div>
+            ${frontHTML}
             <div class="note-face note-face-back" id="active-note-back">
                 <div class="nf-denom-overlay">
                     <span class="nf-denom-value">?</span>
-                    <span class="nf-denom-label">SWIPE TO REVEAL</span>
+                    <span class="nf-denom-label">SWIPE UP TO REVEAL</span>
                 </div>
             </div>
         `;
         stage.appendChild(card);
-        // Start auto-flip timer for the new card
         _startAutoFlipTimer();
     }
 
-    // ---- SWIPE GESTURE ENGINE ----
+    // ---- SWIPE GESTURE ENGINE (both vertical & horizontal) ----
     let _swipeBound = false;
     function _bindSwipeEvents() {
         if (_swipeBound) return;
@@ -240,32 +282,32 @@
         const zone = document.getElementById('note-flipper');
         if (!zone) return;
 
-        // Touch
         zone.addEventListener('touchstart', _onSwipeStart, { passive: true });
         zone.addEventListener('touchmove', _onSwipeMove, { passive: false });
         zone.addEventListener('touchend', _onSwipeEnd, { passive: true });
         zone.addEventListener('touchcancel', _onSwipeEnd, { passive: true });
 
-        // Mouse (desktop)
         zone.addEventListener('mousedown', _onSwipeStart);
         zone.addEventListener('mousemove', _onSwipeMove);
         zone.addEventListener('mouseup', _onSwipeEnd);
         zone.addEventListener('mouseleave', _onSwipeEnd);
     }
 
-    function _getX(e) {
-        return e.touches ? e.touches[0].clientX : e.clientX;
+    function _getXY(e) {
+        const t = e.touches ? e.touches[0] : e;
+        return { x: t.clientX, y: t.clientY };
     }
 
     function _onSwipeStart(e) {
         if (state.isFlipping || !state.session || state.session.status !== 'active') return;
-        // Dismiss tutorial on first touch
         const tut = document.getElementById('swipe-tutorial');
         if (tut && !tut.classList.contains('hidden')) {
             tut.classList.add('hidden');
             localStorage.setItem('cf_tut_seen', '1');
         }
-        _swipeStartX = _getX(e);
+        const p = _getXY(e);
+        _swipeStartX = p.x;
+        _swipeStartY = p.y;
         _swipeDragging = true;
         _swipeCurrentAngle = 0;
         const card = document.getElementById('active-note');
@@ -279,22 +321,25 @@
         if (!_swipeDragging) return;
         const card = document.getElementById('active-note');
         if (!card) return;
-        const dx = _getX(e) - _swipeStartX;
-        // Only allow left swipe (negative dx)
-        if (dx >= 0) {
+        const p = _getXY(e);
+        const dy = _swipeStartY - p.y; // positive = swiped up
+        const dx = _swipeStartX - p.x; // positive = swiped left
+        // Use whichever axis has more movement
+        const delta = Math.abs(dy) >= Math.abs(dx) ? dy : dx;
+        if (delta <= 0) {
             _swipeCurrentAngle = 0;
-            card.style.transform = 'rotateY(0deg)';
+            card.style.transform = 'rotateX(0deg) translateY(0) scale(1)';
             return;
         }
         if (e.cancelable) e.preventDefault();
-        // Map px to angle: 0 to -180deg over ~250px drag
-        const maxDrag = 250;
-        const ratio = Math.min(Math.abs(dx) / maxDrag, 1);
-        // Ease the angle (slight resistance)
-        _swipeCurrentAngle = -(ratio * ratio) * 180;
-        card.style.transform = `rotateY(${_swipeCurrentAngle}deg)`;
-        // Haptic at threshold
-        if (Math.abs(dx) >= SWIPE_THRESHOLD && Math.abs(dx) < SWIPE_THRESHOLD + 10) {
+        const maxDrag = 200;
+        const ratio = Math.min(delta / maxDrag, 1);
+        // Eased angle with curve for the flexible bend feel
+        _swipeCurrentAngle = ratio * ratio * 90;
+        const liftY = ratio * 40;
+        const scaleDown = 1 - (ratio * 0.08);
+        card.style.transform = `rotateX(${_swipeCurrentAngle}deg) translateY(-${liftY}%) scale(${scaleDown})`;
+        if (delta >= SWIPE_THRESHOLD && delta < SWIPE_THRESHOLD + 12) {
             _hapticTick();
         }
     }
@@ -306,8 +351,8 @@
         if (!card) return;
         card.classList.remove('dragging');
 
-        if (Math.abs(_swipeCurrentAngle) >= 60) {
-            // Commit the flip — snap to -180
+        if (_swipeCurrentAngle >= 35) {
+            // Commit the flip
             _stopAutoFlipTimer();
             card.classList.add('flipping');
             card.style.transform = '';
@@ -335,7 +380,7 @@
         const seconds = state.gameConfig?.auto_flip_seconds || 8;
         if (seconds <= 0) return;
         _autoFlipCountdown = seconds;
-        const circumference = 339.292; // 2 * PI * 54
+        const circumference = 339.292;
         const ring = document.getElementById('autoflip-ring');
         const progress = document.getElementById('afr-progress');
         const text = document.getElementById('afr-text');
@@ -350,7 +395,6 @@
             _autoFlipCountdown--;
             if (_autoFlipCountdown <= 0) {
                 _stopAutoFlipTimer();
-                // Auto-trigger flip
                 if (!state.isFlipping && state.session?.status === 'active') {
                     _hapticHeavy();
                     const card = document.getElementById('active-note');
@@ -382,12 +426,10 @@
         const tut = document.getElementById('swipe-tutorial');
         if (!tut) return;
         tut.classList.remove('hidden');
-        // Also dismiss on click/tap
         tut.addEventListener('click', () => {
             tut.classList.add('hidden');
             localStorage.setItem('cf_tut_seen', '1');
         }, { once: true });
-        // Auto-dismiss after 5 seconds
         setTimeout(() => {
             if (!tut.classList.contains('hidden')) {
                 tut.classList.add('hidden');
@@ -412,15 +454,15 @@
                     backFace.innerHTML = `
                         <div class="nf-denom-overlay">
                             <span class="nf-denom-value">ZERO</span>
-                            <span class="nf-denom-label">💀 GAME OVER</span>
+                            <span class="nf-denom-label">GAME OVER</span>
                         </div>
                     `;
                 } else {
-                    const imgUrl = denomData?.image_url;
-                    if (imgUrl) {
+                    const frontImgUrl = denomData?.front_image_url || denomData?.image_url;
+                    if (frontImgUrl) {
                         backFace.classList.add('has-image');
                         backFace.innerHTML = `
-                            <img src="${imgUrl}" alt="${sym}${value}" />
+                            <img src="${frontImgUrl}" alt="${sym}${value}" />
                             <div class="nf-denom-overlay">
                                 <span class="nf-denom-value">+${sym}${parseFloat(value).toFixed(2)}</span>
                             </div>
@@ -436,18 +478,20 @@
                 }
             }
 
-            // Card should already be flipping from swipe or auto-flip.
-            // Ensure it's committed.
+            // Ensure the card is in flipping state
             card.classList.remove('entering', 'dragging', 'spring-back');
             if (!card.classList.contains('flipping')) {
                 void card.offsetWidth;
                 card.classList.add('flipping');
             }
 
-            // Wait for flip transition (~550ms)
+            // Phase 1: peel up (~450ms), then Phase 2: reveal back face
             setTimeout(() => {
-                _noteFlipCount++;
+                // Snap to reveal (back face fully visible)
+                card.classList.remove('flipping');
+                card.classList.add('reveal');
 
+                _noteFlipCount++;
                 if (!isZero) {
                     updateRunningTotal();
                     const pile = document.getElementById('note-pile');
@@ -456,7 +500,7 @@
                     if (pileCount) pileCount.textContent = _noteFlipCount;
                 }
 
-                // Settle card to pile, place next
+                // Phase 3: settle and place next card
                 setTimeout(() => {
                     card.removeAttribute('id');
                     document.getElementById('active-note-back')?.removeAttribute('id');
@@ -471,8 +515,8 @@
 
                     state.isFlipping = false;
                     resolve();
-                }, isZero ? 200 : 500);
-            }, 600);
+                }, isZero ? 600 : 500);
+            }, 500);
         });
     }
 
@@ -1093,6 +1137,7 @@
             const resp = await fetch('/api/game/config/');
             if (resp.ok) {
                 state.gameConfig = await resp.json();
+                state.denominations = state.gameConfig.denominations || [];
                 const c = state.gameConfig;
                 const sym = c.currency?.symbol || 'GH₵';
                 // Update CTA hint dynamically
