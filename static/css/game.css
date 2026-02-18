@@ -303,6 +303,17 @@ html, body {
 @keyframes walletShimmer { 0%,100% { opacity: 0; } 50% { opacity: 1; } }
 .wallet-label { display: block; font-size: 0.65rem; color: var(--text-secondary); text-transform: uppercase; }
 .wallet-amount { font-family: 'Orbitron', sans-serif; font-size: 1rem; color: var(--gold); font-weight: 700; }
+.header-deposit-btn {
+    width: 36px; height: 36px; border-radius: 50%; border: none; cursor: pointer;
+    background: linear-gradient(135deg, var(--teal), #00d4aa); color: #0a0f1a;
+    font-size: 1.3rem; font-weight: 700; line-height: 1;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 0 12px rgba(0,191,166,0.35);
+    transition: transform 0.15s, box-shadow 0.15s;
+    flex-shrink: 0;
+}
+.header-deposit-btn:hover { transform: scale(1.1); box-shadow: 0 0 20px rgba(0,191,166,0.5); }
+.header-deposit-btn:active { transform: scale(0.95); }
 
 .lobby-body {
     position: relative; z-index: 1;
@@ -873,7 +884,9 @@ html, body {
 .profile-avatar-large { font-size: 3rem; margin-bottom: 0.5rem; }
 .text-muted { color: var(--text-secondary); font-size: 0.85rem; }
 
-.profile-stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.75rem; margin-bottom: 1.5rem; }
+.profile-stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.75rem; margin-bottom: 1rem; }
+.profile-actions { display: flex; gap: 0.75rem; margin-bottom: 1.5rem; }
+.profile-actions .btn-primary, .profile-actions .btn-outline { flex: 1; text-align: center; padding: 0.55rem 0.8rem; font-size: 0.85rem; border-radius: 8px; }
 .stat { text-align: center; background: var(--casino-surface); border-radius: 10px; padding: 0.75rem; }
 .stat-value { display: block; font-family: 'Orbitron', sans-serif; font-size: 1rem; font-weight: 700; color: var(--teal); }
 .stat-label { font-size: 0.7rem; color: var(--text-secondary); text-transform: uppercase; }
@@ -1223,6 +1236,7 @@ html, body {
     .wallet-label { font-size: 0.55rem; }
     .avatar-circle { width: 32px; height: 32px; font-size: 0.85rem; }
     .icon-btn { width: 34px; height: 34px; }
+    .header-deposit-btn { width: 30px; height: 30px; font-size: 1.1rem; }
     .lobby-card { padding: 1.2rem; }
     .lobby-card h2 { font-size: 1rem; }
     .btn-action { padding: 0.5rem 0.8rem; font-size: 0.8rem; }
@@ -1233,6 +1247,7 @@ html, body {
     .lobby-logo { font-size: 0.9rem; }
     .wallet-amount { font-size: 0.75rem; }
     .avatar-circle { width: 28px; height: 28px; font-size: 0.75rem; }
+    .header-deposit-btn { width: 26px; height: 26px; font-size: 1rem; }
 }
 
 @media (max-width: 480px) {

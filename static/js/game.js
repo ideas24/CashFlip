@@ -1490,6 +1490,75 @@
     let _verifyTimeout = null;
     let _lastVerifiedPhone = '';
 
+    async function loadDepositAccounts() {
+        const container = document.getElementById('dep-saved-accounts');
+        const select = document.getElementById('dep-account-select');
+        const phoneGroup = document.getElementById('dep-phone-group');
+        if (!container || !select) return;
+
+        try {
+            const resp = await API.get('/payments/momo-accounts/');
+            if (!resp.ok) return;
+            const data = await resp.json();
+            const accounts = data.accounts || [];
+
+            // Clear previous options except the first
+            select.innerHTML = '<option value="">-- Use a new number --</option>';
+
+            if (accounts.length === 0) {
+                container.style.display = 'none';
+                phoneGroup.style.display = '';
+                return;
+            }
+
+            accounts.forEach(a => {
+                const opt = document.createElement('option');
+                opt.value = JSON.stringify(a);
+                opt.textContent = `${a.verified_name} - ${a.mobile_number} (${NETWORK_NAMES[a.network] || a.network})`;
+                if (a.is_primary) opt.textContent += ' ★';
+                select.appendChild(opt);
+            });
+
+            container.style.display = '';
+
+            // Auto-select primary account
+            const primary = accounts.find(a => a.is_primary) || accounts[0];
+            if (primary) {
+                select.value = JSON.stringify(primary);
+                onDepositAccountSelect(primary);
+            }
+        } catch (e) {
+            container.style.display = 'none';
+        }
+    }
+
+    function onDepositAccountSelect(account) {
+        const phoneGroup = document.getElementById('dep-phone-group');
+        const verifyStatus = document.getElementById('dep-verify-status');
+        const verifiedInfo = document.getElementById('dep-verified-info');
+        const verifiedName = document.getElementById('dep-verified-name');
+        const btn = document.getElementById('dep-momo-btn');
+        const phoneEl = document.getElementById('dep-phone');
+
+        if (!account) {
+            // "Use a new number" selected — show phone input, reset
+            phoneGroup.style.display = '';
+            resetDepositVerification();
+            return;
+        }
+
+        // Saved account selected — hide phone input, show verified info
+        phoneGroup.style.display = 'none';
+        if (verifyStatus) verifyStatus.style.display = 'none';
+        verifiedInfo.style.display = 'block';
+        verifiedName.textContent = `${account.verified_name} (${NETWORK_NAMES[account.network] || account.network})`;
+        document.getElementById('dep-account-id').value = account.id;
+        document.getElementById('dep-network').value = account.network;
+        if (phoneEl) phoneEl.value = account.mobile_number;
+        _lastVerifiedPhone = account.mobile_number.replace(/\D/g, '');
+        if (btn) btn.disabled = false;
+    }
+
     function resetDepositVerification() {
         const btn = document.getElementById('dep-momo-btn');
         const verifyStatus = document.getElementById('dep-verify-status');
@@ -2343,8 +2412,22 @@
         });
 
         // Lobby actions
-        document.getElementById('deposit-btn')?.addEventListener('click', () => showModal('deposit-modal'));
-        document.getElementById('cta-deposit-btn')?.addEventListener('click', () => showModal('deposit-modal'));
+        document.getElementById('deposit-btn')?.addEventListener('click', () => {
+            showModal('deposit-modal');
+            loadDepositAccounts();
+        });
+        document.getElementById('cta-deposit-btn')?.addEventListener('click', () => {
+            showModal('deposit-modal');
+            loadDepositAccounts();
+        });
+        document.getElementById('header-deposit-btn')?.addEventListener('click', () => {
+            showModal('deposit-modal');
+            loadDepositAccounts();
+        });
+        document.getElementById('dep-account-select')?.addEventListener('change', (e) => {
+            const val = e.target.value;
+            onDepositAccountSelect(val ? JSON.parse(val) : null);
+        });
         document.getElementById('withdraw-btn')?.addEventListener('click', () => showModal('withdraw-modal'));
         document.getElementById('transfer-btn')?.addEventListener('click', () => showModal('transfer-modal'));
         document.getElementById('trf-btn')?.addEventListener('click', doTransfer);
@@ -2420,6 +2503,15 @@
         });
         document.getElementById('close-profile')?.addEventListener('click', () => {
             document.getElementById('profile-panel')?.classList.remove('show');
+        });
+        document.getElementById('profile-deposit-btn')?.addEventListener('click', () => {
+            document.getElementById('profile-panel')?.classList.remove('show');
+            showModal('deposit-modal');
+            loadDepositAccounts();
+        });
+        document.getElementById('profile-withdraw-btn')?.addEventListener('click', () => {
+            document.getElementById('profile-panel')?.classList.remove('show');
+            showModal('withdraw-modal');
         });
 
         // Profile menu items
