@@ -1304,6 +1304,49 @@
         return 'Something went wrong. Please try again.';
     }
 
+    async function pollDepositStatus(reference, statusEl) {
+        const POLL_INTERVAL = 3000;
+        const MAX_POLLS = 40; // 40 * 3s = 120 seconds max
+        let dots = '';
+
+        for (let i = 0; i < MAX_POLLS; i++) {
+            await new Promise(r => setTimeout(r, POLL_INTERVAL));
+            dots = '.'.repeat((i % 3) + 1);
+
+            try {
+                const resp = await API.get(`/payments/status/deposit/${reference}/`);
+                const data = await resp.json();
+                const st = (data.status || '').toUpperCase();
+
+                if (st === 'COMPLETED' || st === 'SUCCESSFUL') {
+                    statusEl.textContent = 'Payment successful! Your balance has been updated.';
+                    statusEl.className = 'status-msg success';
+                    await loadWalletBalance();
+                    setTimeout(() => hideModal('deposit-modal'), 2000);
+                    return;
+                }
+                if (st === 'FAILED') {
+                    statusEl.textContent = data.message || 'Payment failed. Please try again.';
+                    statusEl.className = 'status-msg error';
+                    return;
+                }
+                // Still pending/processing
+                statusEl.textContent = `Waiting for payment confirmation${dots}`;
+                statusEl.className = 'status-msg success';
+            } catch (e) {
+                // Network hiccup — keep polling
+                statusEl.textContent = `Checking payment status${dots}`;
+                statusEl.className = 'status-msg';
+            }
+        }
+
+        // Timeout — do a final balance check in case webhook arrived
+        await loadWalletBalance();
+        statusEl.textContent = 'Payment is still processing. Your balance will update automatically once confirmed.';
+        statusEl.className = 'status-msg';
+        setTimeout(() => hideModal('deposit-modal'), 4000);
+    }
+
     async function depositMoMo() {
         const amount = document.getElementById('dep-amount')?.value;
         const accountId = document.getElementById('dep-account-id')?.value;
@@ -1332,10 +1375,12 @@
             if (data.success) {
                 statusEl.textContent = `Payment prompt sent to ${data.verified_name || 'your phone'}! Approve on your phone.`;
                 statusEl.className = 'status-msg success';
-                setTimeout(() => {
-                    hideModal('deposit-modal');
-                    loadWalletBalance();
-                }, 4000);
+                // Disable button during polling
+                const depBtn = document.getElementById('dep-momo-btn');
+                if (depBtn) depBtn.disabled = true;
+                // Poll deposit status until terminal state or timeout
+                await pollDepositStatus(data.reference, statusEl);
+                if (depBtn) depBtn.disabled = false;
             } else {
                 statusEl.textContent = parseApiError(resp, data);
                 statusEl.className = 'status-msg error';
