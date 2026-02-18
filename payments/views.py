@@ -94,7 +94,7 @@ def list_momo_accounts(request):
         'verified_name': a.verified_name,
         'is_primary': a.is_primary,
     } for a in accounts]
-    return Response(data)
+    return Response({'accounts': data})
 
 
 @api_view(['POST'])
@@ -480,8 +480,26 @@ def deposit_status(request, reference):
         return Response({'status': deposit.status, 'message': deposit.failure_reason or 'Done'})
 
     result = check_deposit_status(reference)
+    poll_status = result.get('status', 'UNKNOWN')
+
+    # If polling detects a terminal state, update the deposit record
+    # so we don't keep polling (in case the webhook was missed or delayed)
+    if poll_status == 'SUCCESSFUL' and deposit.status != 'completed':
+        from django.utils import timezone as tz
+        deposit.status = 'completed'
+        deposit.completed_at = tz.now()
+        deposit.orchard_response = result.get('data', {})
+        deposit.save(update_fields=['status', 'completed_at', 'orchard_response'])
+        from payments.services import _credit_wallet
+        _credit_wallet(deposit.player, deposit.amount, f'CF-WDEP-{reference[-8:]}', 'deposit')
+    elif poll_status == 'FAILED' and deposit.status not in ('completed', 'failed'):
+        deposit.status = 'failed'
+        deposit.failure_reason = result.get('message', 'Payment failed')
+        deposit.orchard_response = result.get('data', {})
+        deposit.save(update_fields=['status', 'failure_reason', 'orchard_response'])
+
     return Response({
-        'status': result.get('status', 'UNKNOWN'),
+        'status': poll_status,
         'message': result.get('message', ''),
     })
 

@@ -153,6 +153,8 @@ def check_deposit_status(reference):
 
     try:
         response = requests.post(verification_url, json=proxy_data, timeout=30)
+        if response.status_code not in (200, 401):
+            logger.warning(f'CTM status check proxy returned HTTP {response.status_code} for {reference}')
         data = response.json()
         logger.info(f'CTM status check for {reference}: {data}')
 
@@ -164,6 +166,10 @@ def check_deposit_status(reference):
         if main_code == '000' or resp_code == '000' or resp_desc.upper() == 'SUCCESSFUL':
             return {'success': True, 'status': 'SUCCESSFUL', 'message': resp_desc or 'Payment successful', 'data': data}
         elif resp_code in ['034', '099', '100', '101', '102', '103', '104', '105']:
+            return {'success': True, 'status': 'FAILED', 'message': resp_desc or 'Payment failed', 'data': data}
+        elif main_code == '001' and 'TIMEOUT' in trans_status:
+            return {'success': True, 'status': 'FAILED', 'message': resp_desc or 'Payment timed out', 'data': data}
+        elif main_code == '001' and 'FAILED' in trans_status:
             return {'success': True, 'status': 'FAILED', 'message': resp_desc or 'Payment failed', 'data': data}
         elif resp_code == '084' or main_code == '001':
             return {'success': True, 'status': 'PENDING', 'message': resp_desc or 'Still processing', 'data': data}
