@@ -370,6 +370,201 @@ html, body {
 #game-screen { background: #000; }
 #game-canvas { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 0; }
 
+/* ==================== NOTE FLIPPER (Booklet-style) ==================== */
+.note-flipper {
+    position: absolute; inset: 0; z-index: 5;
+    display: flex; align-items: center; justify-content: center;
+    perspective: 1400px;
+    pointer-events: none;
+}
+
+/* Counted pile indicator (left side) */
+.note-pile {
+    position: absolute; left: 3%; top: 50%; transform: translateY(-50%);
+    width: 60px; height: 36px;
+    background: linear-gradient(135deg, #1a3a2a 0%, #0d4d2b 100%);
+    border: 2px solid rgba(0,191,166,0.25);
+    border-radius: 6px;
+    box-shadow: 2px 2px 0 rgba(0,0,0,0.4), 4px 4px 0 rgba(26,58,42,0.6), 6px 6px 0 rgba(13,77,43,0.4);
+    display: flex; align-items: center; justify-content: center;
+    opacity: 0; transition: opacity 0.4s;
+}
+.note-pile.visible { opacity: 1; }
+.pile-count {
+    font-family: 'Orbitron', sans-serif; font-size: 0.8rem; font-weight: 700;
+    color: var(--gold); text-shadow: 0 0 6px rgba(245,200,66,0.4);
+}
+
+/* Note stage — where the active banknote lives */
+.note-stage {
+    position: relative;
+    width: 72vw; max-width: 480px;
+    aspect-ratio: 16 / 8.5;
+    transform-style: preserve-3d;
+}
+
+/* Individual banknote card */
+.banknote-card {
+    position: absolute; inset: 0;
+    transform-style: preserve-3d;
+    transform-origin: left center;
+    transition: transform 0.85s cubic-bezier(0.4, 0.0, 0.2, 1);
+    cursor: default;
+    filter: drop-shadow(0 8px 24px rgba(0,0,0,0.5));
+}
+.banknote-card.flipping { transform: rotateY(-180deg); }
+.banknote-card.flipped {
+    transform: rotateY(-180deg);
+    transition: none;
+}
+
+/* Card faces */
+.note-face {
+    position: absolute; inset: 0;
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+    border-radius: 10px;
+    overflow: hidden;
+    border: 1.5px solid rgba(255,255,255,0.08);
+}
+
+/* FRONT = back of the note (what you see before flipping) — cashflip branding */
+.note-face-front {
+    background: linear-gradient(145deg, #1a3a2a 0%, #0d4d2b 40%, #1a3a2a 100%);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 0.3rem;
+}
+.note-face-front::before {
+    content: '';
+    position: absolute; inset: 6px;
+    border: 1px solid rgba(0,191,166,0.15);
+    border-radius: 8px;
+    pointer-events: none;
+}
+.note-face-front .nf-logo {
+    font-family: 'Orbitron', sans-serif; font-size: clamp(1.6rem, 5vw, 2.8rem);
+    font-weight: 900; color: var(--gold);
+    text-shadow: 0 2px 8px rgba(245,200,66,0.3);
+    letter-spacing: 0.1em;
+}
+.note-face-front .nf-sub {
+    font-size: clamp(0.5rem, 1.5vw, 0.7rem); color: rgba(0,191,166,0.6);
+    text-transform: uppercase; letter-spacing: 0.25em;
+}
+.note-face-front .nf-pattern {
+    position: absolute; inset: 0; opacity: 0.04;
+    background-image: repeating-linear-gradient(45deg, transparent, transparent 10px, rgba(255,255,255,1) 10px, rgba(255,255,255,1) 11px);
+    pointer-events: none;
+}
+
+/* BACK = front of the note (revealed after flipping) — denomination */
+.note-face-back {
+    transform: rotateY(180deg);
+    display: flex; align-items: center; justify-content: center;
+    position: relative;
+    background: linear-gradient(135deg, #f5f0e1 0%, #e8e0cc 50%, #f5f0e1 100%);
+}
+/* If a banknote image is provided */
+.note-face-back img {
+    width: 100%; height: 100%;
+    object-fit: cover;
+    border-radius: 10px;
+}
+/* Denomination value overlay (shown when image exists, or as fallback) */
+.note-face-back .nf-denom-overlay {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 0.2rem;
+}
+.note-face-back .nf-denom-value {
+    font-family: 'Orbitron', sans-serif;
+    font-size: clamp(2rem, 7vw, 3.5rem);
+    font-weight: 900;
+    color: #1a3a2a;
+    text-shadow: 0 2px 0 rgba(255,255,255,0.5);
+}
+.note-face-back .nf-denom-label {
+    font-size: clamp(0.6rem, 1.5vw, 0.8rem);
+    color: rgba(26,58,42,0.6);
+    text-transform: uppercase; letter-spacing: 0.2em;
+}
+/* With image: move overlay to bottom-right corner */
+.note-face-back.has-image .nf-denom-overlay {
+    inset: auto 0 0 auto;
+    padding: 0.3rem 0.6rem;
+    border-radius: 10px 0 10px 0;
+    background: rgba(0,0,0,0.55);
+    backdrop-filter: blur(4px);
+    flex-direction: row; gap: 0.3rem;
+}
+.note-face-back.has-image .nf-denom-value {
+    font-size: clamp(0.9rem, 3vw, 1.4rem);
+    color: #fff;
+    text-shadow: 0 1px 4px rgba(0,0,0,0.5);
+}
+.note-face-back.has-image .nf-denom-label { display: none; }
+
+/* ZERO / LOSS note face */
+.note-face-back.zero-note {
+    background: linear-gradient(135deg, #2a0a0a, #4a0000, #2a0a0a);
+}
+.note-face-back.zero-note .nf-denom-value {
+    font-size: clamp(2.5rem, 8vw, 4rem);
+    color: #ff3333;
+    text-shadow: 0 0 20px rgba(255,0,0,0.5);
+}
+.note-face-back.zero-note .nf-denom-label {
+    color: rgba(255,80,80,0.7);
+}
+
+/* Running total counter */
+.note-running-total {
+    position: absolute; bottom: 15%; left: 50%; transform: translateX(-50%);
+    background: rgba(10,14,23,0.8);
+    border: 1px solid rgba(0,191,166,0.3);
+    border-radius: 14px;
+    padding: 0.4rem 1.5rem;
+    text-align: center;
+    backdrop-filter: blur(10px);
+    box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+    opacity: 0; transition: opacity 0.4s;
+}
+.note-running-total.visible { opacity: 1; }
+.nrt-label {
+    display: block; font-size: 0.55rem; color: var(--text-secondary);
+    text-transform: uppercase; letter-spacing: 0.2em;
+}
+.nrt-value {
+    font-family: 'Orbitron', sans-serif; font-size: clamp(1rem, 3vw, 1.6rem);
+    font-weight: 900; color: var(--gold);
+    text-shadow: 0 0 10px rgba(245,200,66,0.3);
+    transition: transform 0.3s, color 0.3s;
+}
+.nrt-value.bump {
+    transform: scale(1.25);
+    color: var(--neon-green);
+}
+
+/* Note entrance animation */
+@keyframes noteSlideIn {
+    from { transform: translateX(80px) scale(0.92); opacity: 0; }
+    to { transform: translateX(0) scale(1); opacity: 1; }
+}
+.banknote-card.entering {
+    animation: noteSlideIn 0.4s ease-out both;
+}
+
+/* Note settle to pile */
+@keyframes noteToPile {
+    to {
+        transform: rotateY(-180deg) scale(0.12) translateX(-800%) translateY(0);
+        opacity: 0;
+    }
+}
+.banknote-card.to-pile {
+    animation: noteToPile 0.5s ease-in forwards;
+}
+
 .game-hud { position: absolute; inset: 0; z-index: 10; pointer-events: none; }
 .game-hud > * { pointer-events: auto; }
 
@@ -951,9 +1146,19 @@ html, body {
     .avatar-circle { width: 28px; height: 28px; font-size: 0.75rem; }
 }
 
+@media (max-width: 480px) {
+    .note-stage { width: 85vw; }
+    .note-pile { width: 44px; height: 28px; left: 2%; }
+    .pile-count { font-size: 0.65rem; }
+    .note-running-total { bottom: 12%; padding: 0.3rem 1rem; }
+    .flip-button { width: 68px; height: 68px; }
+}
+
 @media (max-height: 500px) {
     .lobby-card { padding: 1rem; }
     .lobby-card h2 { font-size: 0.95rem; }
     .flip-button { width: 64px; height: 64px; }
     .flip-text { font-size: 0.85rem; }
+    .note-stage { width: 60vw; max-width: 360px; }
+    .note-running-total { bottom: 8%; }
 }

@@ -678,16 +678,17 @@ def daily_wheel_spin(request):
     # Credit wallet
     from wallet.models import Wallet, WalletTransaction
     try:
-        wallet = Wallet.objects.select_for_update().get(player=request.user)
-        before = wallet.balance
-        wallet.balance += amount
-        wallet.save(update_fields=['balance', 'updated_at'])
-        WalletTransaction.objects.create(
-            wallet=wallet, amount=amount, tx_type='ad_bonus',
-            reference=f'WHEEL-{uuid.uuid4().hex[:12].upper()}',
-            status='completed', balance_before=before, balance_after=wallet.balance,
-            metadata={'type': 'daily_wheel', 'segment': chosen['label']},
-        )
+        with transaction.atomic():
+            wallet = Wallet.objects.select_for_update().get(player=request.user)
+            before = wallet.balance
+            wallet.balance += amount
+            wallet.save(update_fields=['balance', 'updated_at'])
+            WalletTransaction.objects.create(
+                wallet=wallet, amount=amount, tx_type='ad_bonus',
+                reference=f'WHEEL-{uuid.uuid4().hex[:12].upper()}',
+                status='completed', balance_before=before, balance_after=wallet.balance,
+                metadata={'type': 'daily_wheel', 'segment': chosen['label']},
+            )
     except Wallet.DoesNotExist:
         return Response({'error': 'Wallet not found'}, status=status.HTTP_404_NOT_FOUND)
 

@@ -94,8 +94,7 @@
     }
 
     // ==================== THREE.JS SCENE ====================
-    let scene, camera, renderer, banknote, particles;
-    let noteGeometry, noteFrontMat, noteBackMat;
+    let scene, camera, renderer, particles;
     let animationId;
 
     function initScene() {
@@ -139,25 +138,6 @@
         table.position.y = -2;
         scene.add(table);
 
-        // Banknote card with branded textures
-        noteGeometry = new THREE.BoxGeometry(3, 1.8, 0.02);
-        const brandedTex = createBrandedTexture();
-        const cediTex = createCediTexture();
-        noteFrontMat = new THREE.MeshStandardMaterial({
-            map: brandedTex, roughness: 0.3, metalness: 0.6,
-            emissive: 0x332200, emissiveIntensity: 0.2,
-        });
-        noteBackMat = new THREE.MeshStandardMaterial({
-            map: cediTex, roughness: 0.4, metalness: 0.3,
-        });
-        const sideMat = new THREE.MeshStandardMaterial({ color: 0xb8860b });
-
-        banknote = new THREE.Mesh(noteGeometry, [
-            sideMat, sideMat, sideMat, sideMat, noteFrontMat, noteBackMat,
-        ]);
-        banknote.position.set(0, 0, 0);
-        scene.add(banknote);
-
         // Particles
         const particleGeo = new THREE.BufferGeometry();
         const particleCount = 200;
@@ -187,12 +167,6 @@
         function animate() {
             animationId = requestAnimationFrame(animate);
 
-            // Gentle banknote hover
-            if (!state.isFlipping) {
-                banknote.rotation.y += 0.002;
-                banknote.position.y = Math.sin(Date.now() * 0.001) * 0.1;
-            }
-
             // Particle drift
             particles.rotation.y += 0.0003;
 
@@ -207,49 +181,136 @@
         });
     }
 
-    function flipAnimation(isZero, value) {
+    // ==================== BOOKLET NOTE FLIPPER ====================
+    let _noteFlipCount = 0;
+
+    function initNoteStage() {
+        _noteFlipCount = 0;
+        const stage = document.getElementById('note-stage');
+        if (stage) stage.innerHTML = '';
+        const pile = document.getElementById('note-pile');
+        if (pile) pile.classList.remove('visible');
+        const pileCount = document.getElementById('pile-count');
+        if (pileCount) pileCount.textContent = '0';
+        const total = document.getElementById('note-running-total');
+        if (total) total.classList.remove('visible');
+        const nrtVal = document.getElementById('nrt-value');
+        if (nrtVal) nrtVal.textContent = `${state.session?.currency?.symbol || 'GH₵'}0.00`;
+        // Place the first "ready" card
+        _placeReadyCard();
+    }
+
+    function _placeReadyCard() {
+        const stage = document.getElementById('note-stage');
+        if (!stage) return;
+        const card = document.createElement('div');
+        card.className = 'banknote-card entering';
+        card.id = 'active-note';
+        card.innerHTML = `
+            <div class="note-face note-face-front">
+                <div class="nf-pattern"></div>
+                <span class="nf-logo">CF</span>
+                <span class="nf-sub">CASHFLIP</span>
+            </div>
+            <div class="note-face note-face-back" id="active-note-back">
+                <div class="nf-denom-overlay">
+                    <span class="nf-denom-value">?</span>
+                    <span class="nf-denom-label">FLIP TO REVEAL</span>
+                </div>
+            </div>
+        `;
+        stage.appendChild(card);
+    }
+
+    function flipNoteAnimation(isZero, value, denomData) {
         return new Promise((resolve) => {
             state.isFlipping = true;
-            const startTime = Date.now();
-            const duration = 1200;
-            const totalRotations = 4;
+            const sym = state.session?.currency?.symbol || 'GH₵';
+            const card = document.getElementById('active-note');
+            if (!card) { state.isFlipping = false; resolve(); return; }
 
-            // Set color based on result
-            if (isZero) {
-                noteFrontMat.color.setHex(0xff0000);
-                noteFrontMat.emissive.setHex(0x440000);
-            } else {
-                noteFrontMat.color.setHex(0xffd700);
-                noteFrontMat.emissive.setHex(0x332200);
-            }
-
-            function animateFlip() {
-                const elapsed = Date.now() - startTime;
-                const progress = Math.min(elapsed / duration, 1);
-                const eased = 1 - Math.pow(1 - progress, 3); // ease-out cubic
-
-                // Spin Y
-                banknote.rotation.y = eased * Math.PI * 2 * totalRotations;
-
-                // Rise and fall
-                const peakHeight = 1.5;
-                banknote.position.y = Math.sin(progress * Math.PI) * peakHeight;
-
-                // Slight wobble
-                banknote.rotation.z = Math.sin(progress * Math.PI * 6) * 0.1 * (1 - progress);
-
-                if (progress < 1) {
-                    requestAnimationFrame(animateFlip);
+            // Fill in the back face with denomination data BEFORE flipping
+            const backFace = document.getElementById('active-note-back');
+            if (backFace) {
+                if (isZero) {
+                    backFace.classList.add('zero-note');
+                    backFace.innerHTML = `
+                        <div class="nf-denom-overlay">
+                            <span class="nf-denom-value">ZERO</span>
+                            <span class="nf-denom-label">💀 GAME OVER</span>
+                        </div>
+                    `;
                 } else {
-                    banknote.rotation.y = 0;
-                    banknote.rotation.z = 0;
-                    banknote.position.y = 0;
-                    state.isFlipping = false;
-                    resolve();
+                    const imgUrl = denomData?.image_url;
+                    if (imgUrl) {
+                        backFace.classList.add('has-image');
+                        backFace.innerHTML = `
+                            <img src="${imgUrl}" alt="${sym}${value}" />
+                            <div class="nf-denom-overlay">
+                                <span class="nf-denom-value">+${sym}${parseFloat(value).toFixed(2)}</span>
+                            </div>
+                        `;
+                    } else {
+                        backFace.innerHTML = `
+                            <div class="nf-denom-overlay">
+                                <span class="nf-denom-value">${sym}${parseFloat(value).toFixed(2)}</span>
+                                <span class="nf-denom-label">GHANA CEDI</span>
+                            </div>
+                        `;
+                    }
                 }
             }
-            animateFlip();
+
+            // Trigger the CSS page-turn (right-to-left pivot on left edge)
+            card.classList.remove('entering');
+            // Force reflow so the class change animates
+            void card.offsetWidth;
+            card.classList.add('flipping');
+
+            // Wait for the flip transition to complete (850ms as per CSS)
+            setTimeout(() => {
+                _noteFlipCount++;
+
+                if (!isZero) {
+                    // Update running total
+                    updateRunningTotal();
+                    // Update pile
+                    const pile = document.getElementById('note-pile');
+                    const pileCount = document.getElementById('pile-count');
+                    if (pile) pile.classList.add('visible');
+                    if (pileCount) pileCount.textContent = _noteFlipCount;
+                }
+
+                // After a brief pause showing the revealed denomination, settle the card
+                setTimeout(() => {
+                    // Move flipped card to pile
+                    card.removeAttribute('id');
+                    card.classList.add('to-pile');
+                    card.addEventListener('animationend', () => card.remove(), { once: true });
+
+                    if (!isZero) {
+                        // Place next ready card
+                        _placeReadyCard();
+                    }
+
+                    state.isFlipping = false;
+                    resolve();
+                }, isZero ? 200 : 600);
+            }, 900);
         });
+    }
+
+    function updateRunningTotal() {
+        const totalEl = document.getElementById('note-running-total');
+        const nrtVal = document.getElementById('nrt-value');
+        if (!totalEl || !nrtVal) return;
+        totalEl.classList.add('visible');
+
+        const sym = state.session?.currency?.symbol || 'GH₵';
+        const bal = parseFloat(state.session?.cashout_balance || 0);
+        nrtVal.textContent = `${sym}${bal.toFixed(2)}`;
+        nrtVal.classList.add('bump');
+        setTimeout(() => nrtVal.classList.remove('bump'), 350);
     }
 
     // ==================== SIGNATURE FEATURES ====================
@@ -988,6 +1049,7 @@
         currentStreak = 0;
         showScreen('game-screen');
         initScene();
+        initNoteStage();
         updateGameHUD();
 
         document.getElementById('flip-btn').disabled = false;
@@ -1023,13 +1085,13 @@
                 return;
             }
 
-            // Sound + animate the flip
-            sfxFlip();
-            await flipAnimation(data.is_zero, data.value);
-
-            // Update session state
+            // Update session state BEFORE animation so running total is correct
             state.session.flip_count = data.flip_number;
             state.session.cashout_balance = data.cashout_balance;
+
+            // Sound + booklet page-turn animation
+            sfxFlip();
+            await flipNoteAnimation(data.is_zero, data.value, data.denomination);
 
             if (data.is_zero) {
                 // LOSS
@@ -1040,28 +1102,15 @@
                     `${state.session.currency?.symbol || 'GH₵'}${parseFloat(state.session.stake_amount).toFixed(2)}`;
                 document.getElementById('loss-overlay').classList.remove('hidden');
             } else {
-                // WIN - show denomination
+                // WIN — denomination shown on the note face itself
                 const denomDisplay = document.getElementById('denom-display');
                 const denomValue = document.getElementById('denom-value');
                 const sym = state.session.currency?.symbol || 'GH₵';
                 denomValue.textContent = `+${sym}${parseFloat(data.value).toFixed(2)}`;
                 denomDisplay.classList.add('show');
+                setTimeout(() => denomDisplay.classList.remove('show'), 1200);
 
                 winCelebration();
-
-                // Show quick result overlay
-                const resultOverlay = document.getElementById('flip-result-overlay');
-                document.getElementById('result-icon').textContent = '💵';
-                document.getElementById('result-value').textContent = `+${sym}${parseFloat(data.value).toFixed(2)}`;
-                document.getElementById('result-balance').textContent =
-                    `Balance: ${sym}${parseFloat(data.cashout_balance).toFixed(2)}`;
-                resultOverlay.classList.remove('hidden');
-
-                setTimeout(() => {
-                    resultOverlay.classList.add('hidden');
-                    denomDisplay.classList.remove('show');
-                }, 1000);
-
                 updateGameHUD();
                 flipBtn.disabled = false;
 
@@ -1847,79 +1896,6 @@
             osc.start(ctx.currentTime + i * 0.15);
             osc.stop(ctx.currentTime + 2.5);
         });
-    }
-
-    // ==================== BRANDED COIN FACE ====================
-    function createBrandedTexture() {
-        const canvas = document.createElement('canvas');
-        canvas.width = 512; canvas.height = 512;
-        const ctx = canvas.getContext('2d');
-
-        // Gold gradient background
-        const grad = ctx.createRadialGradient(256, 256, 50, 256, 256, 256);
-        grad.addColorStop(0, '#ffe066');
-        grad.addColorStop(0.5, '#ffd700');
-        grad.addColorStop(1, '#b8860b');
-        ctx.fillStyle = grad;
-        ctx.fillRect(0, 0, 512, 512);
-
-        // Embossed border ring
-        ctx.beginPath();
-        ctx.arc(256, 256, 240, 0, Math.PI * 2);
-        ctx.strokeStyle = '#8B6914';
-        ctx.lineWidth = 8;
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.arc(256, 256, 225, 0, Math.PI * 2);
-        ctx.strokeStyle = 'rgba(255,255,255,0.3)';
-        ctx.lineWidth = 2;
-        ctx.stroke();
-
-        // CF logo
-        ctx.fillStyle = '#1a1a2e';
-        ctx.font = 'bold 120px Orbitron, sans-serif';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText('CF', 256, 230);
-
-        // CASHFLIP text
-        ctx.fillStyle = '#1a1a2e';
-        ctx.font = 'bold 32px Orbitron, sans-serif';
-        ctx.fillText('CASHFLIP', 256, 330);
-
-        // Stars
-        ctx.fillStyle = '#8B6914';
-        ctx.font = '28px sans-serif';
-        ctx.fillText('★ ★ ★', 256, 380);
-
-        return new THREE.CanvasTexture(canvas);
-    }
-
-    function createCediTexture() {
-        const canvas = document.createElement('canvas');
-        canvas.width = 512; canvas.height = 512;
-        const ctx = canvas.getContext('2d');
-
-        const grad = ctx.createRadialGradient(256, 256, 50, 256, 256, 256);
-        grad.addColorStop(0, '#2d5a3d');
-        grad.addColorStop(0.5, '#1a3a2a');
-        grad.addColorStop(1, '#0d2018');
-        ctx.fillStyle = grad;
-        ctx.fillRect(0, 0, 512, 512);
-
-        ctx.beginPath();
-        ctx.arc(256, 256, 240, 0, Math.PI * 2);
-        ctx.strokeStyle = 'rgba(0,191,166,0.3)';
-        ctx.lineWidth = 4;
-        ctx.stroke();
-
-        ctx.fillStyle = '#ffd700';
-        ctx.font = 'bold 160px serif';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText('₵', 256, 256);
-
-        return new THREE.CanvasTexture(canvas);
     }
 
     // ==================== LIVE FEED ====================

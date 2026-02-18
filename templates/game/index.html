@@ -11,7 +11,7 @@
     {% load static %}
     <link rel="icon" type="image/svg+xml" href="{% static 'images/cashflip-favicon.svg' %}">
     <meta name="theme-color" content="#0D1117">
-    <link rel="stylesheet" href="{% static 'css/game.css' %}?v=20260217k">
+    <link rel="stylesheet" href="{% static 'css/game.css' %}?v=20260218b">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
 <body>
@@ -181,8 +181,22 @@
 
     <!-- GAME SCREEN -->
     <div id="game-screen" class="screen">
-        <!-- Three.js Canvas -->
+        <!-- Three.js Canvas (background ambiance) -->
         <canvas id="game-canvas"></canvas>
+
+        <!-- Note Flipper (booklet-style counting) -->
+        <div class="note-flipper" id="note-flipper">
+            <div class="note-pile" id="note-pile">
+                <span class="pile-count" id="pile-count">0</span>
+            </div>
+            <div class="note-stage" id="note-stage">
+                <!-- Dynamic banknote cards injected here by JS -->
+            </div>
+            <div class="note-running-total" id="note-running-total">
+                <span class="nrt-label">TOTAL</span>
+                <span class="nrt-value" id="nrt-value">GH₵0.00</span>
+            </div>
+        </div>
 
         <!-- HUD Overlay -->
         <div class="game-hud">
@@ -534,6 +548,6 @@
         <span id="toast-message"></span>
     </div>
 
-    <script src="{% static 'js/game.js' %}?v=20260218a"></script>
+    <script src="{% static 'js/game.js' %}?v=20260218b"></script>
 </body>
 </html>
