@@ -47,7 +47,8 @@ class CurrencyDenominationAdmin(admin.ModelAdmin):
         (None, {'fields': ('currency', 'value', 'display_order', 'weight', 'is_zero', 'is_active')}),
         ('Banknote Images', {
             'fields': ('front_image', 'back_image'),
-            'description': 'Upload front and back images of the banknote. Both are shown during the flip animation.',
+            'description': 'Upload front and back images of the banknote. Both are shown during the flip animation. '
+                         'Recommended: 960×510 px (2x retina) or 1440×765 px (3x). Aspect ratio ~1.88:1. PNG or JPEG, under 200KB.',
         }),
     )
 
