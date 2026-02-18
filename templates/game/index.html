@@ -11,7 +11,7 @@
     {% load static %}
     <link rel="icon" type="image/svg+xml" href="{% static 'images/cashflip-favicon.svg' %}">
     <meta name="theme-color" content="#0D1117">
-    <link rel="stylesheet" href="{% static 'css/game.css' %}?v=20260218b">
+    <link rel="stylesheet" href="{% static 'css/game.css' %}?v=20260218c">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
 <body>
@@ -184,7 +184,7 @@
         <!-- Three.js Canvas (background ambiance) -->
         <canvas id="game-canvas"></canvas>
 
-        <!-- Note Flipper (booklet-style counting) -->
+        <!-- Note Flipper (booklet-style counting) — swipe zone -->
         <div class="note-flipper" id="note-flipper">
             <div class="note-pile" id="note-pile">
                 <span class="pile-count" id="pile-count">0</span>
@@ -192,9 +192,27 @@
             <div class="note-stage" id="note-stage">
                 <!-- Dynamic banknote cards injected here by JS -->
             </div>
+            <!-- Auto-flip countdown ring -->
+            <svg class="autoflip-ring" id="autoflip-ring" viewBox="0 0 120 120">
+                <circle class="afr-track" cx="60" cy="60" r="54" />
+                <circle class="afr-progress" id="afr-progress" cx="60" cy="60" r="54" />
+                <text class="afr-text" id="afr-text" x="60" y="66">8</text>
+            </svg>
             <div class="note-running-total" id="note-running-total">
                 <span class="nrt-label">TOTAL</span>
                 <span class="nrt-value" id="nrt-value">GH₵0.00</span>
+            </div>
+        </div>
+
+        <!-- Swipe Tutorial Overlay (first play only) -->
+        <div class="swipe-tutorial hidden" id="swipe-tutorial">
+            <div class="tut-content">
+                <div class="tut-hand" id="tut-hand">👋</div>
+                <div class="tut-arrow">
+                    <svg width="120" height="40" viewBox="0 0 120 40"><path d="M110 20 L10 20" stroke="rgba(255,255,255,0.7)" stroke-width="3" stroke-linecap="round" stroke-dasharray="8 6"/><polygon points="10,20 22,12 22,28" fill="rgba(255,255,255,0.7)"/></svg>
+                </div>
+                <p class="tut-text">Swipe the note to flip</p>
+                <span class="tut-dismiss">Tap anywhere to start</span>
             </div>
         </div>
 
@@ -228,9 +246,6 @@
 
             <div class="hud-bottom">
                 <button id="pause-btn" class="btn-game-action" disabled>⏸ Pause</button>
-                <button id="flip-btn" class="flip-button pulse-btn" disabled>
-                    <span class="flip-text">FLIP</span>
-                </button>
                 <button id="game-back-btn" class="btn-game-action">🏠 Lobby</button>
             </div>
         </div>
@@ -548,6 +563,6 @@
         <span id="toast-message"></span>
     </div>
 
-    <script src="{% static 'js/game.js' %}?v=20260218b"></script>
+    <script src="{% static 'js/game.js' %}?v=20260218c"></script>
 </body>
 </html>

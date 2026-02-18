@@ -181,8 +181,15 @@
         });
     }
 
-    // ==================== BOOKLET NOTE FLIPPER ====================
+    // ==================== BOOKLET NOTE FLIPPER + SWIPE ====================
     let _noteFlipCount = 0;
+    let _swipeStartX = 0;
+    let _swipeDragging = false;
+    let _swipeCurrentAngle = 0;
+    const SWIPE_THRESHOLD = 60; // px needed to commit the flip
+    let _autoFlipTimer = null;
+    let _autoFlipCountdown = 0;
+    let _autoFlipTick = null;
 
     function initNoteStage() {
         _noteFlipCount = 0;
@@ -196,8 +203,9 @@
         if (total) total.classList.remove('visible');
         const nrtVal = document.getElementById('nrt-value');
         if (nrtVal) nrtVal.textContent = `${state.session?.currency?.symbol || 'GH₵'}0.00`;
-        // Place the first "ready" card
         _placeReadyCard();
+        _bindSwipeEvents();
+        _showTutorialIfNeeded();
     }
 
     function _placeReadyCard() {
@@ -215,13 +223,180 @@
             <div class="note-face note-face-back" id="active-note-back">
                 <div class="nf-denom-overlay">
                     <span class="nf-denom-value">?</span>
-                    <span class="nf-denom-label">FLIP TO REVEAL</span>
+                    <span class="nf-denom-label">SWIPE TO REVEAL</span>
                 </div>
             </div>
         `;
         stage.appendChild(card);
+        // Start auto-flip timer for the new card
+        _startAutoFlipTimer();
     }
 
+    // ---- SWIPE GESTURE ENGINE ----
+    let _swipeBound = false;
+    function _bindSwipeEvents() {
+        if (_swipeBound) return;
+        _swipeBound = true;
+        const zone = document.getElementById('note-flipper');
+        if (!zone) return;
+
+        // Touch
+        zone.addEventListener('touchstart', _onSwipeStart, { passive: true });
+        zone.addEventListener('touchmove', _onSwipeMove, { passive: false });
+        zone.addEventListener('touchend', _onSwipeEnd, { passive: true });
+        zone.addEventListener('touchcancel', _onSwipeEnd, { passive: true });
+
+        // Mouse (desktop)
+        zone.addEventListener('mousedown', _onSwipeStart);
+        zone.addEventListener('mousemove', _onSwipeMove);
+        zone.addEventListener('mouseup', _onSwipeEnd);
+        zone.addEventListener('mouseleave', _onSwipeEnd);
+    }
+
+    function _getX(e) {
+        return e.touches ? e.touches[0].clientX : e.clientX;
+    }
+
+    function _onSwipeStart(e) {
+        if (state.isFlipping || !state.session || state.session.status !== 'active') return;
+        // Dismiss tutorial on first touch
+        const tut = document.getElementById('swipe-tutorial');
+        if (tut && !tut.classList.contains('hidden')) {
+            tut.classList.add('hidden');
+            localStorage.setItem('cf_tut_seen', '1');
+        }
+        _swipeStartX = _getX(e);
+        _swipeDragging = true;
+        _swipeCurrentAngle = 0;
+        const card = document.getElementById('active-note');
+        if (card) {
+            card.classList.remove('entering', 'spring-back');
+            card.classList.add('dragging');
+        }
+    }
+
+    function _onSwipeMove(e) {
+        if (!_swipeDragging) return;
+        const card = document.getElementById('active-note');
+        if (!card) return;
+        const dx = _getX(e) - _swipeStartX;
+        // Only allow left swipe (negative dx)
+        if (dx >= 0) {
+            _swipeCurrentAngle = 0;
+            card.style.transform = 'rotateY(0deg)';
+            return;
+        }
+        if (e.cancelable) e.preventDefault();
+        // Map px to angle: 0 to -180deg over ~250px drag
+        const maxDrag = 250;
+        const ratio = Math.min(Math.abs(dx) / maxDrag, 1);
+        // Ease the angle (slight resistance)
+        _swipeCurrentAngle = -(ratio * ratio) * 180;
+        card.style.transform = `rotateY(${_swipeCurrentAngle}deg)`;
+        // Haptic at threshold
+        if (Math.abs(dx) >= SWIPE_THRESHOLD && Math.abs(dx) < SWIPE_THRESHOLD + 10) {
+            _hapticTick();
+        }
+    }
+
+    function _onSwipeEnd() {
+        if (!_swipeDragging) return;
+        _swipeDragging = false;
+        const card = document.getElementById('active-note');
+        if (!card) return;
+        card.classList.remove('dragging');
+
+        if (Math.abs(_swipeCurrentAngle) >= 60) {
+            // Commit the flip — snap to -180
+            _stopAutoFlipTimer();
+            card.classList.add('flipping');
+            card.style.transform = '';
+            _hapticHeavy();
+            doFlip();
+        } else {
+            // Spring back
+            card.classList.add('spring-back');
+            card.style.transform = '';
+            _swipeCurrentAngle = 0;
+        }
+    }
+
+    // ---- HAPTIC FEEDBACK ----
+    function _hapticTick() {
+        if (navigator.vibrate) navigator.vibrate(10);
+    }
+    function _hapticHeavy() {
+        if (navigator.vibrate) navigator.vibrate([15, 30, 15]);
+    }
+
+    // ---- AUTO-FLIP COUNTDOWN TIMER ----
+    function _startAutoFlipTimer() {
+        _stopAutoFlipTimer();
+        const seconds = state.gameConfig?.auto_flip_seconds || 8;
+        if (seconds <= 0) return;
+        _autoFlipCountdown = seconds;
+        const circumference = 339.292; // 2 * PI * 54
+        const ring = document.getElementById('autoflip-ring');
+        const progress = document.getElementById('afr-progress');
+        const text = document.getElementById('afr-text');
+        if (!ring || !progress || !text) return;
+
+        ring.classList.add('visible');
+        text.textContent = seconds;
+        progress.style.strokeDashoffset = '0';
+        progress.classList.remove('urgent');
+
+        _autoFlipTick = setInterval(() => {
+            _autoFlipCountdown--;
+            if (_autoFlipCountdown <= 0) {
+                _stopAutoFlipTimer();
+                // Auto-trigger flip
+                if (!state.isFlipping && state.session?.status === 'active') {
+                    _hapticHeavy();
+                    const card = document.getElementById('active-note');
+                    if (card) {
+                        card.classList.remove('entering', 'spring-back', 'dragging');
+                        card.style.transform = '';
+                        card.classList.add('flipping');
+                    }
+                    doFlip();
+                }
+                return;
+            }
+            text.textContent = _autoFlipCountdown;
+            const fraction = 1 - (_autoFlipCountdown / seconds);
+            progress.style.strokeDashoffset = (fraction * circumference).toFixed(1);
+            if (_autoFlipCountdown <= 3) progress.classList.add('urgent');
+        }, 1000);
+    }
+
+    function _stopAutoFlipTimer() {
+        if (_autoFlipTick) { clearInterval(_autoFlipTick); _autoFlipTick = null; }
+        const ring = document.getElementById('autoflip-ring');
+        if (ring) ring.classList.remove('visible');
+    }
+
+    // ---- TUTORIAL OVERLAY ----
+    function _showTutorialIfNeeded() {
+        if (localStorage.getItem('cf_tut_seen')) return;
+        const tut = document.getElementById('swipe-tutorial');
+        if (!tut) return;
+        tut.classList.remove('hidden');
+        // Also dismiss on click/tap
+        tut.addEventListener('click', () => {
+            tut.classList.add('hidden');
+            localStorage.setItem('cf_tut_seen', '1');
+        }, { once: true });
+        // Auto-dismiss after 5 seconds
+        setTimeout(() => {
+            if (!tut.classList.contains('hidden')) {
+                tut.classList.add('hidden');
+                localStorage.setItem('cf_tut_seen', '1');
+            }
+        }, 5000);
+    }
+
+    // ---- FLIP NOTE ANIMATION (called after API returns) ----
     function flipNoteAnimation(isZero, value, denomData) {
         return new Promise((resolve) => {
             state.isFlipping = true;
@@ -229,7 +404,7 @@
             const card = document.getElementById('active-note');
             if (!card) { state.isFlipping = false; resolve(); return; }
 
-            // Fill in the back face with denomination data BEFORE flipping
+            // Fill in the back face with denomination data
             const backFace = document.getElementById('active-note-back');
             if (backFace) {
                 if (isZero) {
@@ -261,42 +436,43 @@
                 }
             }
 
-            // Trigger the CSS page-turn (right-to-left pivot on left edge)
-            card.classList.remove('entering');
-            // Force reflow so the class change animates
-            void card.offsetWidth;
-            card.classList.add('flipping');
+            // Card should already be flipping from swipe or auto-flip.
+            // Ensure it's committed.
+            card.classList.remove('entering', 'dragging', 'spring-back');
+            if (!card.classList.contains('flipping')) {
+                void card.offsetWidth;
+                card.classList.add('flipping');
+            }
 
-            // Wait for the flip transition to complete (850ms as per CSS)
+            // Wait for flip transition (~550ms)
             setTimeout(() => {
                 _noteFlipCount++;
 
                 if (!isZero) {
-                    // Update running total
                     updateRunningTotal();
-                    // Update pile
                     const pile = document.getElementById('note-pile');
                     const pileCount = document.getElementById('pile-count');
                     if (pile) pile.classList.add('visible');
                     if (pileCount) pileCount.textContent = _noteFlipCount;
                 }
 
-                // After a brief pause showing the revealed denomination, settle the card
+                // Settle card to pile, place next
                 setTimeout(() => {
-                    // Move flipped card to pile
                     card.removeAttribute('id');
+                    document.getElementById('active-note-back')?.removeAttribute('id');
                     card.classList.add('to-pile');
                     card.addEventListener('animationend', () => card.remove(), { once: true });
 
                     if (!isZero) {
-                        // Place next ready card
                         _placeReadyCard();
+                    } else {
+                        _stopAutoFlipTimer();
                     }
 
                     state.isFlipping = false;
                     resolve();
-                }, isZero ? 200 : 600);
-            }, 900);
+                }, isZero ? 200 : 500);
+            }, 600);
         });
     }
 
@@ -1052,7 +1228,6 @@
         initNoteStage();
         updateGameHUD();
 
-        document.getElementById('flip-btn').disabled = false;
         document.getElementById('pause-btn').disabled = false;
     }
 
@@ -1070,10 +1245,8 @@
     }
 
     async function doFlip() {
-        if (state.isFlipping || !state.session) return;
-
-        const flipBtn = document.getElementById('flip-btn');
-        flipBtn.disabled = true;
+        if (state.isFlipping || !state.session || state.session.status !== 'active') return;
+        state.isFlipping = true;
 
         try {
             const resp = await API.post('/game/flip/', {});
@@ -1081,7 +1254,11 @@
 
             if (!data.success) {
                 showToast(data.error || 'Flip failed');
-                flipBtn.disabled = false;
+                state.isFlipping = false;
+                // Spring-back the card if it was mid-swipe
+                const card = document.getElementById('active-note');
+                if (card) { card.classList.remove('flipping', 'dragging'); card.classList.add('spring-back'); card.style.transform = ''; }
+                _startAutoFlipTimer();
                 return;
             }
 
@@ -1091,11 +1268,14 @@
 
             // Sound + booklet page-turn animation
             sfxFlip();
+            // isFlipping is managed inside flipNoteAnimation
+            state.isFlipping = false;
             await flipNoteAnimation(data.is_zero, data.value, data.denomination);
 
             if (data.is_zero) {
                 // LOSS
                 state.session.status = 'lost';
+                _stopAutoFlipTimer();
                 lossBurst();
 
                 document.getElementById('loss-stake-amount').textContent =
@@ -1112,7 +1292,6 @@
 
                 winCelebration();
                 updateGameHUD();
-                flipBtn.disabled = false;
 
                 // Badge notifications
                 if (data.new_badges) {
@@ -1126,12 +1305,16 @@
             }
         } catch (e) {
             showToast('Network error');
-            flipBtn.disabled = false;
+            state.isFlipping = false;
+            const card = document.getElementById('active-note');
+            if (card) { card.classList.remove('flipping', 'dragging'); card.classList.add('spring-back'); card.style.transform = ''; }
+            _startAutoFlipTimer();
         }
     }
 
     async function doCashout() {
         if (!state.session || state.isFlipping) return;
+        _stopAutoFlipTimer();
 
         const btn = document.getElementById('cashout-btn');
         btn.disabled = true;
@@ -1162,6 +1345,7 @@
 
     async function doPause() {
         if (!state.session) return;
+        _stopAutoFlipTimer();
 
         // First get pause cost
         try {
@@ -1201,6 +1385,7 @@
     }
 
     function returnToLobby() {
+        _stopAutoFlipTimer();
         if (animationId) cancelAnimationFrame(animationId);
         state.session = null;
         document.getElementById('loss-overlay')?.classList.add('hidden');
@@ -2092,8 +2277,7 @@
             });
         });
 
-        // Game buttons
-        document.getElementById('flip-btn')?.addEventListener('click', doFlip);
+        // Game buttons (flip is now swipe-triggered, no button)
         document.getElementById('cashout-btn')?.addEventListener('click', doCashout);
         document.getElementById('pause-btn')?.addEventListener('click', doPause);
         document.getElementById('confirm-pause-btn')?.addEventListener('click', confirmPause);
@@ -2256,10 +2440,19 @@
             }
         });
 
-        // Keyboard shortcut for flip
+        // Keyboard shortcut for flip (Space / ArrowLeft)
         document.addEventListener('keydown', (e) => {
-            if (e.code === 'Space' && document.getElementById('game-screen')?.classList.contains('active')) {
+            if ((e.code === 'Space' || e.code === 'ArrowLeft') && document.getElementById('game-screen')?.classList.contains('active')) {
                 e.preventDefault();
+                if (state.isFlipping || !state.session || state.session.status !== 'active') return;
+                _stopAutoFlipTimer();
+                const card = document.getElementById('active-note');
+                if (card) {
+                    card.classList.remove('entering', 'spring-back', 'dragging');
+                    card.style.transform = '';
+                    card.classList.add('flipping');
+                }
+                _hapticHeavy();
                 doFlip();
             }
         });
