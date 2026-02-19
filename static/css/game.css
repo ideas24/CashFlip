@@ -479,22 +479,22 @@ html, body {
 }
 .note-stack-layer:nth-child(1) {
     transform: translate(2px, 2px);
-    background: linear-gradient(135deg, #163828 0%, #0a3d22 100%);
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
     opacity: 0.7;
 }
 .note-stack-layer:nth-child(2) {
     transform: translate(4px, 4px);
-    background: linear-gradient(135deg, #123020 0%, #0a3018 100%);
+    background: linear-gradient(135deg, #141428 0%, #121230 100%);
     opacity: 0.5;
 }
 .note-stack-layer:nth-child(3) {
     transform: translate(6px, 6px);
-    background: linear-gradient(135deg, #0e2818 0%, #082610 100%);
+    background: linear-gradient(135deg, #0f0f20 0%, #0a0a1a 100%);
     opacity: 0.35;
 }
 .note-stack-layer:nth-child(4) {
     transform: translate(8px, 8px);
-    background: linear-gradient(135deg, #0a200e 0%, #061c0a 100%);
+    background: linear-gradient(135deg, #0a0a18 0%, #060612 100%);
     opacity: 0.2;
 }
 
@@ -503,6 +503,7 @@ html, body {
     position: absolute; inset: 0;
     overflow: hidden;
     border-radius: 12px;
+    background: #000;
     transition: opacity 0.35s ease;
     cursor: grab;
 }

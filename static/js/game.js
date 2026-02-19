@@ -352,51 +352,23 @@
         card.id = 'active-note';
         card.style.zIndex = '1';
 
-        // Pick a random non-zero denomination — prefer ones with GIF
+        // Pick a random non-zero denomination
         const denominations = state.denominations || [];
-        const withGif = denominations.filter(d => !d.is_zero && d.flip_gif_path);
         const nonZero = denominations.filter(d => !d.is_zero);
-        const pool = withGif.length > 0 ? withGif : nonZero;
-        const randomDenom = pool.length > 0 ? pool[Math.floor(Math.random() * pool.length)] : null;
+        const randomDenom = nonZero.length > 0 ? nonZero[Math.floor(Math.random() * nonZero.length)] : null;
 
-        // GIF mode: show first frame of GIF as static flat note
-        const gifPath = randomDenom?.flip_gif_path;
-        if (gifPath) {
-            const gifUrl = _assetUrl(gifPath);
-            const frozenSrc = _gifFrameCache[gifUrl] || gifUrl;
-            card.innerHTML = `<img id="card-face-img" src="${frozenSrc}" alt="note"
+        // Always use face_image_path for the STATIC flat card (never the animated GIF)
+        const faceImgPath = randomDenom?.face_image_path
+            ? _assetUrl(randomDenom.face_image_path)
+            : (randomDenom?.front_image_url || randomDenom?.back_image_url);
+        if (faceImgPath) {
+            card.innerHTML = `<img id="card-face-img" src="${faceImgPath}" alt="note"
                  style="width:100%;height:100%;object-fit:cover;display:block;" />`;
-            // If cache miss, freeze the GIF once it loads
-            if (!_gifFrameCache[gifUrl]) {
-                const loader = new Image();
-                loader.onload = function() {
-                    try {
-                        const c = document.createElement('canvas');
-                        c.width = this.naturalWidth;
-                        c.height = this.naturalHeight;
-                        c.getContext('2d').drawImage(this, 0, 0);
-                        const dataUrl = c.toDataURL('image/jpeg', 0.92);
-                        _gifFrameCache[gifUrl] = dataUrl;
-                        const el = document.getElementById('card-face-img');
-                        if (el) el.src = dataUrl;
-                    } catch(e) {}
-                };
-                loader.src = gifUrl;
-            }
         } else {
-            // Fallback: face image
-            const faceImgPath = randomDenom?.face_image_path
-                ? _assetUrl(randomDenom.face_image_path)
-                : (randomDenom?.front_image_url || randomDenom?.back_image_url);
-            if (faceImgPath) {
-                card.innerHTML = `<img src="${faceImgPath}" alt="note"
-                     style="width:100%;height:100%;object-fit:cover;display:block;" />`;
-            } else {
-                card.innerHTML = `<div class="note-face note-face-front">
-                    <span class="nf-logo">CF</span>
-                    <span class="nf-sub">CASHFLIP</span>
-                </div>`;
-            }
+            card.innerHTML = `<div class="note-face note-face-front">
+                <span class="nf-logo">CF</span>
+                <span class="nf-sub">CASHFLIP</span>
+            </div>`;
         }
 
         stage.appendChild(card);
@@ -675,24 +647,15 @@
         nextCard.style.zIndex = '0';
 
         const denominations = state.denominations || [];
-        const withGif = denominations.filter(d => !d.is_zero && d.flip_gif_path);
         const nonZero = denominations.filter(d => !d.is_zero);
-        const pool = withGif.length > 0 ? withGif : nonZero;
-        const randomDenom = pool.length > 0 ? pool[Math.floor(Math.random() * pool.length)] : null;
+        const randomDenom = nonZero.length > 0 ? nonZero[Math.floor(Math.random() * nonZero.length)] : null;
 
-        const gifPath = randomDenom?.flip_gif_path;
-        if (gifPath) {
-            const gifUrl = _assetUrl(gifPath);
-            const frozenSrc = _gifFrameCache[gifUrl] || gifUrl;
-            nextCard.innerHTML = `<img src="${frozenSrc}" alt="note"
+        // Always use face_image_path for the static next card (never animated GIF)
+        const faceImgPath = randomDenom?.face_image_path
+            ? _assetUrl(randomDenom.face_image_path) : null;
+        if (faceImgPath) {
+            nextCard.innerHTML = `<img src="${faceImgPath}" alt="note"
                  style="width:100%;height:100%;object-fit:cover;display:block;" />`;
-        } else {
-            const faceImgPath = randomDenom?.face_image_path
-                ? _assetUrl(randomDenom.face_image_path) : null;
-            if (faceImgPath) {
-                nextCard.innerHTML = `<img src="${faceImgPath}" alt="note"
-                     style="width:100%;height:100%;object-fit:cover;display:block;" />`;
-            }
         }
 
         // Insert underneath (before active card)
