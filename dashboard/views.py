@@ -1415,6 +1415,54 @@ def branding_upload(request):
     })
 
 
+@api_view(['POST'])
+@permission_classes([IsStaffAdmin])
+def cloudinary_upload(request):
+    """Upload any image/GIF to Cloudinary and return the CDN URL.
+    
+    Body (multipart): file=<file>, folder=<cloudinary_folder>
+    Returns: { url: 'https://res.cloudinary.com/...' }
+    """
+    import cloudinary.uploader
+    from django.conf import settings as django_settings
+
+    cld_cloud = getattr(django_settings, 'CLOUDINARY_CLOUD_NAME', '') or os.getenv('CLOUDINARY_CLOUD_NAME', '')
+    cld_key = getattr(django_settings, 'CLOUDINARY_API_KEY', '') or os.getenv('CLOUDINARY_API_KEY', '')
+    cld_secret = getattr(django_settings, 'CLOUDINARY_API_SECRET', '') or os.getenv('CLOUDINARY_API_SECRET', '')
+
+    if not cld_cloud or not cld_key:
+        return Response({'error': 'Cloudinary not configured'}, status=400)
+
+    cloudinary.config(cloud_name=cld_cloud, api_key=cld_key, api_secret=cld_secret)
+
+    if 'file' not in request.FILES:
+        return Response({'error': 'No file provided'}, status=400)
+
+    file = request.FILES['file']
+    folder = request.data.get('folder', 'cashflip/uploads')
+    # Use filename without extension as public_id
+    import os as _os
+    name = _os.path.splitext(file.name)[0]
+    public_id = f"{folder}/{name}"
+
+    try:
+        result = cloudinary.uploader.upload(
+            file,
+            public_id=public_id,
+            resource_type='auto',
+            overwrite=True,
+        )
+        return Response({
+            'url': result['secure_url'],
+            'public_id': result['public_id'],
+            'format': result.get('format', ''),
+            'width': result.get('width', 0),
+            'height': result.get('height', 0),
+        })
+    except Exception as e:
+        return Response({'error': str(e)}, status=500)
+
+
 @api_view(['POST', 'PATCH', 'DELETE'])
 @permission_classes([IsStaffAdmin])
 def simulated_config_manage(request, config_id=None):

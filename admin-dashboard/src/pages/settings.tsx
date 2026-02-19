@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { api } from '@/lib/api'
-import { Save, Shield, Gamepad2, FlaskConical, Plus, Trash2, X, Check } from 'lucide-react'
+import { Save, Shield, Gamepad2, FlaskConical, Plus, Trash2, X, Check, Upload, Image } from 'lucide-react'
 
 interface AuthSettings {
   sms_otp_enabled: boolean
@@ -188,18 +188,32 @@ export default function SettingsPage() {
     setUploading(true)
     try {
       const formData = new FormData()
-      formData.append(field, file)
-      const resp = await api.upload('/settings/branding/upload/', formData)
-      if (settings) {
+      formData.append('file', file)
+      formData.append('folder', 'cashflip/branding')
+      const resp = await api.upload<{ url: string }>('/settings/cloudinary-upload/', formData)
+      if (settings && resp.url) {
+        const key = field === 'logo' ? 'logo_url' : field === 'logo_icon' ? 'logo_icon_url' : 'loading_animation_url'
         setSettings({
           ...settings,
-          branding: {
-            ...settings.branding,
-            logo_url: resp.logo_url || settings.branding.logo_url,
-            logo_icon_url: resp.logo_icon_url || settings.branding.logo_icon_url,
-            loading_animation_url: resp.loading_animation_url || settings.branding.loading_animation_url,
-          }
+          branding: { ...settings.branding, [key]: resp.url }
         })
+      }
+    } catch {}
+    setUploading(false)
+  }
+
+  const uploadDenomFile = async (denomIndex: number, field: 'face_image_path' | 'flip_gif_path', file: File) => {
+    setUploading(true)
+    try {
+      const folder = field === 'face_image_path' ? 'cashflip/faces' : 'cashflip/gifs'
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('folder', folder)
+      const resp = await api.upload<{ url: string }>('/settings/cloudinary-upload/', formData)
+      if (settings && resp.url) {
+        const denoms = [...settings.denominations]
+        denoms[denomIndex] = { ...denoms[denomIndex], [field]: resp.url }
+        setSettings({ ...settings, denominations: denoms })
       }
     } catch {}
     setUploading(false)
@@ -641,44 +655,66 @@ export default function SettingsPage() {
                         </div>
                       </div>
                       {!denom.is_zero && (
-                        <>
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3">
-                            <div>
-                              <label className="block text-xs text-slate-400 mb-1">Face Image Path</label>
-                              <Input type="text" placeholder="images/Cedi-Face/5f.jpg" value={denom.face_image_path} onChange={e => {
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3">
+                          {/* Face Image */}
+                          <div className="p-3 rounded-lg border border-border/50 bg-zinc-900/50">
+                            <label className="block text-xs text-slate-400 mb-2 font-medium">Face Image (static first frame)</label>
+                            {denom.face_image_path && (
+                              <div className="mb-2 rounded overflow-hidden border border-border bg-black" style={{maxHeight: 80}}>
+                                <img src={denom.face_image_path.startsWith('http') ? denom.face_image_path : `/static/${denom.face_image_path}`}
+                                  alt="face" className="w-full h-20 object-cover" />
+                              </div>
+                            )}
+                            <div className="flex items-center gap-2">
+                              <Input type="text" placeholder="Cloudinary URL or static path" value={denom.face_image_path}
+                                className="text-xs flex-1" onChange={e => {
                                 const denoms = [...s.denominations]
                                 denoms[i] = { ...denom, face_image_path: e.target.value }
                                 setSettings({ ...s, denominations: denoms })
                               }} />
+                              <label className="shrink-0">
+                                <span className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-primary/20 text-primary text-xs rounded cursor-pointer hover:bg-primary/30 transition">
+                                  <Upload size={12} /> {uploading ? '...' : 'Upload'}
+                                </span>
+                                <input type="file" className="hidden" accept="image/*" disabled={uploading}
+                                  onChange={e => {
+                                    const file = e.target.files?.[0]
+                                    if (file) uploadDenomFile(i, 'face_image_path', file)
+                                    e.target.value = ''
+                                  }} />
+                              </label>
                             </div>
-                            <div>
-                              <label className="block text-xs text-slate-400 mb-1">Flip GIF Path</label>
-                              <Input type="text" placeholder="images/Cedi-Gifs/5cedis.gif" value={denom.flip_gif_path} onChange={e => {
+                          </div>
+                          {/* Flip GIF */}
+                          <div className="p-3 rounded-lg border border-border/50 bg-zinc-900/50">
+                            <label className="block text-xs text-slate-400 mb-2 font-medium">Flip Animation GIF</label>
+                            {denom.flip_gif_path && (
+                              <div className="mb-2 rounded overflow-hidden border border-border bg-black" style={{maxHeight: 80}}>
+                                <img src={denom.flip_gif_path.startsWith('http') ? denom.flip_gif_path : `/static/${denom.flip_gif_path}`}
+                                  alt="flip gif" className="w-full h-20 object-cover" />
+                              </div>
+                            )}
+                            <div className="flex items-center gap-2">
+                              <Input type="text" placeholder="Cloudinary URL or static path" value={denom.flip_gif_path}
+                                className="text-xs flex-1" onChange={e => {
                                 const denoms = [...s.denominations]
                                 denoms[i] = { ...denom, flip_gif_path: e.target.value }
                                 setSettings({ ...s, denominations: denoms })
                               }} />
-                            </div>
-                            <div>
-                              <label className="block text-xs text-slate-400 mb-1">PNG Sequence Folder</label>
-                              <Input type="text" placeholder="images/Cedi-Sequences/5" value={denom.flip_sequence_prefix} onChange={e => {
-                                const denoms = [...s.denominations]
-                                denoms[i] = { ...denom, flip_sequence_prefix: e.target.value }
-                                setSettings({ ...s, denominations: denoms })
-                              }} />
-                            </div>
-                          </div>
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-2">
-                            <div>
-                              <label className="block text-xs text-slate-400 mb-1">Sequence Frames</label>
-                              <Input type="number" value={denom.flip_sequence_frames} onChange={e => {
-                                const denoms = [...s.denominations]
-                                denoms[i] = { ...denom, flip_sequence_frames: parseInt(e.target.value) || 31 }
-                                setSettings({ ...s, denominations: denoms })
-                              }} />
+                              <label className="shrink-0">
+                                <span className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-amber-500/20 text-amber-400 text-xs rounded cursor-pointer hover:bg-amber-500/30 transition">
+                                  <Upload size={12} /> {uploading ? '...' : 'Upload'}
+                                </span>
+                                <input type="file" className="hidden" accept="image/gif" disabled={uploading}
+                                  onChange={e => {
+                                    const file = e.target.files?.[0]
+                                    if (file) uploadDenomFile(i, 'flip_gif_path', file)
+                                    e.target.value = ''
+                                  }} />
+                              </label>
                             </div>
                           </div>
-                        </>
+                        </div>
                       )}
                       <div className="flex items-center gap-2 mt-2">
                         <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
