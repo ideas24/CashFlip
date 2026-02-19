@@ -14,6 +14,7 @@ urlpatterns = [
     # Players
     path('players/', views.player_list, name='player_list'),
     path('players/<uuid:player_id>/', views.player_update, name='player_update'),
+    path('players/<uuid:player_id>/wallet/adjust/', views.player_wallet_adjust, name='player_wallet_adjust'),
 
     # Sessions
     path('sessions/', views.session_list, name='session_list'),

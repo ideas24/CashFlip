@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table'
 import { api } from '@/lib/api'
 import { formatCurrency, formatDateTime } from '@/lib/utils'
-import { Search, ChevronLeft, ChevronRight, Eye, Ban, CheckCircle, X, Wallet, Gamepad2, ArrowDownRight, ArrowUpRight } from 'lucide-react'
+import { Search, ChevronLeft, ChevronRight, Eye, Ban, CheckCircle, X, Wallet, Gamepad2, ArrowDownRight, ArrowUpRight, PlusCircle, MinusCircle } from 'lucide-react'
 
 interface Player {
   id: string
@@ -53,6 +53,11 @@ export default function PlayersPage() {
   const [page, setPage] = useState(1)
   const [detail, setDetail] = useState<PlayerDetail | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
+  const [adjusting, setAdjusting] = useState(false)
+  const [adjustAmount, setAdjustAmount] = useState('')
+  const [adjustNote, setAdjustNote] = useState('')
+  const [adjustType, setAdjustType] = useState<'admin_credit' | 'admin_debit'>('admin_credit')
+  const [adjustMsg, setAdjustMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
   const fetchPlayers = (p = 1, q = '') => {
     setLoading(true)
@@ -82,11 +87,34 @@ export default function PlayersPage() {
   const viewPlayer = async (id: string) => {
     setDetailLoading(true)
     setDetail(null)
+    setAdjustMsg(null)
+    setAdjustAmount('')
+    setAdjustNote('')
+    setAdjusting(false)
     try {
       const d = await api.get<PlayerDetail>(`/players/${id}/`)
       setDetail(d)
     } catch {}
     setDetailLoading(false)
+  }
+
+  const doWalletAdjust = async () => {
+    if (!detail || !adjustAmount) return
+    setAdjustMsg(null)
+    try {
+      const res = await api.post<{ success: boolean; new_balance: string; error?: string }>(
+        `/players/${detail.id}/wallet/adjust/`,
+        { amount: adjustAmount, tx_type: adjustType, note: adjustNote }
+      )
+      setAdjustMsg({ type: 'success', text: `Done! New balance: GHS ${parseFloat(res.new_balance).toFixed(2)}` })
+      setAdjustAmount('')
+      setAdjustNote('')
+      // Refresh detail
+      const d = await api.get<PlayerDetail>(`/players/${detail.id}/`)
+      setDetail(d)
+    } catch (e: any) {
+      setAdjustMsg({ type: 'error', text: e?.message || 'Failed to adjust wallet' })
+    }
   }
 
   const totalPages = data ? Math.ceil(data.count / 25) : 0
@@ -311,6 +339,66 @@ export default function PlayersPage() {
                     </div>
                   </div>
                 )}
+
+                {/* Admin Wallet Adjustment */}
+                <div className="border border-border rounded-lg p-4 bg-surface">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-sm font-semibold text-white flex items-center gap-1.5">
+                      <Wallet size={14} className="text-primary" /> Wallet Adjustment
+                    </h3>
+                    <Button variant="ghost" size="sm" onClick={() => setAdjusting(v => !v)}>
+                      {adjusting ? 'Cancel' : 'Adjust'}
+                    </Button>
+                  </div>
+                  {adjusting && (
+                    <div className="space-y-3">
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          variant={adjustType === 'admin_credit' ? 'primary' : 'outline'}
+                          className="flex-1 gap-1"
+                          onClick={() => setAdjustType('admin_credit')}
+                        >
+                          <PlusCircle size={13} /> Credit
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant={adjustType === 'admin_debit' ? 'danger' : 'outline'}
+                          className="flex-1 gap-1"
+                          onClick={() => setAdjustType('admin_debit')}
+                        >
+                          <MinusCircle size={13} /> Debit
+                        </Button>
+                      </div>
+                      <Input
+                        type="number"
+                        placeholder="Amount (GHS)"
+                        value={adjustAmount}
+                        onChange={e => setAdjustAmount(e.target.value)}
+                        min="0.01"
+                        step="0.01"
+                      />
+                      <Input
+                        placeholder="Note / reason (optional)"
+                        value={adjustNote}
+                        onChange={e => setAdjustNote(e.target.value)}
+                      />
+                      <Button
+                        className="w-full"
+                        variant={adjustType === 'admin_credit' ? 'primary' : 'danger'}
+                        disabled={!adjustAmount || parseFloat(adjustAmount) <= 0}
+                        onClick={doWalletAdjust}
+                      >
+                        {adjustType === 'admin_credit' ? `Credit GHS ${adjustAmount || '0'}` : `Debit GHS ${adjustAmount || '0'}`}
+                      </Button>
+                      {adjustMsg && (
+                        <p className={`text-xs ${adjustMsg.type === 'success' ? 'text-success' : 'text-danger'}`}>
+                          {adjustMsg.text}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
             )}
           </div>

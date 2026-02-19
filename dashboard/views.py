@@ -290,6 +290,68 @@ def player_update(request, player_id):
     })
 
 
+# ==================== PLAYER WALLET CREDIT/DEBIT ====================
+
+@api_view(['POST'])
+@permission_classes([IsStaffAdmin])
+def player_wallet_adjust(request, player_id):
+    """Admin credit or debit a player's wallet. tx_type: 'admin_credit' or 'admin_debit'."""
+    import uuid as _uuid
+    from decimal import Decimal, InvalidOperation
+    try:
+        player = Player.objects.get(id=player_id)
+    except Player.DoesNotExist:
+        return Response({'error': 'Player not found'}, status=404)
+
+    amount_raw = request.data.get('amount')
+    tx_type = request.data.get('tx_type', 'admin_credit')
+    note = request.data.get('note', '')
+
+    if tx_type not in ('admin_credit', 'admin_debit'):
+        return Response({'error': 'tx_type must be admin_credit or admin_debit'}, status=400)
+
+    try:
+        amount = Decimal(str(amount_raw))
+        if amount <= 0:
+            raise ValueError
+    except (InvalidOperation, ValueError, TypeError):
+        return Response({'error': 'Invalid amount'}, status=400)
+
+    wallet = getattr(player, 'wallet', None)
+    if not wallet:
+        return Response({'error': 'Player has no wallet'}, status=400)
+
+    from django.db import transaction as db_tx
+    with db_tx.atomic():
+        wallet_obj = Wallet.objects.select_for_update().get(pk=wallet.pk)
+        before = wallet_obj.balance
+        if tx_type == 'admin_credit':
+            wallet_obj.balance += amount
+        else:
+            if wallet_obj.balance < amount:
+                return Response({'error': 'Insufficient balance for debit'}, status=400)
+            wallet_obj.balance -= amount
+        wallet_obj.save(update_fields=['balance', 'updated_at'])
+        WalletTransaction.objects.create(
+            wallet=wallet_obj,
+            amount=amount if tx_type == 'admin_credit' else -amount,
+            tx_type=tx_type,
+            reference=f'ADMIN-{_uuid.uuid4().hex[:12].upper()}',
+            status='completed',
+            balance_before=before,
+            balance_after=wallet_obj.balance,
+            metadata={'note': note, 'admin': str(request.user.id)},
+        )
+
+    return Response({
+        'success': True,
+        'tx_type': tx_type,
+        'amount': str(amount),
+        'new_balance': str(wallet_obj.balance),
+        'player_id': str(player.id),
+    })
+
+
 # ==================== SESSIONS ====================
 
 @api_view(['GET'])

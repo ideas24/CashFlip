@@ -693,9 +693,11 @@ def daily_wheel_spin(request):
     if not segments:
         return Response({'error': 'No wheel segments configured'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-    # Weighted random selection
+    # Weighted random selection — track index explicitly to avoid duplicate-segment lookup bug
     weights = [s.get('weight', 1) for s in segments]
-    chosen = rng.choices(segments, weights=weights, k=1)[0]
+    population = list(range(len(segments)))
+    seg_index = rng.choices(population, weights=weights, k=1)[0]
+    chosen = segments[seg_index]
     amount = Decimal(str(chosen['value']))
 
     # Credit wallet
@@ -718,9 +720,6 @@ def daily_wheel_spin(request):
     DailyBonusSpin.objects.create(
         player=request.user, amount=amount, segment_label=chosen['label'],
     )
-
-    # Index of chosen segment for frontend animation
-    seg_index = segments.index(chosen)
 
     return Response({
         'success': True,

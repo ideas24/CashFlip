@@ -171,6 +171,21 @@ certbot --nginx \
     log "SSL certificate provisioning complete"
 }
 
+# ---- Action: Scale VMSS instances ----
+scale_vmss() {
+    local vmss_name="$1"
+    local count="$2"
+    log "Scaling $vmss_name to $count instances..."
+    az vmss scale \
+        --resource-group "$RESOURCE_GROUP" \
+        --name "$vmss_name" \
+        --new-capacity "$count" \
+        --output json 2>&1 | jq -r '.provisioningState // "Done"' || {
+            err "Failed to scale $vmss_name"
+        }
+    log "$vmss_name scaled to $count instances"
+}
+
 # ---- Action: Check status ----
 check_status() {
     log "Checking service status on all VMs..."
@@ -257,19 +272,6 @@ usage() {
     echo "=========================="
     echo ""
     echo "Usage:"
-    echo "  $0                            Code update only (git pull + restart)"
-    echo "  $0 --with-env FILE            Code update + push .env file"
-    echo "  $0 --init --env FILE          First-time: SSH key + env + full deploy"
-    echo "  $0 --env-only FILE            Push .env file only (no code update)"
-    echo "  $0 --admin                    Rebuild React admin console + restart pm2"
-    echo "  $0 --cert                     Provision/renew SSL certificates"
-    echo "  $0 --status                   Check service status on all VMs"
-    echo "  $0 --logs                     View deploy logs from all VMs"
-    echo "  $0 --journal [SERVICE] [N]    Tail service logs (default: all, 80 lines)"
-    echo "  $0 --journal [SERVICE] -f      Near-realtime: last 2 min of logs"
-    echo "                                  Services: gunicorn | celery | beat | all"
-    echo "  $0 --help                     Show this help"
-    echo ""
     echo "Examples:"
     echo "  # Initial production deploy"
     echo "  $0 --init --env terraform/production.env"
@@ -318,6 +320,8 @@ main() {
     local journal_service="all"
     local journal_lines="80"
     local journal_follow=false
+    local scale_app=""
+    local scale_celery=""
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -346,6 +350,16 @@ main() {
             --cert)
                 mode="cert"
                 shift
+                ;;
+            --scale)
+                mode="scale"
+                shift
+                scale_app="$1"
+                shift
+                if [[ $# -gt 0 && "$1" =~ ^[0-9]+$ ]]; then
+                    scale_celery="$1"
+                    shift
+                fi
                 ;;
             --status)
                 mode="status"
@@ -435,6 +449,20 @@ main() {
             ;;
         cert)
             provision_certs
+            ;;
+        scale)
+            if [ -z "$scale_app" ]; then
+                err "Usage: $0 --scale APP_COUNT [CELERY_COUNT]"
+                exit 1
+            fi
+            log "=== VMSS SCALE ==="
+            scale_vmss "$APP_VMSS" "$scale_app"
+            if [ -n "$scale_celery" ]; then
+                scale_vmss "$CELERY_VMSS" "$scale_celery"
+            fi
+            # Deploy code to any new instances
+            log "Deploying code to newly scaled instances..."
+            deploy_code
             ;;
         status)
             check_status

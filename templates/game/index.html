@@ -420,19 +420,25 @@
         <div class="modal-backdrop"></div>
         <div class="modal-content">
             <div class="modal-header">
-                <h3>🔄 Transfer</h3>
+                <h3>🔄 Transfer Funds</h3>
                 <button class="modal-close" data-modal="transfer-modal">✕</button>
             </div>
             <div class="modal-body">
                 <div class="input-group">
-                    <label>Recipient Phone</label>
-                    <input type="tel" id="trf-phone" placeholder="0241234567" maxlength="12" autocomplete="off">
+                    <label>Recipient Phone Number</label>
+                    <div style="display:flex;gap:0.5rem;align-items:center;">
+                        <input type="tel" id="trf-phone" placeholder="0241234567" maxlength="12" autocomplete="off" style="flex:1;">
+                        <span id="trf-network-badge" class="network-badge" style="display:none;"></span>
+                    </div>
+                </div>
+                <div id="trf-recipient-preview" style="display:none;" class="verify-status" style="margin-bottom:0.5rem;">
+                    <span id="trf-recipient-name" style="font-size:0.85rem;color:var(--teal);"></span>
                 </div>
                 <div class="input-group">
                     <label>Amount (GH₵)</label>
                     <input type="number" id="trf-amount" min="1" max="500" step="0.5" placeholder="Enter amount">
                 </div>
-                <p class="text-muted small">Min GH₵1 · Max GH₵500 per transfer</p>
+                <p class="text-muted small">Min GH₵1 · Max GH₵500 per transfer · Recipient must be a CashFlip player</p>
                 <button id="trf-btn" class="btn-primary">Send Funds</button>
                 <div id="trf-status" class="status-msg"></div>
             </div>
@@ -560,11 +566,14 @@
         <div class="modal-backdrop"></div>
         <div class="modal-content">
             <div class="modal-header">
-                <h3>🔗 Refer & Earn</h3>
+                <h3>🔗 Refer &amp; Earn</h3>
                 <button class="modal-close" data-modal="referral-modal">✕</button>
             </div>
             <div class="modal-body">
-                <p>Share your referral link and earn bonuses!</p>
+                <div class="referral-hero">
+                    <div class="referral-bonus-badge" id="ref-bonus-badge">Earn GH₵1 per referral</div>
+                    <p class="referral-desc">Invite friends to play. When they make their first deposit, you both earn a bonus!</p>
+                </div>
                 <div class="referral-link-box">
                     <input type="text" id="referral-link" readonly>
                     <button id="copy-referral" class="btn-small">📋 Copy</button>
@@ -572,9 +581,94 @@
                 <div class="referral-stats">
                     <div class="stat"><span class="stat-value" id="ref-total">0</span><span class="stat-label">Referrals</span></div>
                     <div class="stat"><span class="stat-value" id="ref-earned">₵0</span><span class="stat-label">Earned</span></div>
+                    <div class="stat"><span class="stat-value" id="ref-pending">0</span><span class="stat-label">Pending</span></div>
                 </div>
+                <p class="text-muted small" style="text-align:center;margin-bottom:0.75rem;">Share your link via:</p>
                 <div class="share-buttons">
-                    <button id="share-whatsapp" class="btn-share whatsapp">Share on WhatsApp</button>
+                    <button id="share-whatsapp" class="btn-share whatsapp">💬 WhatsApp</button>
+                    <button id="share-sms" class="btn-share sms">📱 SMS</button>
+                    <button id="share-telegram" class="btn-share telegram">✈️ Telegram</button>
+                    <button id="share-twitter" class="btn-share twitter">🐦 X / Twitter</button>
+                    <button id="share-native" class="btn-share native" id="share-native">↗ More</button>
+                </div>
+                <div class="referral-how">
+                    <div class="how-step"><span class="how-num">1</span><span>Share your link</span></div>
+                    <div class="how-step"><span class="how-num">2</span><span>Friend signs up &amp; deposits</span></div>
+                    <div class="how-step"><span class="how-num">3</span><span>You both earn bonuses!</span></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settings-modal" class="modal hidden">
+        <div class="modal-backdrop"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>⚙️ Settings</h3>
+                <button class="modal-close" data-modal="settings-modal">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="settings-section">
+                    <h4 class="settings-section-title">Game Preferences</h4>
+                    <div class="settings-row">
+                        <div>
+                            <span class="settings-label">Sound Effects</span>
+                            <span class="settings-desc">Flip &amp; win sounds</span>
+                        </div>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="setting-sound" checked>
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <div class="settings-row">
+                        <div>
+                            <span class="settings-label">Haptic Feedback</span>
+                            <span class="settings-desc">Vibration on flip</span>
+                        </div>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="setting-haptic" checked>
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <div class="settings-row">
+                        <div>
+                            <span class="settings-label">Auto-Flip</span>
+                            <span class="settings-desc">Flip automatically after delay</span>
+                        </div>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="setting-autoflip">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <div class="settings-row" id="autoflip-speed-row" style="display:none;">
+                        <span class="settings-label">Auto-Flip Speed</span>
+                        <select id="setting-autoflip-speed" class="settings-select">
+                            <option value="3">3 seconds</option>
+                            <option value="5" selected>5 seconds</option>
+                            <option value="8">8 seconds</option>
+                            <option value="12">12 seconds</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="settings-section">
+                    <h4 class="settings-section-title">Account</h4>
+                    <div class="settings-row">
+                        <span class="settings-label">Phone</span>
+                        <span class="settings-value" id="settings-phone">—</span>
+                    </div>
+                    <div class="settings-row">
+                        <span class="settings-label">Player ID</span>
+                        <span class="settings-value mono" id="settings-player-id">—</span>
+                    </div>
+                </div>
+                <div class="settings-section">
+                    <h4 class="settings-section-title">App</h4>
+                    <div class="settings-row">
+                        <span class="settings-label">Version</span>
+                        <span class="settings-value">1.0.0</span>
+                    </div>
+                    <button id="settings-logout-btn" class="btn-danger-outline" style="width:100%;margin-top:1rem;">🚪 Logout</button>
                 </div>
             </div>
         </div>

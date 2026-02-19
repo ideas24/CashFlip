@@ -1374,6 +1374,94 @@ html, body {
 .social-emoji { margin-right: 4px; }
 .social-amount { color: #ffd700; font-weight: 800; font-family: 'Orbitron', sans-serif; }
 
+/* ==================== SETTINGS MODAL ==================== */
+.settings-section {
+    margin-bottom: 1.25rem;
+    padding-bottom: 1.25rem;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.settings-section:last-child { border-bottom: none; margin-bottom: 0; }
+.settings-section-title {
+    font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.15em;
+    color: var(--text-secondary); margin-bottom: 0.75rem; font-weight: 600;
+}
+.settings-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0.5rem 0; gap: 1rem;
+}
+.settings-label { font-size: 0.9rem; color: var(--text-primary); }
+.settings-desc { display: block; font-size: 0.7rem; color: var(--text-secondary); margin-top: 1px; }
+.settings-value { font-size: 0.85rem; color: var(--text-secondary); }
+.settings-value.mono { font-family: monospace; font-size: 0.75rem; }
+.settings-select {
+    background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1);
+    color: var(--text-primary); border-radius: 8px; padding: 0.3rem 0.6rem;
+    font-size: 0.85rem;
+}
+/* Toggle switch */
+.toggle-switch { position: relative; display: inline-block; width: 44px; height: 24px; flex-shrink: 0; }
+.toggle-switch input { opacity: 0; width: 0; height: 0; }
+.toggle-slider {
+    position: absolute; cursor: pointer; inset: 0;
+    background: rgba(255,255,255,0.12); border-radius: 24px;
+    transition: background 0.2s;
+}
+.toggle-slider::before {
+    content: ''; position: absolute; width: 18px; height: 18px;
+    left: 3px; bottom: 3px; background: #fff; border-radius: 50%;
+    transition: transform 0.2s;
+}
+.toggle-switch input:checked + .toggle-slider { background: var(--teal); }
+.toggle-switch input:checked + .toggle-slider::before { transform: translateX(20px); }
+.btn-danger-outline {
+    background: transparent; border: 1px solid var(--danger);
+    color: var(--danger); border-radius: 10px; padding: 0.6rem 1rem;
+    cursor: pointer; font-size: 0.9rem; transition: all 0.2s;
+}
+.btn-danger-outline:hover { background: rgba(255,107,107,0.1); }
+
+/* ==================== REFERRAL MODAL REVAMP ==================== */
+.referral-hero { text-align: center; margin-bottom: 1rem; }
+.referral-bonus-badge {
+    display: inline-block; background: linear-gradient(135deg, var(--gold), #e6a817);
+    color: #000; font-weight: 800; font-size: 0.85rem; border-radius: 20px;
+    padding: 0.3rem 1rem; margin-bottom: 0.5rem;
+}
+.referral-desc { font-size: 0.8rem; color: var(--text-secondary); line-height: 1.4; }
+.share-buttons {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem;
+    margin-bottom: 1rem;
+}
+.btn-share {
+    border: none; border-radius: 10px; padding: 0.5rem 0.4rem;
+    font-size: 0.78rem; font-weight: 600; cursor: pointer;
+    transition: all 0.15s; display: flex; align-items: center; justify-content: center; gap: 0.3rem;
+}
+.btn-share.whatsapp { background: #25D366; color: #fff; }
+.btn-share.whatsapp:hover { background: #1ebe5d; }
+.btn-share.sms { background: #4a90d9; color: #fff; }
+.btn-share.sms:hover { background: #3a7fc8; }
+.btn-share.telegram { background: #0088cc; color: #fff; }
+.btn-share.telegram:hover { background: #0077b5; }
+.btn-share.twitter { background: #1da1f2; color: #fff; }
+.btn-share.twitter:hover { background: #0d8fd8; }
+.btn-share.native { background: rgba(255,255,255,0.1); color: var(--text-primary); border: 1px solid rgba(255,255,255,0.15); }
+.btn-share.native:hover { background: rgba(255,255,255,0.15); }
+.referral-how {
+    display: flex; gap: 0.5rem; justify-content: center;
+    margin-top: 0.75rem; padding-top: 0.75rem;
+    border-top: 1px solid rgba(255,255,255,0.06);
+}
+.how-step {
+    display: flex; flex-direction: column; align-items: center; gap: 0.3rem;
+    flex: 1; text-align: center; font-size: 0.72rem; color: var(--text-secondary);
+}
+.how-num {
+    width: 22px; height: 22px; border-radius: 50%;
+    background: var(--teal); color: #000; font-weight: 800;
+    display: flex; align-items: center; justify-content: center; font-size: 0.75rem;
+}
+
 /* ==================== SIDE ENGAGEMENT PANELS ==================== */
 
 /* Left side — Session Stats Strip */

@@ -2122,6 +2122,43 @@
         }
     }
 
+    // ==================== SETTINGS ====================
+    const _settingsKey = 'cf_settings';
+    let _settings = { sound: true, haptic: true, autoflip: false, autoflipSpeed: 5 };
+
+    function loadSettings() {
+        try {
+            const saved = JSON.parse(localStorage.getItem(_settingsKey) || '{}');
+            _settings = { ..._settings, ...saved };
+        } catch (e) {}
+    }
+
+    function saveSettings() {
+        try { localStorage.setItem(_settingsKey, JSON.stringify(_settings)); } catch (e) {}
+    }
+
+    function openSettings() {
+        // Populate account info
+        if (state.player) {
+            const phoneEl = document.getElementById('settings-phone');
+            const idEl = document.getElementById('settings-player-id');
+            if (phoneEl) phoneEl.textContent = state.player.phone || '—';
+            if (idEl) idEl.textContent = (state.player.id || '').substring(0, 12) + '…';
+        }
+        // Sync toggles to current settings
+        const soundEl = document.getElementById('setting-sound');
+        const hapticEl = document.getElementById('setting-haptic');
+        const autoflipEl = document.getElementById('setting-autoflip');
+        const speedEl = document.getElementById('setting-autoflip-speed');
+        const speedRow = document.getElementById('autoflip-speed-row');
+        if (soundEl) soundEl.checked = _settings.sound;
+        if (hapticEl) hapticEl.checked = _settings.haptic;
+        if (autoflipEl) autoflipEl.checked = _settings.autoflip;
+        if (speedEl) speedEl.value = String(_settings.autoflipSpeed || 5);
+        if (speedRow) speedRow.style.display = _settings.autoflip ? '' : 'none';
+        showModal('settings-modal');
+    }
+
     // ==================== HISTORY & REFERRAL ====================
     async function loadHistory() {
         const container = document.getElementById('history-list');
@@ -2155,6 +2192,23 @@
     }
 
     // ==================== TRANSFER ====================
+    function handleTrfPhoneInput() {
+        const phone = document.getElementById('trf-phone')?.value?.replace(/\D/g, '') || '';
+        const badge = document.getElementById('trf-network-badge');
+        const preview = document.getElementById('trf-recipient-preview');
+        const nw = detectNetworkFromPhone(phone);
+        if (badge) {
+            if (nw && phone.length >= 3) {
+                badge.textContent = NETWORK_NAMES[nw] || nw;
+                badge.className = 'network-badge ' + nw.toLowerCase();
+                badge.style.display = 'inline-block';
+            } else {
+                badge.style.display = 'none';
+            }
+        }
+        if (preview) preview.style.display = 'none';
+    }
+
     async function doTransfer() {
         const phone = document.getElementById('trf-phone')?.value?.trim();
         const amount = document.getElementById('trf-amount')?.value;
@@ -2598,9 +2652,24 @@
             const resp = await API.get('/accounts/profile/');
             if (resp.ok) {
                 const player = await resp.json();
-                // referral code is generated at login, get it from profile
-                const refLink = window.location.origin + '/?ref=' + (player.id || '').substring(0, 8);
+                const code = player.referral_code || (player.id || '').substring(0, 8);
+                const refLink = window.location.origin + '/?ref=' + code;
                 document.getElementById('referral-link').value = refLink;
+            }
+        } catch (e) { /* ignore */ }
+
+        // Load referral stats
+        try {
+            const resp = await API.get('/referrals/stats/');
+            if (resp.ok) {
+                const data = await resp.json();
+                const sym = state.session?.currency?.symbol || 'GH₵';
+                document.getElementById('ref-total').textContent = data.total_referrals || 0;
+                document.getElementById('ref-earned').textContent = `${sym}${parseFloat(data.total_earned || 0).toFixed(2)}`;
+                document.getElementById('ref-pending').textContent = data.pending_referrals || 0;
+                if (data.referrer_bonus) {
+                    document.getElementById('ref-bonus-badge').textContent = `Earn ${sym}${parseFloat(data.referrer_bonus).toFixed(2)} per referral`;
+                }
             }
         } catch (e) { /* ignore */ }
     }
@@ -2747,6 +2816,10 @@
         });
 
         // Profile menu items
+        document.getElementById('menu-settings')?.addEventListener('click', () => {
+            document.getElementById('profile-panel')?.classList.remove('show');
+            openSettings();
+        });
         document.getElementById('menu-history')?.addEventListener('click', () => {
             document.getElementById('profile-panel')?.classList.remove('show');
             showModal('history-modal');
@@ -2761,6 +2834,32 @@
             document.getElementById('profile-panel')?.classList.remove('show');
             logout();
         });
+
+        // Settings modal
+        document.getElementById('settings-logout-btn')?.addEventListener('click', () => {
+            hideModal('settings-modal');
+            logout();
+        });
+        document.getElementById('setting-sound')?.addEventListener('change', (e) => {
+            _settings.sound = e.target.checked;
+            saveSettings();
+        });
+        document.getElementById('setting-haptic')?.addEventListener('change', (e) => {
+            _settings.haptic = e.target.checked;
+            saveSettings();
+        });
+        document.getElementById('setting-autoflip')?.addEventListener('change', (e) => {
+            _settings.autoflip = e.target.checked;
+            saveSettings();
+            document.getElementById('autoflip-speed-row').style.display = e.target.checked ? '' : 'none';
+        });
+        document.getElementById('setting-autoflip-speed')?.addEventListener('change', (e) => {
+            _settings.autoflipSpeed = parseInt(e.target.value);
+            saveSettings();
+        });
+
+        // Transfer phone network detection
+        document.getElementById('trf-phone')?.addEventListener('input', handleTrfPhoneInput);
 
         // Modal close buttons
         document.querySelectorAll('.modal-close').forEach(btn => {
@@ -2796,16 +2895,50 @@
         document.getElementById('copy-referral')?.addEventListener('click', () => {
             const input = document.getElementById('referral-link');
             if (input) {
-                navigator.clipboard?.writeText(input.value);
-                showToast('Link copied!');
+                navigator.clipboard?.writeText(input.value).catch(() => {
+                    input.select(); document.execCommand('copy');
+                });
+                showToast('Link copied! 📋');
             }
         });
 
+        const _getRefMsg = () => {
+            const link = document.getElementById('referral-link')?.value || '';
+            return `🎰 Play CashFlip & win real money! Use my link to sign up and we both earn a bonus: ${link}`;
+        };
+
         // Share WhatsApp
         document.getElementById('share-whatsapp')?.addEventListener('click', () => {
-            const link = document.getElementById('referral-link')?.value;
-            if (link) {
-                window.open(`https://wa.me/?text=${encodeURIComponent('Play Cashflip and win big! 🎰💵 ' + link)}`, '_blank');
+            window.open(`https://wa.me/?text=${encodeURIComponent(_getRefMsg())}`, '_blank');
+        });
+
+        // Share SMS
+        document.getElementById('share-sms')?.addEventListener('click', () => {
+            window.open(`sms:?body=${encodeURIComponent(_getRefMsg())}`, '_blank');
+        });
+
+        // Share Telegram
+        document.getElementById('share-telegram')?.addEventListener('click', () => {
+            const link = document.getElementById('referral-link')?.value || '';
+            window.open(`https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent('🎰 Play CashFlip & win real money!')}`, '_blank');
+        });
+
+        // Share Twitter/X
+        document.getElementById('share-twitter')?.addEventListener('click', () => {
+            const link = document.getElementById('referral-link')?.value || '';
+            window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent('🎰 Play CashFlip & win real money! ' + link)}`, '_blank');
+        });
+
+        // Share Native (Web Share API)
+        document.getElementById('share-native')?.addEventListener('click', async () => {
+            const link = document.getElementById('referral-link')?.value || '';
+            if (navigator.share) {
+                try {
+                    await navigator.share({ title: 'CashFlip', text: '🎰 Play CashFlip & win real money!', url: link });
+                } catch (e) { /* user cancelled */ }
+            } else {
+                navigator.clipboard?.writeText(link).catch(() => {});
+                showToast('Link copied! Share it anywhere.');
             }
         });
 
@@ -2839,6 +2972,7 @@
     document.addEventListener('click', initAudioOnInteraction, { once: true });
 
     async function init() {
+        loadSettings();
         bindEvents();
         initAuth();
 
