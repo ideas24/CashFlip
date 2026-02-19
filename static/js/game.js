@@ -1542,9 +1542,21 @@
                 lossBurst();
                 triggerLossEffect();
 
-                document.getElementById('loss-stake-amount').textContent =
-                    `${state.session.currency?.symbol || 'GH₵'}${parseFloat(state.session.stake_amount).toFixed(2)}`;
-                document.getElementById('loss-overlay').classList.remove('hidden');
+                // Show zero note first
+                const zeroNote = document.getElementById('zero-note');
+                zeroNote.classList.remove('hidden');
+                zeroNote.classList.add('show');
+                
+                // Show loss overlay after delay
+                setTimeout(() => {
+                    zeroNote.classList.remove('show');
+                    setTimeout(() => {
+                        zeroNote.classList.add('hidden');
+                        document.getElementById('loss-stake-amount').textContent =
+                            `${state.session.currency?.symbol || 'GH₵'}${parseFloat(state.session.stake_amount).toFixed(2)}`;
+                        document.getElementById('loss-overlay').classList.remove('hidden');
+                    }, 300);
+                }, 1500);
             } else {
                 // WIN — denomination shown on the note face itself
                 const denomDisplay = document.getElementById('denom-display');
@@ -1655,6 +1667,24 @@
         }
     }
 
+    function showStakeModalInGame() {
+        // Reset session state
+        state.session = null;
+        document.getElementById('loss-overlay')?.classList.add('hidden');
+        document.getElementById('cashout-overlay')?.classList.add('hidden');
+        document.getElementById('flip-result-overlay')?.classList.add('hidden');
+        
+        // Show stake modal in game room
+        const modal = document.getElementById('game-stake-modal');
+        if (modal) {
+            modal.classList.remove('hidden');
+            // Focus on stake input
+            setTimeout(() => {
+                document.getElementById('game-stake-input')?.focus();
+            }, 100);
+        }
+    }
+
     function returnToLobby() {
         _stopAutoFlipTimer();
         if (animationId) cancelAnimationFrame(animationId);
@@ -1662,6 +1692,7 @@
         document.getElementById('loss-overlay')?.classList.add('hidden');
         document.getElementById('cashout-overlay')?.classList.add('hidden');
         document.getElementById('flip-result-overlay')?.classList.add('hidden');
+        document.getElementById('game-stake-modal')?.classList.add('hidden');
         enterLobby();
     }
 
@@ -2701,7 +2732,8 @@
         // Loss/Cashout overlays
         document.getElementById('play-again-btn')?.addEventListener('click', () => {
             document.getElementById('loss-overlay').classList.add('hidden');
-            returnToLobby();
+            // Stay in game room and show stake modal
+            showStakeModalInGame();
         });
         document.getElementById('loss-lobby-btn')?.addEventListener('click', () => {
             document.getElementById('loss-overlay').classList.add('hidden');
@@ -2864,6 +2896,69 @@
         // Modal close buttons
         document.querySelectorAll('.modal-close').forEach(btn => {
             btn.addEventListener('click', () => hideModal(btn.dataset.modal));
+        });
+
+        // Game stake modal (for Play Again)
+        document.getElementById('game-stake-input')?.addEventListener('input', (e) => {
+            const btn = document.getElementById('game-start-btn');
+            const amount = parseFloat(e.target.value);
+            btn.disabled = isNaN(amount) || amount < 0.5;
+        });
+
+        // Quick stakes in game modal
+        document.querySelectorAll('#game-stake-modal .quick-stake').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.getElementById('game-stake-input').value = btn.dataset.amount;
+                document.getElementById('game-start-btn').disabled = false;
+            });
+        });
+
+        document.getElementById('game-start-btn')?.addEventListener('click', async () => {
+            const stakeInput = document.getElementById('game-stake-input');
+            const stake = parseFloat(stakeInput?.value || '1');
+            const statusEl = document.getElementById('game-stake-status');
+            const btn = document.getElementById('game-start-btn');
+
+            if (isNaN(stake) || stake < 0.5) {
+                statusEl.textContent = 'Enter a valid stake amount';
+                statusEl.className = 'status-msg error';
+                return;
+            }
+
+            btn.disabled = true;
+            btn.textContent = 'Starting...';
+            statusEl.textContent = '';
+
+            try {
+                const resp = await API.post('/game/start/', {
+                    stake_amount: stake.toFixed(2),
+                    currency_code: 'GHS',
+                });
+                const data = await resp.json();
+
+                if (resp.ok) {
+                    state.session = {
+                        id: data.session_id,
+                        server_seed_hash: data.server_seed_hash,
+                        stake_amount: data.stake_amount,
+                        cashout_balance: '0.00',
+                        flip_count: 0,
+                        status: 'active',
+                        currency: data.currency,
+                    };
+                    hideModal('game-stake-modal');
+                    enterGame();
+                } else {
+                    statusEl.textContent = data.error || 'Failed to start game';
+                    statusEl.className = 'status-msg error';
+                }
+            } catch (e) {
+                statusEl.textContent = 'Network error';
+                statusEl.className = 'status-msg error';
+            }
+
+            btn.disabled = false;
+            btn.textContent = '🎰 Start Game';
         });
         document.querySelectorAll('.modal-backdrop').forEach(bd => {
             bd.addEventListener('click', () => {
