@@ -439,7 +439,11 @@
         if (_swipeCurrentAngle >= 35) {
             // Commit the flip
             _stopAutoFlipTimer();
-            card.classList.add('flipping');
+            // Only do CSS peel if no GIF/PNG assets (CSS fallback mode)
+            const hasAnimAssets = (state.denominations || []).some(d => d.flip_gif_path || d.flip_sequence_prefix);
+            if (!hasAnimAssets) {
+                card.classList.add('flipping');
+            }
             card.style.transform = '';
             _hapticHeavy();
             doFlip();
@@ -486,7 +490,9 @@
                     if (card) {
                         card.classList.remove('entering', 'spring-back', 'dragging');
                         card.style.transform = '';
-                        card.classList.add('flipping');
+                        // Only CSS peel when no GIF/PNG assets
+                        const hasAnimAssets = (state.denominations || []).some(d => d.flip_gif_path || d.flip_sequence_prefix);
+                        if (!hasAnimAssets) card.classList.add('flipping');
                     }
                     doFlip();
                 }
@@ -586,19 +592,27 @@
     // ---- GIF FLIP ANIMATION ----
     function _flipWithGif(card, gifPath, durationMs, value, sym, resolve) {
         const gifUrl = `/static/${gifPath}`;
-        // Add cache-bust to force GIF restart from frame 0
+        // Cache-bust forces GIF to restart from frame 0 each time
         const cacheBust = `?t=${Date.now()}`;
 
+        // Remove any CSS transform classes - the GIF IS the flip animation
         card.classList.remove('entering', 'dragging', 'spring-back', 'flipping');
-        card.innerHTML = `
-            <div class="seq-player" id="seq-player" style="position:relative;width:100%;height:100%;">
-                <img id="seq-frame" src="${gifUrl}${cacheBust}" alt="flip"
-                     style="width:100%;height:100%;object-fit:contain;border-radius:10px;" />
-                <div class="nf-denom-overlay seq-value-overlay hidden" id="seq-value-overlay">
-                    <span class="nf-denom-value">+${sym}${parseFloat(value).toFixed(2)}</span>
-                </div>
+        card.style.transform = 'none';
+
+        // Overlay the GIF on top of the existing face image for a smooth transition.
+        // The face stays visible briefly while the GIF loads, then the GIF covers it.
+        const gifOverlay = document.createElement('div');
+        gifOverlay.id = 'gif-flip-overlay';
+        gifOverlay.style.cssText = 'position:absolute;inset:0;z-index:10;border-radius:10px;overflow:hidden;background:#0D1117;';
+        gifOverlay.innerHTML = `
+            <img src="${gifUrl}${cacheBust}" alt="flip"
+                 style="width:100%;height:100%;object-fit:cover;border-radius:10px;display:block;" />
+            <div class="nf-denom-overlay seq-value-overlay hidden" id="seq-value-overlay"
+                 style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:2;">
+                <span class="nf-denom-value" style="font-family:'Orbitron',sans-serif;font-size:clamp(1.2rem,4vw,2rem);font-weight:900;color:#fff;text-shadow:0 2px 8px rgba(0,0,0,0.7),0 0 20px rgba(0,191,166,0.4);">+${sym}${parseFloat(value).toFixed(2)}</span>
             </div>
         `;
+        card.appendChild(gifOverlay);
 
         // After GIF plays for the configured duration, show value and move on
         setTimeout(() => {
@@ -629,16 +643,23 @@
         const denomVal = seqPrefix.split('/').pop();
         const filePrefix = (denomVal === '1') ? `${denomVal}cedi` : `${denomVal}cedis`;
 
+        // Remove CSS transforms - the sequence IS the flip animation
         card.classList.remove('entering', 'dragging', 'spring-back', 'flipping');
-        card.innerHTML = `
-            <div class="seq-player" id="seq-player" style="position:relative;width:100%;height:100%;">
-                <img id="seq-frame" src="${staticBase}/${filePrefix}_00000.png" alt="flip"
-                     style="width:100%;height:100%;object-fit:contain;border-radius:10px;" />
-                <div class="nf-denom-overlay seq-value-overlay hidden" id="seq-value-overlay">
-                    <span class="nf-denom-value">+${sym}${parseFloat(value).toFixed(2)}</span>
-                </div>
+        card.style.transform = 'none';
+
+        // Overlay the sequence player on top of the face image
+        const seqOverlay = document.createElement('div');
+        seqOverlay.id = 'seq-player';
+        seqOverlay.style.cssText = 'position:absolute;inset:0;z-index:10;border-radius:10px;overflow:hidden;background:#0D1117;';
+        seqOverlay.innerHTML = `
+            <img id="seq-frame" src="${staticBase}/${filePrefix}_00000.png" alt="flip"
+                 style="width:100%;height:100%;object-fit:cover;border-radius:10px;display:block;" />
+            <div class="nf-denom-overlay seq-value-overlay hidden" id="seq-value-overlay"
+                 style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:2;">
+                <span class="nf-denom-value" style="font-family:'Orbitron',sans-serif;font-size:clamp(1.2rem,4vw,2rem);font-weight:900;color:#fff;text-shadow:0 2px 8px rgba(0,0,0,0.7),0 0 20px rgba(0,191,166,0.4);">+${sym}${parseFloat(value).toFixed(2)}</span>
             </div>
         `;
+        card.appendChild(seqOverlay);
 
         const frameImg = document.getElementById('seq-frame');
         let currentFrame = 0;
