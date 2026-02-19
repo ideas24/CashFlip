@@ -1626,10 +1626,10 @@
             const sym = state.session.currency?.symbol || 'GH₵';
             document.getElementById('pause-balance-display').textContent =
                 `${sym}${parseFloat(data.current_balance || state.session.cashout_balance).toFixed(2)}`;
-            document.getElementById('pause-fee-display').textContent =
+            document.getElementById('pause-cost-display').textContent =
                 `${sym}${parseFloat(data.pause_cost || 0).toFixed(2)}`;
             document.getElementById('pause-after-display').textContent =
-                `${sym}${parseFloat(data.balance_after_pause || 0).toFixed(2)}`;
+                `${sym}${parseFloat(data.balance_after_pause || data.remaining_balance || 0).toFixed(2)}`;
 
             showModal('pause-modal');
         } catch (e) {
