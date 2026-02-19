@@ -96,79 +96,156 @@
     // ==================== THREE.JS SCENE ====================
     let scene, camera, renderer, particles;
     let animationId;
+    let _sceneTime = 0;
+    let _bgOrbs = [];
 
     function initScene() {
         const canvas = document.getElementById('game-canvas');
         if (!canvas) return;
 
         scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x0a0e17);
-        scene.fog = new THREE.FogExp2(0x0a0e17, 0.015);
+        scene.background = new THREE.Color(0x060a14);
+        scene.fog = new THREE.FogExp2(0x060a14, 0.012);
 
-        camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 100);
-        camera.position.set(0, 0, 5);
+        camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 120);
+        camera.position.set(0, 0.5, 6);
 
         renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        renderer.toneMappingExposure = 1.1;
 
-        // Lighting
-        const ambientLight = new THREE.AmbientLight(0x404060, 0.6);
+        // === Premium Lighting ===
+        const ambientLight = new THREE.AmbientLight(0x1a1a3a, 0.4);
         scene.add(ambientLight);
 
-        const spotLight = new THREE.SpotLight(0xffd700, 1.5, 20, Math.PI / 4, 0.5);
-        spotLight.position.set(0, 5, 5);
-        scene.add(spotLight);
+        // Warm overhead spotlight — pool-of-light on the note area
+        const mainSpot = new THREE.SpotLight(0xffd700, 2.5, 25, Math.PI / 5, 0.6, 1.5);
+        mainSpot.position.set(0, 8, 4);
+        mainSpot.target.position.set(0, 0, 0);
+        scene.add(mainSpot);
+        scene.add(mainSpot.target);
 
-        const pointLight1 = new THREE.PointLight(0x00ff88, 0.4, 15);
-        pointLight1.position.set(-5, 2, 3);
-        scene.add(pointLight1);
+        // Teal rim lights flanking the table
+        const rimLeft = new THREE.PointLight(0x00bfa6, 0.8, 18);
+        rimLeft.position.set(-6, 3, 2);
+        scene.add(rimLeft);
 
-        const pointLight2 = new THREE.PointLight(0x00d4ff, 0.4, 15);
-        pointLight2.position.set(5, 2, 3);
-        scene.add(pointLight2);
+        const rimRight = new THREE.PointLight(0x00bfa6, 0.8, 18);
+        rimRight.position.set(6, 3, 2);
+        scene.add(rimRight);
 
-        // Casino table (felt surface)
-        const tableGeo = new THREE.PlaneGeometry(20, 12);
+        // Purple underglow
+        const underGlow = new THREE.PointLight(0x8b5cf6, 0.35, 12);
+        underGlow.position.set(0, -3, 2);
+        scene.add(underGlow);
+
+        // Warm fill from behind camera
+        const fillLight = new THREE.PointLight(0xffeedd, 0.25, 20);
+        fillLight.position.set(0, 2, 8);
+        scene.add(fillLight);
+
+        // === Glossy Casino Table ===
+        const tableGeo = new THREE.PlaneGeometry(22, 14, 1, 1);
         const tableMat = new THREE.MeshStandardMaterial({
-            color: 0x0d4d2b, roughness: 0.8, metalness: 0.1,
+            color: 0x0a3d22,
+            roughness: 0.25,
+            metalness: 0.5,
+            envMapIntensity: 0.6,
         });
         const table = new THREE.Mesh(tableGeo, tableMat);
         table.rotation.x = -Math.PI / 2;
-        table.position.y = -2;
+        table.position.y = -2.5;
         scene.add(table);
 
-        // Particles
+        // Gold trim ring around the table
+        const ringGeo = new THREE.RingGeometry(7.5, 7.8, 64);
+        const ringMat = new THREE.MeshStandardMaterial({
+            color: 0xd4a72c, roughness: 0.2, metalness: 0.9,
+            emissive: 0xd4a72c, emissiveIntensity: 0.15,
+        });
+        const ring = new THREE.Mesh(ringGeo, ringMat);
+        ring.rotation.x = -Math.PI / 2;
+        ring.position.y = -2.48;
+        scene.add(ring);
+
+        // === Background Orbs (slow-moving ambient glow) ===
+        _bgOrbs = [];
+        const orbData = [
+            { color: 0x00bfa6, x: -4, y: 1, z: -6, size: 3.5 },
+            { color: 0xffd700, x: 5, y: 2, z: -8, size: 2.8 },
+            { color: 0x8b5cf6, x: 0, y: -1, z: -10, size: 4.0 },
+        ];
+        orbData.forEach((o, i) => {
+            const geo = new THREE.SphereGeometry(o.size, 16, 16);
+            const mat = new THREE.MeshBasicMaterial({
+                color: o.color, transparent: true, opacity: 0.035,
+            });
+            const mesh = new THREE.Mesh(geo, mat);
+            mesh.position.set(o.x, o.y, o.z);
+            scene.add(mesh);
+            _bgOrbs.push({ mesh, baseX: o.x, baseY: o.y, speed: 0.15 + i * 0.08 });
+        });
+
+        // === Enhanced Particle System ===
         const particleGeo = new THREE.BufferGeometry();
-        const particleCount = 200;
+        const particleCount = 500;
         const positions = new Float32Array(particleCount * 3);
         const colors = new Float32Array(particleCount * 3);
+        const sizes = new Float32Array(particleCount);
 
         for (let i = 0; i < particleCount; i++) {
-            positions[i * 3] = (Math.random() - 0.5) * 20;
-            positions[i * 3 + 1] = (Math.random() - 0.5) * 10;
-            positions[i * 3 + 2] = (Math.random() - 0.5) * 10;
-            const c = new THREE.Color().setHSL(0.12 + Math.random() * 0.1, 0.8, 0.6);
+            positions[i * 3] = (Math.random() - 0.5) * 24;
+            positions[i * 3 + 1] = (Math.random() - 0.5) * 12;
+            positions[i * 3 + 2] = (Math.random() - 0.5) * 14;
+            // Gold/teal color mix
+            const hue = Math.random() < 0.6 ? (0.12 + Math.random() * 0.08) : (0.46 + Math.random() * 0.04);
+            const c = new THREE.Color().setHSL(hue, 0.9, 0.65);
             colors[i * 3] = c.r;
             colors[i * 3 + 1] = c.g;
             colors[i * 3 + 2] = c.b;
+            sizes[i] = 0.03 + Math.random() * 0.09;
         }
 
         particleGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
         particleGeo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
 
         const particleMat = new THREE.PointsMaterial({
-            size: 0.05, vertexColors: true, transparent: true, opacity: 0.6,
+            size: 0.06,
+            vertexColors: true,
+            transparent: true,
+            opacity: 0.7,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false,
+            sizeAttenuation: true,
         });
         particles = new THREE.Points(particleGeo, particleMat);
         scene.add(particles);
 
-        // Animate
+        // === Animate ===
+        const _baseCamY = camera.position.y;
         function animate() {
             animationId = requestAnimationFrame(animate);
+            _sceneTime += 0.008;
 
-            // Particle drift
-            particles.rotation.y += 0.0003;
+            // Particle drift + gentle upward float
+            particles.rotation.y += 0.0004;
+            const posArr = particles.geometry.attributes.position.array;
+            for (let i = 0; i < particleCount; i++) {
+                posArr[i * 3 + 1] += 0.002 + Math.sin(_sceneTime * 2 + i) * 0.001;
+                if (posArr[i * 3 + 1] > 6) posArr[i * 3 + 1] = -6;
+            }
+            particles.geometry.attributes.position.needsUpdate = true;
+
+            // Background orb drift
+            _bgOrbs.forEach((o) => {
+                o.mesh.position.x = o.baseX + Math.sin(_sceneTime * o.speed) * 1.5;
+                o.mesh.position.y = o.baseY + Math.cos(_sceneTime * o.speed * 0.7) * 0.8;
+            });
+
+            // Subtle camera breathing
+            camera.position.y = _baseCamY + Math.sin(_sceneTime * 0.5) * 0.04;
 
             renderer.render(scene, camera);
         }
@@ -254,7 +331,12 @@
         } else {
             frontHTML = `
                 <div class="note-face note-face-front">
-                    <div class="nf-pattern"></div>
+                    <div class="nf-guilloche"></div>
+                    <div class="nf-security-thread"></div>
+                    <span class="nf-corner nf-corner-tl">CF</span>
+                    <span class="nf-corner nf-corner-tr">CF</span>
+                    <span class="nf-corner nf-corner-bl">CF</span>
+                    <span class="nf-corner nf-corner-br">CF</span>
                     <span class="nf-logo">CF</span>
                     <span class="nf-sub">CASHFLIP</span>
                 </div>
@@ -264,9 +346,11 @@
         card.innerHTML = `
             ${frontHTML}
             <div class="note-face note-face-back" id="active-note-back">
+                <div class="nf-guilloche-back"></div>
+                <div class="nf-watermark"></div>
                 <div class="nf-denom-overlay">
                     <span class="nf-denom-value">?</span>
-                    <span class="nf-denom-label">SWIPE UP TO REVEAL</span>
+                    <span class="nf-denom-label">SWIPE LEFT TO REVEAL</span>
                 </div>
             </div>
         `;
@@ -322,24 +406,21 @@
         const card = document.getElementById('active-note');
         if (!card) return;
         const p = _getXY(e);
-        const dy = _swipeStartY - p.y; // positive = swiped up
         const dx = _swipeStartX - p.x; // positive = swiped left
-        // Use whichever axis has more movement
-        const delta = Math.abs(dy) >= Math.abs(dx) ? dy : dx;
-        if (delta <= 0) {
+        if (dx <= 0) {
             _swipeCurrentAngle = 0;
-            card.style.transform = 'rotateX(0deg) translateY(0) scale(1)';
+            card.style.transform = 'rotateY(0deg) translateX(0) scale(1)';
             return;
         }
         if (e.cancelable) e.preventDefault();
         const maxDrag = 200;
-        const ratio = Math.min(delta / maxDrag, 1);
+        const ratio = Math.min(dx / maxDrag, 1);
         // Eased angle with curve for the flexible bend feel
         _swipeCurrentAngle = ratio * ratio * 90;
-        const liftY = ratio * 40;
+        const shiftX = ratio * 15;
         const scaleDown = 1 - (ratio * 0.08);
-        card.style.transform = `rotateX(${_swipeCurrentAngle}deg) translateY(-${liftY}%) scale(${scaleDown})`;
-        if (delta >= SWIPE_THRESHOLD && delta < SWIPE_THRESHOLD + 12) {
+        card.style.transform = `rotateY(-${_swipeCurrentAngle}deg) translateX(-${shiftX}%) scale(${scaleDown})`;
+        if (dx >= SWIPE_THRESHOLD && dx < SWIPE_THRESHOLD + 12) {
             _hapticTick();
         }
     }
@@ -449,9 +530,21 @@
             // Fill in the back face with denomination data
             const backFace = document.getElementById('active-note-back');
             if (backFace) {
+                const serial = 'CF-' + Math.random().toString(36).substring(2, 10).toUpperCase();
                 if (isZero) {
                     backFace.classList.add('zero-note');
                     backFace.innerHTML = `
+                        <div class="nf-guilloche-back"></div>
+                        <div class="nf-watermark"></div>
+                        <div class="nf-security-strip"></div>
+                        <div class="nf-inner-frame-back">
+                            <div class="nf-bank-name">CASHFLIP</div>
+                            <span class="nf-corner-val nf-cv-tl">0</span>
+                            <span class="nf-corner-val nf-cv-tr">0</span>
+                            <span class="nf-corner-val nf-cv-bl">0</span>
+                            <span class="nf-corner-val nf-cv-br">0</span>
+                            <div class="nf-serial">${serial}</div>
+                        </div>
                         <div class="nf-denom-overlay">
                             <span class="nf-denom-value">ZERO</span>
                             <span class="nf-denom-label">GAME OVER</span>
@@ -468,9 +561,21 @@
                             </div>
                         `;
                     } else {
+                        const shortVal = parseFloat(value).toFixed(0);
                         backFace.innerHTML = `
+                            <div class="nf-guilloche-back"></div>
+                            <div class="nf-watermark"></div>
+                            <div class="nf-security-strip"></div>
+                            <div class="nf-inner-frame-back">
+                                <div class="nf-bank-name">BANK OF GHANA</div>
+                                <span class="nf-corner-val nf-cv-tl">${shortVal}</span>
+                                <span class="nf-corner-val nf-cv-tr">${shortVal}</span>
+                                <span class="nf-corner-val nf-cv-bl">${shortVal}</span>
+                                <span class="nf-corner-val nf-cv-br">${shortVal}</span>
+                                <div class="nf-serial">${serial}</div>
+                            </div>
                             <div class="nf-denom-overlay">
-                                <span class="nf-denom-value">${sym}${parseFloat(value).toFixed(2)}</span>
+                                <span class="nf-denom-value">+${sym}${parseFloat(value).toFixed(2)}</span>
                                 <span class="nf-denom-label">GHANA CEDI</span>
                             </div>
                         `;
@@ -485,7 +590,7 @@
                 card.classList.add('flipping');
             }
 
-            // Phase 1: peel up (~450ms), then Phase 2: reveal back face
+            // Phase 1: peel left (~450ms), then Phase 2: reveal back face
             setTimeout(() => {
                 // Snap to reveal (back face fully visible)
                 card.classList.remove('flipping');
@@ -775,6 +880,54 @@
             scene.add(flash);
             setTimeout(() => scene.remove(flash), 600);
         }
+    }
+
+    // Gold particle burst from the note area on win
+    function spawnWinParticles() {
+        const stage = document.getElementById('note-stage');
+        if (!stage) return;
+        const rect = stage.getBoundingClientRect();
+        const cx = rect.left + rect.width / 2;
+        const cy = rect.top + rect.height / 2;
+        const colors = ['#ffd700', '#ffeb3b', '#00e676', '#4dd9c0', '#fff'];
+        for (let i = 0; i < 12; i++) {
+            const p = document.createElement('div');
+            p.className = 'win-particle';
+            const angle = (Math.PI * 2 * i) / 12 + (Math.random() - 0.5) * 0.5;
+            const dist = 30 + Math.random() * 40;
+            const x = cx + Math.cos(angle) * dist;
+            const y = cy + Math.sin(angle) * dist;
+            p.style.left = `${x}px`;
+            p.style.top = `${y}px`;
+            p.style.background = colors[i % colors.length];
+            p.style.animationDuration = `${0.5 + Math.random() * 0.5}s`;
+            document.getElementById('game-screen').appendChild(p);
+            setTimeout(() => p.remove(), 1000);
+        }
+    }
+
+    // Red edge flash + screen shake on loss
+    function triggerLossEffect() {
+        const screen = document.getElementById('game-screen');
+        if (!screen) return;
+        // Red edge flash
+        const flash = document.createElement('div');
+        flash.className = 'loss-flash-overlay';
+        screen.appendChild(flash);
+        setTimeout(() => flash.remove(), 500);
+        // Screen shake
+        screen.classList.add('shake');
+        setTimeout(() => screen.classList.remove('shake'), 300);
+    }
+
+    // Gold shimmer on cashout
+    function triggerCashoutShimmer() {
+        const screen = document.getElementById('game-screen');
+        if (!screen) return;
+        const shimmer = document.createElement('div');
+        shimmer.className = 'cashout-shimmer';
+        screen.appendChild(shimmer);
+        setTimeout(() => shimmer.remove(), 1300);
     }
 
     // ==================== SCREENS ====================
@@ -1264,14 +1417,18 @@
         btn.textContent = '🎰 FLIP NOW';
     }
 
+    let _bestDenom = 0;
+
     function enterGame() {
         stopLiveFeed();
         stopSocialProof();
         currentStreak = 0;
+        _bestDenom = 0;
         showScreen('game-screen');
         initScene();
         initNoteStage();
         updateGameHUD();
+        updateSidePanels(true);
 
         document.getElementById('pause-btn').disabled = false;
     }
@@ -1287,6 +1444,67 @@
         const cashout = parseFloat(s.cashout_balance || 0);
         document.getElementById('hud-cashout').textContent = `${sym}${cashout.toFixed(2)}`;
         document.getElementById('cashout-btn').disabled = cashout <= 0;
+    }
+
+    // ==================== SIDE ENGAGEMENT PANELS ====================
+    function updateSidePanels(reset) {
+        if (!state.session) return;
+        const s = state.session;
+        const sym = s.currency?.symbol || 'GH₵';
+        const flipCount = s.flip_count || 0;
+        const cashout = parseFloat(s.cashout_balance || 0);
+        const stake = parseFloat(s.stake_amount || 1);
+
+        // Left panel: flip count with pop animation
+        const flipEl = document.getElementById('side-flip-count');
+        if (flipEl) {
+            flipEl.textContent = flipCount;
+            if (!reset) {
+                flipEl.classList.remove('pop');
+                void flipEl.offsetWidth;
+                flipEl.classList.add('pop');
+            }
+        }
+
+        // Left panel: best denomination
+        const bestEl = document.getElementById('side-best-denom');
+        if (bestEl) {
+            bestEl.textContent = _bestDenom > 0 ? `${sym}${_bestDenom.toFixed(0)}` : '--';
+            if (_bestDenom > 0) {
+                const card = bestEl.closest('.side-stat-card');
+                if (card) card.classList.add('highlight');
+            }
+        }
+
+        // Left panel: streak
+        const streakCard = document.getElementById('side-streak-card');
+        const streakVal = document.getElementById('side-streak-val');
+        if (streakCard && streakVal) {
+            if (currentStreak >= 2) {
+                streakCard.style.display = '';
+                streakVal.textContent = `${currentStreak}🔥`;
+            } else {
+                streakCard.style.display = 'none';
+            }
+        }
+
+        // Right panel: multiplier (cashout / stake ratio)
+        const multEl = document.getElementById('side-multiplier');
+        if (multEl) {
+            const ratio = stake > 0 ? (cashout / stake) : 0;
+            multEl.textContent = `${ratio.toFixed(1)}×`;
+            multEl.classList.remove('hot', 'danger');
+            if (ratio >= 3) multEl.classList.add('danger');
+            else if (ratio >= 1.5) multEl.classList.add('hot');
+        }
+
+        // Right panel: risk meter (visual only, based on flip count)
+        const riskFill = document.getElementById('side-risk-fill');
+        if (riskFill) {
+            // Risk rises with flip count — purely visual, logarithmic curve
+            const risk = Math.min(95, Math.max(5, 5 + 90 * (1 - Math.exp(-flipCount * 0.12))));
+            riskFill.style.height = `${risk}%`;
+        }
     }
 
     async function doFlip() {
@@ -1322,6 +1540,7 @@
                 state.session.status = 'lost';
                 _stopAutoFlipTimer();
                 lossBurst();
+                triggerLossEffect();
 
                 document.getElementById('loss-stake-amount').textContent =
                     `${state.session.currency?.symbol || 'GH₵'}${parseFloat(state.session.stake_amount).toFixed(2)}`;
@@ -1335,8 +1554,14 @@
                 denomDisplay.classList.add('show');
                 setTimeout(() => denomDisplay.classList.remove('show'), 1200);
 
+                // Track best denomination
+                const denomVal = parseFloat(data.value || 0);
+                if (denomVal > _bestDenom) _bestDenom = denomVal;
+
                 winCelebration();
+                spawnWinParticles();
                 updateGameHUD();
+                updateSidePanels(false);
 
                 // Badge notifications
                 if (data.new_badges) {
@@ -1375,6 +1600,7 @@
                     `${sym}${parseFloat(data.cashout_amount).toFixed(2)}`;
                 document.getElementById('cashout-overlay').classList.remove('hidden');
                 bigCashoutCelebration();
+                triggerCashoutShimmer();
                 if (data.new_badges) {
                     data.new_badges.forEach((b, i) => setTimeout(() => showBadgeNotification(b), 2000 + i * 1500));
                 }
@@ -1389,7 +1615,7 @@
     }
 
     async function doPause() {
-        if (!state.session) return;
+        if (!state.session || state.isFlipping) return;
         _stopAutoFlipTimer();
 
         // First get pause cost
@@ -2395,7 +2621,13 @@
         document.getElementById('cashout-btn')?.addEventListener('click', doCashout);
         document.getElementById('pause-btn')?.addEventListener('click', doPause);
         document.getElementById('confirm-pause-btn')?.addEventListener('click', confirmPause);
-        document.getElementById('game-back-btn')?.addEventListener('click', returnToLobby);
+        document.getElementById('game-back-btn')?.addEventListener('click', () => {
+            if (state.isFlipping) return;
+            if (state.session?.status === 'active') {
+                if (!confirm('Leave game? Your session will remain active — you can resume from the lobby.')) return;
+            }
+            returnToLobby();
+        });
 
         // Loss/Cashout overlays
         document.getElementById('play-again-btn')?.addEventListener('click', () => {

@@ -13,6 +13,8 @@
 #   ./scripts/deploy-prod.sh --cert                  # Provision/renew SSL certs via certbot
 #   ./scripts/deploy-prod.sh --status                # Check service status on all VMs
 #   ./scripts/deploy-prod.sh --logs                  # Tail deploy logs from all VMs
+#   ./scripts/deploy-prod.sh --journal [SERVICE]      # Tail realtime service logs (gunicorn/celery/beat/all)
+#   ./scripts/deploy-prod.sh --journal [SERVICE] -f    # Last 2 min of logs (near-realtime)
 #
 # REQUIREMENTS:
 #   - Azure CLI installed and logged in (az login)
@@ -200,6 +202,54 @@ tail_logs() {
     run_on_vmss "$CELERY_VMSS" "tail -20 /opt/cashflip/logs/deploy.log 2>/dev/null || echo 'No deploy log'" "Logs"
 }
 
+# ---- Action: Journal (realtime service logs) ----
+journal_logs() {
+    local svc="${1:-all}"
+    local lines="${2:-80}"
+    local follow="${3:-false}"
+
+    # Build journalctl flags
+    local jflags="--no-pager"
+    if [ "$follow" = true ]; then
+        jflags="--since '2 min ago' --no-pager"
+        log "Showing logs from last 2 minutes..."
+    else
+        jflags="-n $lines --no-pager"
+    fi
+
+    case "$svc" in
+        gunicorn|app|web)
+            log "Tailing cashflip.service..."
+            run_on_vmss "$APP_VMSS" "journalctl -u cashflip.service $jflags" "Journal: cashflip.service"
+            ;;
+        celery|worker)
+            log "Tailing cashflip-celery.service..."
+            run_on_vmss "$CELERY_VMSS" "journalctl -u cashflip-celery.service $jflags" "Journal: cashflip-celery"
+            ;;
+        beat|scheduler)
+            log "Tailing cashflip-celerybeat.service..."
+            run_on_vmss "$CELERY_VMSS" "journalctl -u cashflip-celerybeat.service $jflags" "Journal: cashflip-celerybeat"
+            ;;
+        all)
+            log "Tailing all services..."
+            echo ""
+            info "━━━ cashflip.service (gunicorn) ━━━"
+            run_on_vmss "$APP_VMSS" "journalctl -u cashflip.service $jflags" "Journal: cashflip.service"
+            echo ""
+            info "━━━ cashflip-celery.service (worker) ━━━"
+            run_on_vmss "$CELERY_VMSS" "journalctl -u cashflip-celery.service $jflags" "Journal: cashflip-celery"
+            echo ""
+            info "━━━ cashflip-celerybeat.service (scheduler) ━━━"
+            run_on_vmss "$CELERY_VMSS" "journalctl -u cashflip-celerybeat.service $jflags" "Journal: cashflip-celerybeat"
+            ;;
+        *)
+            err "Unknown service: $svc"
+            echo "  Valid options: gunicorn | celery | beat | all"
+            exit 1
+            ;;
+    esac
+}
+
 # ---- Usage ----
 usage() {
     echo ""
@@ -215,6 +265,9 @@ usage() {
     echo "  $0 --cert                     Provision/renew SSL certificates"
     echo "  $0 --status                   Check service status on all VMs"
     echo "  $0 --logs                     View deploy logs from all VMs"
+    echo "  $0 --journal [SERVICE] [N]    Tail service logs (default: all, 80 lines)"
+    echo "  $0 --journal [SERVICE] -f      Near-realtime: last 2 min of logs"
+    echo "                                  Services: gunicorn | celery | beat | all"
     echo "  $0 --help                     Show this help"
     echo ""
     echo "Examples:"
@@ -229,6 +282,15 @@ usage() {
     echo ""
     echo "  # Code update + rebuild admin console"
     echo "  $0 --admin"
+    echo ""
+    echo "  # View last 80 lines of all service logs"
+    echo "  $0 --journal"
+    echo ""
+    echo "  # View last 200 lines of celery worker logs"
+    echo "  $0 --journal celery 200"
+    echo ""
+    echo "  # Near-realtime logs (last 2 min) for gunicorn"
+    echo "  $0 --journal gunicorn -f"
     echo ""
 }
 
@@ -253,6 +315,9 @@ main() {
     local mode="code"
     local env_file=""
     local rebuild_admin=false
+    local journal_service="all"
+    local journal_lines="80"
+    local journal_follow=false
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -289,6 +354,19 @@ main() {
             --logs)
                 mode="logs"
                 shift
+                ;;
+            --journal)
+                mode="journal"
+                shift
+                # Parse optional args: [SERVICE] [-f] [N]
+                while [[ $# -gt 0 && ! "$1" =~ ^-- ]]; do
+                    case "$1" in
+                        -f|--follow) journal_follow=true ;;
+                        [0-9]*) journal_lines="$1" ;;
+                        *) journal_service="$1" ;;
+                    esac
+                    shift
+                done
                 ;;
             --help|-h)
                 usage
@@ -363,6 +441,9 @@ main() {
             ;;
         logs)
             tail_logs
+            ;;
+        journal)
+            journal_logs "$journal_service" "$journal_lines" "$journal_follow"
             ;;
     esac
 

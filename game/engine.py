@@ -234,7 +234,8 @@ def execute_flip(session):
         result['denomination'] = {
             'value': str(denomination.value),
             'is_zero': denomination.is_zero,
-            'image_url': denomination.banknote_image.url if denomination.banknote_image else None,
+            'front_image_url': denomination.front_image.url if denomination.front_image else None,
+            'back_image_url': denomination.back_image.url if denomination.back_image else None,
         }
     
     return result

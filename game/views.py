@@ -200,7 +200,23 @@ def flip(request):
     if not session:
         return Response({'error': 'No active game session'}, status=status.HTTP_400_BAD_REQUEST)
 
-    result = execute_flip(session)
+    try:
+        result = execute_flip(session)
+    except Exception as e:
+        logger.error(f'execute_flip crashed for session {session.id}: {e}', exc_info=True)
+        # Session may have been saved as 'lost' before the crash — release locked funds
+        session.refresh_from_db()
+        if session.status == 'lost':
+            from wallet.models import Wallet
+            try:
+                with transaction.atomic():
+                    wallet = Wallet.objects.select_for_update().get(player=player)
+                    wallet.locked_balance = max(Decimal('0'), wallet.locked_balance - session.stake_amount)
+                    wallet.save(update_fields=['locked_balance', 'updated_at'])
+            except Wallet.DoesNotExist:
+                pass
+        return Response({'error': 'Flip failed. Please try again.', 'success': False},
+                        status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     if not result.get('success'):
         return Response({'error': result.get('error', 'Flip failed')}, status=status.HTTP_400_BAD_REQUEST)

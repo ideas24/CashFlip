@@ -527,6 +527,7 @@ def reports_ggr(request):
     tags=['Partner: Reports'],
     summary='Session Detail Report',
     description='Retrieve detailed session-level report for the last 100 sessions. Includes stake, cashout amount, flip count, status, and timestamps.',
+    responses=GameHistorySerializer(many=True),
 )
 @api_view(['GET'])
 @authentication_classes(PARTNER_AUTH)
@@ -548,6 +549,7 @@ def reports_sessions(request):
     tags=['Partner: Settlements'],
     summary='List Settlements',
     description='Retrieve all settlement records for your operator account. Shows GGR, commission, net amount, and settlement status (pending/approved/paid).',
+    responses=GGRReportSerializer(many=True),
 )
 @api_view(['GET'])
 @authentication_classes(PARTNER_AUTH)
@@ -572,6 +574,7 @@ def settlements_list(request):
         '**Supported events**: `game.started`, `game.flip`, `game.lost`, `game.won`, `settlement.generated`\n\n'
         'Cashflip will POST JSON payloads to your webhook URL for each subscribed event.'
     ),
+    request=WebhookConfigureSerializer,
 )
 @api_view(['POST'])
 @authentication_classes(PARTNER_AUTH)
