@@ -39,3 +39,5 @@ drf-spectacular==0.29.0
 
 # Utilities
 python-dateutil==2.9.0.post0
+cloudinary==1.44.1
+django-cloudinary-storage==0.3.0

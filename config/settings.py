@@ -33,6 +33,8 @@ INSTALLED_APPS = [
     'import_export',
     'social_django',
     'drf_spectacular',
+    'cloudinary',
+    'cloudinary_storage',
     # Cashflip apps
     'accounts',
     'game',
@@ -111,19 +113,18 @@ STATICFILES_DIRS = [BASE_DIR / 'static']
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
-# Azure Blob Storage for media (production)
-# Set AZURE_STORAGE_CONNECTION_STRING in .env to enable.
-# Uses django-storages[azure] — pip install django-storages[azure]
-AZURE_STORAGE_CONNECTION_STRING = os.getenv('AZURE_STORAGE_CONNECTION_STRING', '')
-AZURE_STORAGE_CONTAINER = os.getenv('AZURE_STORAGE_CONTAINER', 'media')
-if AZURE_STORAGE_CONNECTION_STRING:
-    DEFAULT_FILE_STORAGE = 'storages.backends.azure_storage.AzureStorage'
-    AZURE_CONTAINER = AZURE_STORAGE_CONTAINER
-    AZURE_CONNECTION_STRING = AZURE_STORAGE_CONNECTION_STRING
-    # CDN custom domain (optional): set AZURE_CUSTOM_DOMAIN for CDN-backed URLs
-    _azure_cdn = os.getenv('AZURE_CDN_DOMAIN', '')
-    if _azure_cdn:
-        AZURE_CUSTOM_DOMAIN = _azure_cdn
+# Cloudinary for media uploads (production CDN)
+# pip install cloudinary django-cloudinary-storage
+_CLD_CLOUD = os.getenv('CLOUDINARY_CLOUD_NAME', '')
+_CLD_KEY = os.getenv('CLOUDINARY_API_KEY', '')
+_CLD_SECRET = os.getenv('CLOUDINARY_API_SECRET', '')
+if _CLD_CLOUD and _CLD_KEY and _CLD_SECRET:
+    CLOUDINARY_STORAGE = {
+        'CLOUD_NAME': _CLD_CLOUD,
+        'API_KEY': _CLD_KEY,
+        'API_SECRET': _CLD_SECRET,
+    }
+    DEFAULT_FILE_STORAGE = 'cloudinary_storage.storage.MediaCloudinaryStorage'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
@@ -318,6 +319,11 @@ TWILIO_ACCOUNT_SID = os.getenv('TWILIO_ACCOUNT_SID')
 TWILIO_AUTH_TOKEN = os.getenv('TWILIO_AUTH_TOKEN')
 TWILIO_PHONE_NUMBER = os.getenv('TWILIO_PHONE_NUMBER')
 TWILIO_FALLBACK_NUMBER = os.getenv('TWILIO_FALLBACK_NUMBER', '')
+
+# ============ Cloudinary ============
+CLOUDINARY_CLOUD_NAME = os.getenv('CLOUDINARY_CLOUD_NAME')
+CLOUDINARY_API_KEY = os.getenv('CLOUDINARY_API_KEY')
+CLOUDINARY_API_SECRET = os.getenv('CLOUDINARY_API_SECRET')
 
 # ============ Social Auth ============
 AUTHENTICATION_BACKENDS = (

@@ -1683,11 +1683,20 @@
         _bestDenom = 0;
         showScreen('game-screen');
         initScene();
-        initNoteStage();
         updateGameHUD();
         updateSidePanels(true);
 
-        document.getElementById('pause-btn').disabled = false;
+        const pauseBtn = document.getElementById('pause-btn');
+        if (state.session?.status === 'paused') {
+            // Paused session — show resume button, don't init note stage yet
+            pauseBtn.textContent = '▶ Resume';
+            pauseBtn.disabled = false;
+            _stopAutoFlipTimer();
+        } else {
+            pauseBtn.textContent = '⏸ Pause';
+            pauseBtn.disabled = false;
+            initNoteStage();
+        }
     }
 
     function updateGameHUD() {
@@ -1880,6 +1889,27 @@
 
     async function doPause() {
         if (!state.session || state.isFlipping) return;
+
+        // If session is paused, this button acts as RESUME
+        if (state.session.status === 'paused') {
+            try {
+                const resp = await API.post('/game/resume/', {});
+                const data = await resp.json();
+                if (resp.ok) {
+                    state.session.status = 'active';
+                    const pauseBtn = document.getElementById('pause-btn');
+                    pauseBtn.textContent = '⏸ Pause';
+                    initNoteStage();
+                    showToast('Game resumed!');
+                } else {
+                    showToast(data.error || 'Resume failed');
+                }
+            } catch (e) {
+                showToast('Network error');
+            }
+            return;
+        }
+
         _stopAutoFlipTimer();
 
         // First get pause cost
@@ -2978,11 +3008,24 @@
             if (state.session?.status === 'active') {
                 const bal = parseFloat(state.session.cashout_balance || 0);
                 const sym = state.session.currency?.symbol || 'GH₵';
-                const msg = bal > 0
-                    ? `⚠️ WARNING: You will LOSE your current balance of ${sym}${bal.toFixed(2)} if you leave! Use Cashout or Pause instead. Leave anyway?`
-                    : 'Leave game? Your session will remain active — you can resume from the lobby.';
-                if (!confirm(msg)) return;
+                const msgEl = document.getElementById('leave-game-msg');
+                const confirmBtn = document.getElementById('confirm-leave-btn');
+                if (bal > 0) {
+                    msgEl.innerHTML = `You will <strong>LOSE</strong> your current balance of <strong>${sym}${bal.toFixed(2)}</strong> if you leave.<br><br>Use <strong>Cashout</strong> or <strong>Pause</strong> instead to keep your winnings.`;
+                    confirmBtn.textContent = 'Leave & Lose Balance';
+                    confirmBtn.style.background = '#e74c3c';
+                } else {
+                    msgEl.textContent = 'Leave the game and return to the lobby?';
+                    confirmBtn.textContent = 'Leave Game';
+                    confirmBtn.style.background = '';
+                }
+                showModal('leave-game-modal');
+                return;
             }
+            returnToLobby();
+        });
+        document.getElementById('confirm-leave-btn')?.addEventListener('click', () => {
+            hideModal('leave-game-modal');
             returnToLobby();
         });
 

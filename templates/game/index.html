@@ -11,7 +11,7 @@
     {% load static %}
     <link rel="icon" type="image/svg+xml" href="{% static 'images/cashflip-favicon.svg' %}">
     <meta name="theme-color" content="#0D1117">
-    <link rel="stylesheet" href="{% static 'css/game.css' %}?v=20260219c">
+    <link rel="stylesheet" href="{% static 'css/game.css' %}?v=20260219d">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
 <body>
@@ -540,6 +540,24 @@
         </div>
     </div>
 
+    <!-- Leave Game Modal -->
+    <div id="leave-game-modal" class="modal hidden">
+        <div class="modal-backdrop"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>⚠️ Leave Game?</h3>
+                <button class="modal-close" data-modal="leave-game-modal">✕</button>
+            </div>
+            <div class="modal-body">
+                <p id="leave-game-msg" style="margin-bottom:1rem;"></p>
+                <div class="modal-actions">
+                    <button id="confirm-leave-btn" class="btn-primary" style="background:var(--danger,#e74c3c);">Leave &amp; Lose Balance</button>
+                    <button class="btn-secondary modal-close" data-modal="leave-game-modal">Stay in Game</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Profile Slide Panel -->
     <div id="profile-panel" class="slide-panel hidden">
         <div class="panel-header">
@@ -732,6 +750,6 @@
         <span id="toast-message"></span>
     </div>
 
-    <script src="{% static 'js/game.js' %}?v=20260219c"></script>
+    <script src="{% static 'js/game.js' %}?v=20260219d"></script>
 </body>
 </html>

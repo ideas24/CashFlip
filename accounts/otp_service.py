@@ -164,7 +164,8 @@ def _send_whatsapp_otp(phone, code):
         'Content-Type': 'application/json',
     }
     
-    payload = {
+    # Try template first, then fall back to plain text message
+    template_payload = {
         'messaging_product': 'whatsapp',
         'recipient_type': 'individual',
         'to': normalized,
@@ -191,27 +192,47 @@ def _send_whatsapp_otp(phone, code):
         }
     }
     
+    # Plain text fallback (works without approved template)
+    text_payload = {
+        'messaging_product': 'whatsapp',
+        'recipient_type': 'individual',
+        'to': normalized,
+        'type': 'text',
+        'text': {
+            'body': f'Your Cashflip verification code is: {code}\n\nThis code expires in 5 minutes. Do not share it with anyone.'
+        }
+    }
+    
     for pid in phone_ids:
         url = f"https://graph.facebook.com/v23.0/{pid}/messages"
-        logger.info(f'WhatsApp OTP: sending to {normalized}, template={template_name}, phone_id={pid} (GH={is_ghana})')
+        
+        # Try template message first
+        logger.info(f'WhatsApp OTP: sending template to {normalized}, template={template_name}, phone_id={pid}')
         try:
-            response = requests.post(url, json=payload, headers=headers, timeout=30)
-            logger.info(f'WhatsApp API response (phone_id={pid}): status={response.status_code}, body={response.text[:500]}')
+            response = requests.post(url, json=template_payload, headers=headers, timeout=30)
+            logger.info(f'WhatsApp template response (phone_id={pid}): status={response.status_code}, body={response.text[:500]}')
             if response.status_code in [200, 201]:
-                logger.info(f'WhatsApp auth template OTP sent to {normalized} via phone_id={pid}')
+                logger.info(f'WhatsApp template OTP sent to {normalized} via phone_id={pid}')
+                return True
+        except Exception as e:
+            logger.warning(f'WhatsApp template error (phone_id={pid}): {e}')
+        
+        # Template failed — try plain text message
+        logger.info(f'WhatsApp OTP: trying plain text to {normalized}, phone_id={pid}')
+        try:
+            response = requests.post(url, json=text_payload, headers=headers, timeout=30)
+            logger.info(f'WhatsApp text response (phone_id={pid}): status={response.status_code}, body={response.text[:500]}')
+            if response.status_code in [200, 201]:
+                logger.info(f'WhatsApp text OTP sent to {normalized} via phone_id={pid}')
                 return True
             else:
-                logger.warning(f'WhatsApp OTP failed with phone_id={pid}: {response.status_code} {response.text[:300]}')
-                if pid == phone_ids[-1]:
-                    logger.error(f'All WhatsApp phone IDs exhausted for {normalized}')
-                    return False
-                logger.info(f'Retrying with next WhatsApp phone ID...')
+                logger.warning(f'WhatsApp text failed (phone_id={pid}): {response.status_code} {response.text[:300]}')
         except Exception as e:
-            logger.error(f'WhatsApp OTP error (phone_id={pid}): {e}', exc_info=True)
-            if pid == phone_ids[-1]:
-                return False
-            logger.info(f'Retrying with next WhatsApp phone ID...')
+            logger.warning(f'WhatsApp text error (phone_id={pid}): {e}')
+        
+        logger.info(f'Phone ID {pid} exhausted, trying next...')
     
+    logger.error(f'All WhatsApp methods exhausted for {normalized}')
     return False
 
 
@@ -242,10 +263,18 @@ def _send_sms_otp(phone, code):
     otp_expiry, _ = _get_auth_config()
     body = f'Cashflip - Your verification code is: {code}. Expires in {otp_expiry} minutes.'
     
-    # Try sending with primary sender (alphanumeric or phone number)
-    senders = [from_number]
-    if fallback_number and fallback_number != from_number:
-        senders.append(fallback_number)
+    # For Ghana numbers: use real phone number FIRST (carriers reject alphanumeric),
+    # then try alphanumeric as fallback.
+    # For other countries: alphanumeric first, real number fallback.
+    is_ghana = normalized.startswith('+233')
+    if is_ghana and fallback_number:
+        senders = [fallback_number]
+        if from_number != fallback_number:
+            senders.append(from_number)
+    else:
+        senders = [from_number]
+        if fallback_number and fallback_number != from_number:
+            senders.append(fallback_number)
     
     try:
         from twilio.rest import Client
