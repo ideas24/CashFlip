@@ -198,10 +198,17 @@ def _send_whatsapp_otp(phone, code):
 
 
 def _send_sms_otp(phone, code):
-    """Send OTP via Twilio SMS."""
+    """
+    Send OTP via Twilio SMS.
+    
+    Uses alphanumeric sender ID first (e.g. CASHFLIP). If that fails or
+    if TWILIO_FALLBACK_NUMBER is set, retries with a real phone number.
+    Ghana carriers (especially MTN) intermittently reject alphanumeric senders.
+    """
     account_sid = settings.TWILIO_ACCOUNT_SID
     auth_token = settings.TWILIO_AUTH_TOKEN
     from_number = settings.TWILIO_PHONE_NUMBER
+    fallback_number = getattr(settings, 'TWILIO_FALLBACK_NUMBER', '')
     
     if not account_sid or not auth_token or not from_number:
         logger.error('Twilio credentials not configured: sid=%s, token=%s, from=%s', bool(account_sid), bool(auth_token), bool(from_number))
@@ -213,21 +220,37 @@ def _send_sms_otp(phone, code):
         normalized = '+233' + normalized[1:]
     elif not normalized.startswith('+'):
         normalized = '+' + normalized
-    logger.info(f'Twilio SMS: sending to {normalized}, from={from_number}')
+    
+    otp_expiry, _ = _get_auth_config()
+    body = f'Cashflip - Your verification code is: {code}. Expires in {otp_expiry} minutes.'
+    
+    # Try sending with primary sender (alphanumeric or phone number)
+    senders = [from_number]
+    if fallback_number and fallback_number != from_number:
+        senders.append(fallback_number)
     
     try:
         from twilio.rest import Client
         client = Client(account_sid, auth_token)
-        
-        otp_expiry, _ = _get_auth_config()
-        message = client.messages.create(
-            body=f'Cashflip - Your verification code is: {code}. Expires in {otp_expiry} minutes.',
-            from_=from_number,
-            to=normalized
-        )
-        
-        logger.info(f'SMS OTP sent to {normalized}, SID: {message.sid}, status: {message.status}')
-        return True
     except Exception as e:
-        logger.error(f'Twilio SMS OTP error for {normalized}: {e}', exc_info=True)
+        logger.error(f'Twilio client init error: {e}', exc_info=True)
         return False
+    
+    for sender in senders:
+        try:
+            logger.info(f'Twilio SMS: sending to {normalized}, from={sender}')
+            message = client.messages.create(
+                body=body,
+                from_=sender,
+                to=normalized
+            )
+            logger.info(f'SMS OTP sent to {normalized}, SID: {message.sid}, status: {message.status}, from={sender}')
+            return True
+        except Exception as e:
+            logger.warning(f'Twilio SMS failed with sender {sender} to {normalized}: {e}')
+            if sender == senders[-1]:
+                logger.error(f'All Twilio senders exhausted for {normalized}', exc_info=True)
+                return False
+            logger.info(f'Retrying with fallback sender...')
+    
+    return False
