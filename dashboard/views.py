@@ -1224,11 +1224,30 @@ def settings_view(request):
             'require_deposit': wc.require_deposit if wc else False,
         }
 
+        # Denominations for this currency
+        from game.models import CurrencyDenomination
+        denoms = []
+        if game_config and game_config.currency:
+            for d in CurrencyDenomination.objects.filter(currency=game_config.currency).order_by('display_order', 'value'):
+                denoms.append({
+                    'id': d.id,
+                    'value': str(d.value),
+                    'payout_multiplier': str(d.payout_multiplier),
+                    'face_image_path': d.face_image_path,
+                    'flip_sequence_prefix': d.flip_sequence_prefix,
+                    'flip_sequence_frames': d.flip_sequence_frames,
+                    'display_order': d.display_order,
+                    'is_zero': d.is_zero,
+                    'is_active': d.is_active,
+                    'weight': d.weight,
+                })
+
         return Response({
             'auth': AuthSettingsSerializer(auth_config).data,
             'game': game_data,
             'features': feature_data,
             'wheel': wheel_data,
+            'denominations': denoms,
             'simulated_configs': sim_list,
             'outcome_mode_choices': [
                 {'value': c[0], 'label': c[1]} for c in SimulatedGameConfig.OUTCOME_CHOICES
@@ -1288,6 +1307,40 @@ def settings_view(request):
                 updated.append(field)
         if updated:
             wc.save(update_fields=updated + ['updated_at'])
+
+    # Save denominations
+    from game.models import CurrencyDenomination
+    denoms_data = request.data.get('denominations', [])
+    if denoms_data and game_config and game_config.currency:
+        from decimal import Decimal
+        existing_ids = set()
+        for dd in denoms_data:
+            denom_id = dd.get('id')
+            if denom_id:
+                try:
+                    d = CurrencyDenomination.objects.get(id=denom_id, currency=game_config.currency)
+                except CurrencyDenomination.DoesNotExist:
+                    continue
+            else:
+                d = CurrencyDenomination(currency=game_config.currency)
+
+            d.value = Decimal(str(dd.get('value', 0)))
+            d.payout_multiplier = Decimal(str(dd.get('payout_multiplier', 10)))
+            d.face_image_path = dd.get('face_image_path', '')
+            d.flip_sequence_prefix = dd.get('flip_sequence_prefix', '')
+            d.flip_sequence_frames = dd.get('flip_sequence_frames', 31)
+            d.display_order = dd.get('display_order', 0)
+            d.is_zero = dd.get('is_zero', False)
+            d.is_active = dd.get('is_active', True)
+            d.weight = dd.get('weight', 10)
+            d.save()
+            existing_ids.add(d.id)
+
+        # Delete denominations that were removed from the list
+        if existing_ids:
+            CurrencyDenomination.objects.filter(
+                currency=game_config.currency
+            ).exclude(id__in=existing_ids).delete()
 
     return Response({'status': 'saved'})
 

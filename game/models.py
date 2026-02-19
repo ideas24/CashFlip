@@ -66,7 +66,11 @@ class Currency(models.Model):
 
 class CurrencyDenomination(models.Model):
     currency = models.ForeignKey(Currency, on_delete=models.CASCADE, related_name='denominations')
-    value = models.DecimalField(max_digits=10, decimal_places=2)
+    value = models.DecimalField(max_digits=10, decimal_places=2,
+        help_text='Face value of the note (visual only, e.g. 1, 5, 10, 50)')
+    payout_multiplier = models.DecimalField(max_digits=6, decimal_places=2, default=10.00,
+        help_text='Payout as % of stake per flip. E.g. 8 = each flip adds 8% of stake. '
+                  'Tune so that avg_multiplier × expected_flips < 100 for house edge.')
     front_image = models.ImageField(
         upload_to='banknotes/front/', null=True, blank=True,
         help_text='Front side of the banknote. Recommended: 960×510 px (2x) or 1440×765 px (3x), PNG/JPEG, < 200KB'
@@ -75,6 +79,12 @@ class CurrencyDenomination(models.Model):
         upload_to='banknotes/back/', null=True, blank=True,
         help_text='Back side of the banknote. Recommended: 960×510 px (2x) or 1440×765 px (3x), PNG/JPEG, < 200KB'
     )
+    face_image_path = models.CharField(max_length=255, blank=True, default='',
+        help_text='Static path to face image, e.g. images/Cedi-Face/5f.jpg')
+    flip_sequence_prefix = models.CharField(max_length=255, blank=True, default='',
+        help_text='Static path to flip sequence folder, e.g. images/Cedi-Sequences/5')
+    flip_sequence_frames = models.PositiveIntegerField(default=31,
+        help_text='Number of frames in the flip sequence (0-indexed PNGs)')
     display_order = models.PositiveIntegerField(default=0)
     is_zero = models.BooleanField(default=False, help_text='Is this the zero/loss denomination?')
     is_active = models.BooleanField(default=True)

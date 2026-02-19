@@ -57,11 +57,16 @@ def calculate_zero_probability(flip_number, config):
     return min(probability, 0.95)  # Cap at 95% to avoid guaranteed loss
 
 
-def select_denomination(currency, result_hash, is_zero):
+def select_denomination(currency, result_hash, is_zero, stake_amount=None):
     """
     Select a denomination based on the result hash.
     If is_zero, return the zero denomination.
     Otherwise, weighted random selection from active denominations.
+    
+    The actual payout value is calculated as:
+        stake_amount * (denom.payout_multiplier / 100)
+    This ensures house edge is consistent regardless of stake level.
+    The denom.value is the visual face value of the note only.
     """
     if is_zero:
         zero_denom = CurrencyDenomination.objects.filter(
@@ -83,14 +88,21 @@ def select_denomination(currency, result_hash, is_zero):
     hash_float = hash_to_float(result_hash[8:16])  # Use different portion of hash
     target = hash_float * total_weight
     
+    selected = denoms[-1]  # fallback
     cumulative = 0
     for denom in denoms:
         cumulative += denom.weight
         if target <= cumulative:
-            return denom, denom.value
+            selected = denom
+            break
     
-    # Fallback to last denomination
-    return denoms[-1], denoms[-1].value
+    # Calculate actual payout from multiplier
+    if stake_amount and selected.payout_multiplier:
+        payout = (stake_amount * selected.payout_multiplier / Decimal('100')).quantize(Decimal('0.01'))
+    else:
+        payout = selected.value
+    
+    return selected, payout
 
 
 def get_simulated_outcome(session, flip_number, roll):
@@ -181,11 +193,16 @@ def execute_flip(session):
             currency=session.currency, value=forced_denom_value, is_active=True
         ).first()
         if forced_denom:
-            denomination, value = forced_denom, forced_denom.value
+            # Use multiplier-based payout for forced denomination too
+            if forced_denom.payout_multiplier:
+                payout = (session.stake_amount * forced_denom.payout_multiplier / Decimal('100')).quantize(Decimal('0.01'))
+            else:
+                payout = forced_denom.value
+            denomination, value = forced_denom, payout
         else:
-            denomination, value = select_denomination(session.currency, result_hash, is_zero)
+            denomination, value = select_denomination(session.currency, result_hash, is_zero, session.stake_amount)
     else:
-        denomination, value = select_denomination(session.currency, result_hash, is_zero)
+        denomination, value = select_denomination(session.currency, result_hash, is_zero, session.stake_amount)
     
     if is_zero:
         # Player loses
@@ -236,6 +253,10 @@ def execute_flip(session):
             'is_zero': denomination.is_zero,
             'front_image_url': denomination.front_image.url if denomination.front_image else None,
             'back_image_url': denomination.back_image.url if denomination.back_image else None,
+            'face_image_path': denomination.face_image_path or None,
+            'flip_sequence_prefix': denomination.flip_sequence_prefix or None,
+            'flip_sequence_frames': denomination.flip_sequence_frames,
+            'payout_multiplier': str(denomination.payout_multiplier),
         }
     
     return result

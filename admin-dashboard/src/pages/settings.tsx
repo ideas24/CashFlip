@@ -88,6 +88,19 @@ interface WheelSettings {
   require_deposit: boolean
 }
 
+interface Denomination {
+  id: number | null
+  value: string
+  payout_multiplier: string
+  face_image_path: string
+  flip_sequence_prefix: string
+  flip_sequence_frames: number
+  display_order: number
+  is_zero: boolean
+  is_active: boolean
+  weight: number
+}
+
 interface OutcomeChoice { value: string; label: string }
 
 interface AllSettings {
@@ -95,6 +108,7 @@ interface AllSettings {
   game: GameSettings
   features: FeatureSettings
   wheel: WheelSettings
+  denominations: Denomination[]
   simulated_configs: SimConfig[]
   outcome_mode_choices: OutcomeChoice[]
 }
@@ -105,7 +119,7 @@ export default function SettingsPage() {
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
-  const [tab, setTab] = useState<'auth' | 'game' | 'features' | 'wheel' | 'simulated'>('auth')
+  const [tab, setTab] = useState<'auth' | 'game' | 'denominations' | 'features' | 'wheel' | 'simulated'>('auth')
 
   const refresh = () => {
     api.get<AllSettings>('/settings/')
@@ -121,7 +135,7 @@ export default function SettingsPage() {
     setSaving(true)
     setSaved(false)
     try {
-      await api.post('/settings/', { auth: settings.auth, game: settings.game, features: settings.features, wheel: settings.wheel })
+      await api.post('/settings/', { auth: settings.auth, game: settings.game, features: settings.features, wheel: settings.wheel, denominations: settings.denominations })
       setSaved(true)
       setTimeout(() => setSaved(false), 2000)
     } catch {}
@@ -199,6 +213,7 @@ export default function SettingsPage() {
           {[
             { key: 'auth' as const, label: 'Auth', icon: Shield },
             { key: 'game' as const, label: 'Game', icon: Gamepad2 },
+            { key: 'denominations' as const, label: 'Denominations', icon: Gamepad2 },
             { key: 'features' as const, label: 'Features', icon: Gamepad2 },
             { key: 'wheel' as const, label: 'Daily Wheel', icon: Gamepad2 },
             { key: 'simulated' as const, label: 'Simulation', icon: FlaskConical },
@@ -440,6 +455,152 @@ export default function SettingsPage() {
               </CardContent>
             </Card>
           </>
+        )}
+
+        {/* ===== DENOMINATIONS TAB ===== */}
+        {tab === 'denominations' && (
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Currency Denominations</CardTitle>
+                  <CardDescription>Configure banknote denominations, payout multipliers, and flip animation assets ({s.game.currency})</CardDescription>
+                </div>
+                <Button size="sm" onClick={() => {
+                  const denoms = [...(s.denominations || []), {
+                    id: null, value: '1.00', payout_multiplier: '8.00',
+                    face_image_path: '', flip_sequence_prefix: '', flip_sequence_frames: 31,
+                    display_order: (s.denominations?.length || 0), is_zero: false, is_active: true, weight: 10
+                  }]
+                  setSettings({ ...s, denominations: denoms })
+                }}><Plus size={14} className="mr-1" /> Add Denomination</Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {(!s.denominations || s.denominations.length === 0) ? (
+                <div className="text-center py-8 text-muted">
+                  <Gamepad2 size={40} className="mx-auto mb-3 opacity-40" />
+                  <div className="text-lg mb-1">No denominations configured</div>
+                  <div className="text-sm">Add denominations for the active currency</div>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-sm text-amber-300">
+                    <strong>House Edge Math:</strong> Avg payout multiplier × expected flips (~5) should be &lt; 100% for house profit.
+                    E.g., avg multiplier 8% × 5 flips = 40% payout → 60% house edge.
+                  </div>
+                  {s.denominations.map((denom, i) => (
+                    <div key={i} className={`p-4 rounded-lg border ${
+                      denom.is_zero ? 'bg-red-500/10 border-red-500/30' : 'bg-card border-border'
+                    }`}>
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <span className="text-white font-bold">
+                            {denom.is_zero ? '🚫 ZERO (Loss)' : `GH₵${denom.value}`}
+                          </span>
+                          {denom.is_active
+                            ? <Badge variant="success">Active</Badge>
+                            : <Badge variant="danger">Inactive</Badge>
+                          }
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button onClick={() => {
+                            const denoms = [...s.denominations]
+                            denoms[i] = { ...denom, is_active: !denom.is_active }
+                            setSettings({ ...s, denominations: denoms })
+                          }} className={`w-10 h-5 rounded-full transition-colors cursor-pointer ${
+                            denom.is_active ? 'bg-emerald-500' : 'bg-zinc-600'
+                          }`}>
+                            <div className={`w-4 h-4 bg-white rounded-full transition-transform ${
+                              denom.is_active ? 'translate-x-5' : 'translate-x-0.5'
+                            }`} />
+                          </button>
+                          <button onClick={() => {
+                            const denoms = s.denominations.filter((_, j) => j !== i)
+                            setSettings({ ...s, denominations: denoms })
+                          }} className="text-red-400 hover:text-red-300 cursor-pointer"><Trash2 size={14} /></button>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                        <div>
+                          <label className="block text-xs text-slate-400 mb-1">Face Value</label>
+                          <Input type="text" value={denom.value} onChange={e => {
+                            const denoms = [...s.denominations]
+                            denoms[i] = { ...denom, value: e.target.value }
+                            setSettings({ ...s, denominations: denoms })
+                          }} />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-slate-400 mb-1">Payout Multiplier (%)</label>
+                          <Input type="text" value={denom.payout_multiplier} onChange={e => {
+                            const denoms = [...s.denominations]
+                            denoms[i] = { ...denom, payout_multiplier: e.target.value }
+                            setSettings({ ...s, denominations: denoms })
+                          }} />
+                          <p className="text-[10px] text-muted mt-0.5">% of stake per flip</p>
+                        </div>
+                        <div>
+                          <label className="block text-xs text-slate-400 mb-1">Weight</label>
+                          <Input type="number" value={denom.weight} onChange={e => {
+                            const denoms = [...s.denominations]
+                            denoms[i] = { ...denom, weight: parseInt(e.target.value) || 1 }
+                            setSettings({ ...s, denominations: denoms })
+                          }} />
+                          <p className="text-[10px] text-muted mt-0.5">Higher = more frequent</p>
+                        </div>
+                        <div>
+                          <label className="block text-xs text-slate-400 mb-1">Display Order</label>
+                          <Input type="number" value={denom.display_order} onChange={e => {
+                            const denoms = [...s.denominations]
+                            denoms[i] = { ...denom, display_order: parseInt(e.target.value) || 0 }
+                            setSettings({ ...s, denominations: denoms })
+                          }} />
+                        </div>
+                      </div>
+                      {!denom.is_zero && (
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3">
+                          <div>
+                            <label className="block text-xs text-slate-400 mb-1">Face Image Path</label>
+                            <Input type="text" placeholder="images/Cedi-Face/5f.jpg" value={denom.face_image_path} onChange={e => {
+                              const denoms = [...s.denominations]
+                              denoms[i] = { ...denom, face_image_path: e.target.value }
+                              setSettings({ ...s, denominations: denoms })
+                            }} />
+                          </div>
+                          <div>
+                            <label className="block text-xs text-slate-400 mb-1">Flip Sequence Folder</label>
+                            <Input type="text" placeholder="images/Cedi-Sequences/5" value={denom.flip_sequence_prefix} onChange={e => {
+                              const denoms = [...s.denominations]
+                              denoms[i] = { ...denom, flip_sequence_prefix: e.target.value }
+                              setSettings({ ...s, denominations: denoms })
+                            }} />
+                          </div>
+                          <div>
+                            <label className="block text-xs text-slate-400 mb-1">Sequence Frames</label>
+                            <Input type="number" value={denom.flip_sequence_frames} onChange={e => {
+                              const denoms = [...s.denominations]
+                              denoms[i] = { ...denom, flip_sequence_frames: parseInt(e.target.value) || 31 }
+                              setSettings({ ...s, denominations: denoms })
+                            }} />
+                          </div>
+                        </div>
+                      )}
+                      <div className="flex items-center gap-2 mt-2">
+                        <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
+                          <input type="checkbox" checked={denom.is_zero} onChange={e => {
+                            const denoms = [...s.denominations]
+                            denoms[i] = { ...denom, is_zero: e.target.checked }
+                            setSettings({ ...s, denominations: denoms })
+                          }} className="accent-red-500" />
+                          Zero (Loss) denomination
+                        </label>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
         )}
 
         {/* ===== FEATURES TAB ===== */}
