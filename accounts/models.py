@@ -32,6 +32,7 @@ class PlayerManager(BaseUserManager):
 class Player(AbstractBaseUser, PermissionsMixin):
     AUTH_PROVIDERS = [
         ('phone', 'Phone OTP'),
+        ('email', 'Email/Password'),
         ('google', 'Google'),
         ('facebook', 'Facebook'),
     ]
@@ -167,6 +168,7 @@ class AuthConfig(models.Model):
     # Login method toggles
     sms_otp_enabled = models.BooleanField(default=True, help_text='Enable SMS OTP login')
     whatsapp_otp_enabled = models.BooleanField(default=True, help_text='Enable WhatsApp OTP login')
+    email_password_enabled = models.BooleanField(default=False, help_text='Enable email/password signup & login')
     google_enabled = models.BooleanField(default=False, help_text='Enable Google OAuth login')
     facebook_enabled = models.BooleanField(default=False, help_text='Enable Facebook OAuth login')
 

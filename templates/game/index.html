@@ -11,7 +11,7 @@
     {% load static %}
     <link rel="icon" type="image/svg+xml" href="{% static 'images/cashflip-favicon.svg' %}">
     <meta name="theme-color" content="#0D1117">
-    <link rel="stylesheet" href="{% static 'css/game.css' %}?v=20260219e">
+    <link rel="stylesheet" href="{% static 'css/game.css' %}?v=20260219f">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
 <body>
@@ -32,6 +32,12 @@
         <div class="auth-panel">
             <h1 class="logo-title">CASH<span class="accent">FLIP</span></h1>
             <p class="tagline">Flip Notes. Stack Cash. Win Big.</p>
+
+            <!-- Auth Method Tabs -->
+            <div class="auth-tabs" id="auth-tabs">
+                <button class="auth-tab-btn active" data-target="otp-step-1" id="auth-tab-phone">📱 Phone</button>
+                <button class="auth-tab-btn" data-target="email-auth-step" id="auth-tab-email" style="display:none">✉️ Email</button>
+            </div>
 
             <!-- Phone OTP Login -->
             <div id="otp-step-1" class="auth-step active">
@@ -82,6 +88,37 @@
                 </div>
                 <button id="verify-otp-btn" class="btn-primary">Verify</button>
                 <button id="back-to-phone" class="btn-link">← Change number</button>
+            </div>
+
+            <!-- Email/Password Login -->
+            <div id="email-auth-step" class="auth-step">
+                <div class="input-group">
+                    <input type="email" id="email-input" placeholder="Email address" class="auth-input" autocomplete="email">
+                </div>
+                <div class="input-group">
+                    <input type="password" id="password-input" placeholder="Password" class="auth-input" autocomplete="current-password">
+                </div>
+                <button id="email-login-btn" class="btn-primary">Log In</button>
+                <p style="text-align:center;margin:8px 0 0;font-size:0.8rem;color:rgba(255,255,255,0.5);">
+                    Don't have an account? <a href="#" id="switch-to-signup" style="color:#00e5a0;">Sign Up</a>
+                </p>
+            </div>
+
+            <!-- Email/Password Signup -->
+            <div id="email-signup-step" class="auth-step">
+                <div class="input-group">
+                    <input type="text" id="signup-name-input" placeholder="Display name (optional)" class="auth-input" autocomplete="name">
+                </div>
+                <div class="input-group">
+                    <input type="email" id="signup-email-input" placeholder="Email address" class="auth-input" autocomplete="email">
+                </div>
+                <div class="input-group">
+                    <input type="password" id="signup-password-input" placeholder="Password (min 6 chars)" class="auth-input" autocomplete="new-password">
+                </div>
+                <button id="email-signup-btn" class="btn-primary">Create Account</button>
+                <p style="text-align:center;margin:8px 0 0;font-size:0.8rem;color:rgba(255,255,255,0.5);">
+                    Already have an account? <a href="#" id="switch-to-login" style="color:#00e5a0;">Log In</a>
+                </p>
             </div>
 
             <div id="auth-error" class="error-msg"></div>
@@ -136,6 +173,17 @@
                     </div>
                 </div>
                 <button id="start-game-btn" class="btn-primary btn-large pulse-btn">🎰 FLIP NOW</button>
+            </div>
+
+            <!-- Resume Session Banner -->
+            <div id="resume-session-banner" class="lobby-card resume-banner hidden">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+                    <div>
+                        <h3 style="margin:0 0 4px;font-size:0.95rem;color:#ffd700;">⚡ You have an active session</h3>
+                        <p id="resume-info" style="margin:0;font-size:0.8rem;color:rgba(255,255,255,0.7);">Loading...</p>
+                    </div>
+                    <button id="resume-game-btn" class="btn-primary" style="padding:0.6rem 1.5rem;font-size:0.85rem;">▶ Resume Game</button>
+                </div>
             </div>
 
             <div class="lobby-actions">
@@ -750,6 +798,6 @@
         <span id="toast-message"></span>
     </div>
 
-    <script src="{% static 'js/game.js' %}?v=20260219e"></script>
+    <script src="{% static 'js/game.js' %}?v=20260219f"></script>
 </body>
 </html>

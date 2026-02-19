@@ -1345,8 +1345,112 @@
                     if (div) div.style.display = '';
                     if (btns) btns.style.display = '';
                 }
+                // Email/password login
+                const emailStep = document.getElementById('email-auth-step');
+                const signupStep = document.getElementById('email-signup-step');
+                if (methods.email_password) {
+                    // Show email/password as a tab option
+                    const emailTab = document.getElementById('auth-tab-email');
+                    if (emailTab) emailTab.style.display = '';
+                } else {
+                    if (emailStep) emailStep.style.display = 'none';
+                    if (signupStep) signupStep.style.display = 'none';
+                }
+
+                // If NO OTP channels enabled but email is, show email login by default
+                if (!methods.sms_otp && !methods.whatsapp_otp && methods.email_password) {
+                    document.getElementById('otp-step-1')?.classList.remove('active');
+                    if (emailStep) emailStep.classList.add('active');
+                }
             })
             .catch(() => {}); // Fail silently — buttons stay hidden
+
+        // Auth tab switching (Phone vs Email)
+        document.querySelectorAll('.auth-tab-btn').forEach(tab => {
+            tab.addEventListener('click', () => {
+                document.querySelectorAll('.auth-tab-btn').forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+                // Hide all auth steps
+                document.querySelectorAll('.auth-step').forEach(s => s.classList.remove('active'));
+                // Show the chosen step
+                const target = tab.dataset.target;
+                document.getElementById(target)?.classList.add('active');
+                showError('');
+            });
+        });
+
+        // Email login
+        document.getElementById('email-login-btn')?.addEventListener('click', async () => {
+            const email = document.getElementById('email-input')?.value?.trim();
+            const password = document.getElementById('password-input')?.value;
+            if (!email || !password) { showError('Enter email and password'); return; }
+
+            const btn = document.getElementById('email-login-btn');
+            btn.disabled = true; btn.textContent = 'Logging in...';
+            try {
+                const resp = await fetch(API.base + '/accounts/auth/email/login/', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password }),
+                });
+                const data = await resp.json();
+                if (resp.ok) {
+                    localStorage.setItem('cf_access', data.access_token);
+                    localStorage.setItem('cf_refresh', data.refresh_token);
+                    showError('');
+                    enterLobby();
+                } else {
+                    showError(data.error || 'Login failed');
+                }
+            } catch (e) { showError('Network error'); }
+            btn.disabled = false; btn.textContent = 'Log In';
+        });
+
+        // Email signup
+        document.getElementById('email-signup-btn')?.addEventListener('click', async () => {
+            const name = document.getElementById('signup-name-input')?.value?.trim();
+            const email = document.getElementById('signup-email-input')?.value?.trim();
+            const password = document.getElementById('signup-password-input')?.value;
+            if (!email || !password) { showError('Enter email and password'); return; }
+            if (password.length < 6) { showError('Password must be at least 6 characters'); return; }
+
+            const btn = document.getElementById('email-signup-btn');
+            btn.disabled = true; btn.textContent = 'Creating...';
+            try {
+                const body = { email, password };
+                if (name) body.display_name = name;
+                if (state.refCode) body.ref_code = state.refCode;
+                const resp = await fetch(API.base + '/accounts/auth/email/signup/', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body),
+                });
+                const data = await resp.json();
+                if (resp.ok) {
+                    localStorage.setItem('cf_access', data.access_token);
+                    localStorage.setItem('cf_refresh', data.refresh_token);
+                    showError('');
+                    enterLobby();
+                } else {
+                    showError(data.error || 'Signup failed');
+                }
+            } catch (e) { showError('Network error'); }
+            btn.disabled = false; btn.textContent = 'Create Account';
+        });
+
+        // Switch between login/signup
+        document.getElementById('switch-to-signup')?.addEventListener('click', (e) => {
+            e.preventDefault();
+            document.querySelectorAll('.auth-step').forEach(s => s.classList.remove('active'));
+            document.getElementById('email-signup-step')?.classList.add('active');
+            showError('');
+        });
+        document.getElementById('switch-to-login')?.addEventListener('click', (e) => {
+            e.preventDefault();
+            document.querySelectorAll('.auth-step').forEach(s => s.classList.remove('active'));
+            document.getElementById('email-auth-step')?.classList.add('active');
+            showError('');
+        });
 
         // Channel buttons
         document.querySelectorAll('.channel-btn').forEach(btn => {
@@ -1588,7 +1692,17 @@
                 const data = await resp.json();
                 if (data.active_session) {
                     state.session = data.session;
-                    enterGame();
+                    // Show resume banner on lobby instead of auto-entering game
+                    const banner = document.getElementById('resume-session-banner');
+                    if (banner) {
+                        const sym = state.session.currency?.symbol || 'GH₵';
+                        const bal = parseFloat(state.session.cashout_balance || 0).toFixed(2);
+                        const flips = state.session.flip_count || 0;
+                        const status = state.session.status === 'paused' ? 'Paused' : 'Active';
+                        document.getElementById('resume-info').textContent =
+                            `${status} session: ${flips} flips, ${sym}${bal} balance`;
+                        banner.classList.remove('hidden');
+                    }
                 }
             }
         } catch (e) { console.error('Session check error:', e); }
@@ -2954,6 +3068,10 @@
     function bindEvents() {
         // Start game
         document.getElementById('start-game-btn')?.addEventListener('click', startGame);
+        document.getElementById('resume-game-btn')?.addEventListener('click', () => {
+            document.getElementById('resume-session-banner')?.classList.add('hidden');
+            enterGame();
+        });
 
         // Quick stakes
         document.querySelectorAll('.quick-stake').forEach(btn => {

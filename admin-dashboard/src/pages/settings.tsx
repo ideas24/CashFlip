@@ -10,6 +10,7 @@ import { Save, Shield, Gamepad2, FlaskConical, Plus, Trash2, X, Check, Upload, I
 interface AuthSettings {
   sms_otp_enabled: boolean
   whatsapp_otp_enabled: boolean
+  email_password_enabled: boolean
   google_enabled: boolean
   facebook_enabled: boolean
   otp_expiry_minutes: number
@@ -299,6 +300,7 @@ export default function SettingsPage() {
               {([
                 { key: 'sms_otp_enabled' as const, label: 'SMS OTP', desc: 'Login via SMS verification code' },
                 { key: 'whatsapp_otp_enabled' as const, label: 'WhatsApp OTP', desc: 'Login via WhatsApp verification code' },
+                { key: 'email_password_enabled' as const, label: 'Email / Password', desc: 'Signup & login with email address and password' },
                 { key: 'google_enabled' as const, label: 'Google OAuth', desc: 'Login with Google account' },
                 { key: 'facebook_enabled' as const, label: 'Facebook OAuth', desc: 'Login with Facebook account' },
               ]).map(item => (

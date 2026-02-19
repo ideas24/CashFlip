@@ -20,6 +20,18 @@ class VerifyOTPSerializer(serializers.Serializer):
     code = serializers.CharField(max_length=6, min_length=6)
 
 
+class EmailSignupSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+    password = serializers.CharField(min_length=6)
+    display_name = serializers.CharField(max_length=50, required=False, allow_blank=True)
+    ref_code = serializers.CharField(max_length=20, required=False, allow_blank=True)
+
+
+class EmailLoginSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+    password = serializers.CharField()
+
+
 class RefreshTokenSerializer(serializers.Serializer):
     refresh_token = serializers.CharField()
 

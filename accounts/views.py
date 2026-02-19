@@ -17,6 +17,7 @@ from accounts.otp_service import send_otp, verify_otp, normalize_phone
 from accounts.serializers import (
     RequestOTPSerializer, VerifyOTPSerializer, RefreshTokenSerializer,
     PlayerSerializer, PlayerUpdateSerializer,
+    EmailSignupSerializer, EmailLoginSerializer,
 )
 
 logger = logging.getLogger(__name__)
@@ -247,6 +248,95 @@ def update_profile(request):
     return Response(PlayerSerializer(request.user).data)
 
 
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def email_signup(request):
+    """Create a new account with email and password."""
+    auth_cfg = AuthConfig.get_config()
+    if not auth_cfg.email_password_enabled:
+        return Response({'error': 'Email signup is currently disabled.'}, status=status.HTTP_403_FORBIDDEN)
+
+    serializer = EmailSignupSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+
+    email = serializer.validated_data['email'].lower().strip()
+    password = serializer.validated_data['password']
+    display_name = serializer.validated_data.get('display_name', '').strip()
+
+    if Player.objects.filter(email=email).exists():
+        return Response({'error': 'An account with this email already exists.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    player = Player.objects.create_user(
+        email=email,
+        password=password,
+        auth_provider='email',
+        is_verified=True,
+        display_name=display_name or _generate_username(),
+    )
+
+    PlayerProfile.objects.get_or_create(player=player)
+
+    from referrals.models import ReferralCode
+    if not hasattr(player, 'referral_code'):
+        ReferralCode.objects.create(player=player, code=ReferralCode.generate_unique_code())
+
+    from wallet.models import Wallet
+    from game.models import Currency
+    if not hasattr(player, 'wallet'):
+        default_currency = Currency.objects.filter(is_default=True).first()
+        if default_currency:
+            Wallet.objects.create(player=player, currency=default_currency)
+
+    ref_code = serializer.validated_data.get('ref_code', '')
+    if ref_code:
+        _process_referral(player, ref_code)
+
+    access_token = generate_access_token(player)
+    refresh_token = generate_refresh_token(player)
+
+    return Response({
+        'access_token': access_token,
+        'refresh_token': refresh_token,
+        'is_new': True,
+        'player': PlayerSerializer(player).data,
+    }, status=status.HTTP_201_CREATED)
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def email_login(request):
+    """Log in with email and password."""
+    auth_cfg = AuthConfig.get_config()
+    if not auth_cfg.email_password_enabled:
+        return Response({'error': 'Email login is currently disabled.'}, status=status.HTTP_403_FORBIDDEN)
+
+    serializer = EmailLoginSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+
+    email = serializer.validated_data['email'].lower().strip()
+    password = serializer.validated_data['password']
+
+    try:
+        player = Player.objects.get(email=email, is_active=True)
+    except Player.DoesNotExist:
+        return Response({'error': 'Invalid email or password.'}, status=status.HTTP_401_UNAUTHORIZED)
+
+    if not player.check_password(password):
+        return Response({'error': 'Invalid email or password.'}, status=status.HTTP_401_UNAUTHORIZED)
+
+    PlayerProfile.objects.get_or_create(player=player)
+
+    access_token = generate_access_token(player)
+    refresh_token = generate_refresh_token(player)
+
+    return Response({
+        'access_token': access_token,
+        'refresh_token': refresh_token,
+        'is_new': False,
+        'player': PlayerSerializer(player).data,
+    })
+
+
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def auth_methods(request):
@@ -255,6 +345,7 @@ def auth_methods(request):
     return Response({
         'sms_otp': cfg.sms_otp_enabled,
         'whatsapp_otp': cfg.whatsapp_otp_enabled,
+        'email_password': cfg.email_password_enabled,
         'google': cfg.google_enabled,
         'facebook': cfg.facebook_enabled,
     })

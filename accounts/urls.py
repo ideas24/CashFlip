@@ -15,6 +15,10 @@ urlpatterns = [
     path('auth/verify-otp/', views.verify_otp_view, name='verify_otp'),
     path('auth/refresh/', views.refresh_token_view, name='refresh_token'),
 
+    # Email/password auth
+    path('auth/email/signup/', views.email_signup, name='email_signup'),
+    path('auth/email/login/', views.email_login, name='email_login'),
+
     # Public — which login buttons to show
     path('auth/methods/', views.auth_methods, name='auth_methods'),
 

@@ -58,8 +58,8 @@ class PlayerListSerializer(serializers.ModelSerializer):
 class AuthSettingsSerializer(serializers.ModelSerializer):
     class Meta:
         model = AuthConfig
-        fields = ['sms_otp_enabled', 'whatsapp_otp_enabled', 'google_enabled',
-                  'facebook_enabled', 'otp_expiry_minutes', 'max_otp_per_hour']
+        fields = ['sms_otp_enabled', 'whatsapp_otp_enabled', 'email_password_enabled',
+                  'google_enabled', 'facebook_enabled', 'otp_expiry_minutes', 'max_otp_per_hour']
 
 
 class RoleSerializer(serializers.ModelSerializer):

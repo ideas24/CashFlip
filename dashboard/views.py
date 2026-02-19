@@ -1279,8 +1279,8 @@ def settings_view(request):
     # POST — save settings
     auth_data = request.data.get('auth', {})
     if auth_data:
-        for field in ['sms_otp_enabled', 'whatsapp_otp_enabled', 'google_enabled',
-                      'facebook_enabled', 'otp_expiry_minutes', 'max_otp_per_hour']:
+        for field in ['sms_otp_enabled', 'whatsapp_otp_enabled', 'email_password_enabled',
+                      'google_enabled', 'facebook_enabled', 'otp_expiry_minutes', 'max_otp_per_hour']:
             if field in auth_data:
                 setattr(auth_config, field, auth_data[field])
         auth_config.save()
