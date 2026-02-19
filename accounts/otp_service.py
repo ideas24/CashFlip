@@ -94,7 +94,13 @@ def send_otp(phone, channel='sms', ip_address=None):
         return {'success': True, 'message': f'OTP sent via {channel}'}
     else:
         logger.error(f'OTP send FAILED: {phone[:6]}*** via {channel}')
-        return {'success': False, 'message': f'Failed to send OTP via {channel}. Please try again.'}
+        # Friendly message suggesting the other channel
+        alt = 'WhatsApp' if channel == 'sms' else 'SMS'
+        return {
+            'success': False,
+            'message': f'Could not deliver OTP via {channel.upper()}. Please try {alt} instead.',
+            'suggest_channel': 'whatsapp' if channel == 'sms' else 'sms',
+        }
 
 
 def verify_otp(phone, code):
@@ -137,18 +143,23 @@ def _send_whatsapp_otp(phone, code):
       Button: Copy code
     """
     access_token = settings.WHATSAPP_ACCESS_TOKEN
-    phone_number_id = settings.WHATSAPP_PHONE_NUMBER_ID
+    phone_number_id_default = settings.WHATSAPP_PHONE_NUMBER_ID
+    phone_number_id_gh = getattr(settings, 'WHATSAPP_PHONE_NUMBER_ID_GH', '')
     template_name = getattr(settings, 'WHATSAPP_AUTH_TEMPLATE_NAME', 'cashflip_auth_otp')
     
-    if not access_token or not phone_number_id:
-        logger.error('WhatsApp credentials not configured: token=%s, phone_id=%s', bool(access_token), bool(phone_number_id))
+    if not access_token or not phone_number_id_default:
+        logger.error('WhatsApp credentials not configured: token=%s, phone_id=%s', bool(access_token), bool(phone_number_id_default))
         return False
     
     # Normalize phone to international format without +
     normalized = phone.replace('+', '').replace(' ', '')
     if normalized.startswith('0'):
         normalized = '233' + normalized[1:]
-    logger.info(f'WhatsApp OTP: sending to {normalized}, template={template_name}')
+    
+    # Use Ghana-specific phone number ID for +233 numbers, fallback to default
+    is_ghana = normalized.startswith('233')
+    phone_number_id = phone_number_id_gh if (is_ghana and phone_number_id_gh) else phone_number_id_default
+    logger.info(f'WhatsApp OTP: sending to {normalized}, template={template_name}, phone_id={phone_number_id} (GH={is_ghana})')
     
     url = f"https://graph.facebook.com/v23.0/{phone_number_id}/messages"
     headers = {

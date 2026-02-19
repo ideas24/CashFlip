@@ -258,6 +258,30 @@
         });
     }
 
+    // ==================== GIF FIRST-FRAME CACHE ====================
+    const _gifFrameCache = {};
+
+    function _preloadGifFirstFrames() {
+        const denoms = state.denominations || [];
+        denoms.forEach(d => {
+            if (d.flip_gif_path && !d.is_zero) {
+                const gifUrl = `/static/${d.flip_gif_path}`;
+                if (_gifFrameCache[gifUrl]) return;
+                const img = new Image();
+                img.onload = function() {
+                    try {
+                        const c = document.createElement('canvas');
+                        c.width = this.naturalWidth;
+                        c.height = this.naturalHeight;
+                        c.getContext('2d').drawImage(this, 0, 0);
+                        _gifFrameCache[gifUrl] = c.toDataURL('image/jpeg', 0.92);
+                    } catch(e) { /* CORS — acceptable, GIF will show animated briefly */ }
+                };
+                img.src = gifUrl;
+            }
+        });
+    }
+
     // ==================== STACKED BUNDLE NOTE FLIPPER + SWIPE ====================
     let _noteFlipCount = 0;
     let _swipeStartY = 0;
@@ -315,49 +339,66 @@
         card.className = 'banknote-card entering';
         card.id = 'active-note';
 
-        // Pick a random non-zero denomination to display its face image
+        // Pick a random non-zero denomination — prefer ones with GIF
         const denominations = state.denominations || [];
+        const withGif = denominations.filter(d => !d.is_zero && d.flip_gif_path);
         const nonZero = denominations.filter(d => !d.is_zero);
-        const randomDenom = nonZero.length > 0 ? nonZero[Math.floor(Math.random() * nonZero.length)] : null;
+        const pool = withGif.length > 0 ? withGif : nonZero;
+        const randomDenom = pool.length > 0 ? pool[Math.floor(Math.random() * pool.length)] : null;
 
-        // Determine face image: prefer static face_image_path, then uploaded images
-        const faceImgPath = randomDenom?.face_image_path
-            ? `/static/${randomDenom.face_image_path}`
-            : (randomDenom?.front_image_url || randomDenom?.back_image_url);
-
-        let frontHTML;
-        if (faceImgPath) {
-            frontHTML = `
-                <div class="note-face note-face-front">
-                    <img src="${faceImgPath}" alt="note face" style="width:100%;height:100%;object-fit:cover;border-radius:10px;" />
-                </div>
+        // GIF mode: show first frame of GIF as static flat note
+        const gifPath = randomDenom?.flip_gif_path;
+        if (gifPath) {
+            const gifUrl = `/static/${gifPath}`;
+            const frozenSrc = _gifFrameCache[gifUrl] || gifUrl;
+            card.innerHTML = `
+                <img id="card-face-img" src="${frozenSrc}" alt="note"
+                     style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:10px;display:block;" />
             `;
+            // If cache miss, freeze the GIF once it loads
+            if (!_gifFrameCache[gifUrl]) {
+                const loader = new Image();
+                loader.onload = function() {
+                    try {
+                        const c = document.createElement('canvas');
+                        c.width = this.naturalWidth;
+                        c.height = this.naturalHeight;
+                        c.getContext('2d').drawImage(this, 0, 0);
+                        const dataUrl = c.toDataURL('image/jpeg', 0.92);
+                        _gifFrameCache[gifUrl] = dataUrl;
+                        const el = document.getElementById('card-face-img');
+                        if (el && el.src.includes(gifPath)) el.src = dataUrl;
+                    } catch(e) {}
+                };
+                loader.src = gifUrl;
+            }
         } else {
-            frontHTML = `
-                <div class="note-face note-face-front">
-                    <div class="nf-guilloche"></div>
-                    <div class="nf-security-thread"></div>
-                    <span class="nf-corner nf-corner-tl">CF</span>
-                    <span class="nf-corner nf-corner-tr">CF</span>
-                    <span class="nf-corner nf-corner-bl">CF</span>
-                    <span class="nf-corner nf-corner-br">CF</span>
-                    <span class="nf-logo">CF</span>
-                    <span class="nf-sub">CASHFLIP</span>
-                </div>
-            `;
+            // Fallback: face image or CSS-generated face
+            const faceImgPath = randomDenom?.face_image_path
+                ? `/static/${randomDenom.face_image_path}`
+                : (randomDenom?.front_image_url || randomDenom?.back_image_url);
+            if (faceImgPath) {
+                card.innerHTML = `
+                    <div class="note-face note-face-front">
+                        <img src="${faceImgPath}" alt="note face" style="width:100%;height:100%;object-fit:cover;border-radius:10px;" />
+                    </div>
+                `;
+            } else {
+                card.innerHTML = `
+                    <div class="note-face note-face-front">
+                        <div class="nf-guilloche"></div>
+                        <div class="nf-security-thread"></div>
+                        <span class="nf-corner nf-corner-tl">CF</span>
+                        <span class="nf-corner nf-corner-tr">CF</span>
+                        <span class="nf-corner nf-corner-bl">CF</span>
+                        <span class="nf-corner nf-corner-br">CF</span>
+                        <span class="nf-logo">CF</span>
+                        <span class="nf-sub">CASHFLIP</span>
+                    </div>
+                `;
+            }
         }
 
-        card.innerHTML = `
-            ${frontHTML}
-            <div class="note-face note-face-back" id="active-note-back">
-                <div class="nf-guilloche-back"></div>
-                <div class="nf-watermark"></div>
-                <div class="nf-denom-overlay">
-                    <span class="nf-denom-value">?</span>
-                    <span class="nf-denom-label">SWIPE LEFT TO REVEAL</span>
-                </div>
-            </div>
-        `;
         stage.appendChild(card);
         _startAutoFlipTimer();
     }
@@ -1373,7 +1414,17 @@
                     // Focus first OTP input
                     document.querySelector('.otp-digit[data-index="0"]')?.focus();
                 } else {
-                    showError(data.error || 'Failed to send OTP');
+                    // If server suggests switching channel, auto-switch and show friendly message
+                    if (data.suggest_channel) {
+                        const altName = data.suggest_channel === 'whatsapp' ? 'WhatsApp' : 'SMS';
+                        state.otpChannel = data.suggest_channel;
+                        document.querySelectorAll('.channel-btn').forEach(b => {
+                            b.classList.toggle('active', b.dataset.channel === data.suggest_channel);
+                        });
+                        showError(`${data.error || 'Delivery failed.'} We\u2019ve switched to ${altName} \u2014 tap Send Code again.`);
+                    } else {
+                        showError(data.error || 'Failed to send OTP. Please try again.');
+                    }
                 }
             } catch (e) {
                 showError('Network error. Try again.');
@@ -1481,6 +1532,7 @@
             if (resp.ok) {
                 state.gameConfig = await resp.json();
                 state.denominations = state.gameConfig.denominations || [];
+                _preloadGifFirstFrames();
                 const c = state.gameConfig;
                 const sym = c.currency?.symbol || 'GH₵';
                 // Update CTA hint dynamically

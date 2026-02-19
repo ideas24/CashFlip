@@ -72,7 +72,10 @@ def request_otp(request):
     
     if result['success']:
         return Response({'message': result['message'], 'channel': channel}, status=status.HTTP_200_OK)
-    return Response({'error': result['message']}, status=status.HTTP_429_TOO_MANY_REQUESTS)
+    resp_data = {'error': result['message']}
+    if result.get('suggest_channel'):
+        resp_data['suggest_channel'] = result['suggest_channel']
+    return Response(resp_data, status=status.HTTP_429_TOO_MANY_REQUESTS)
 
 
 @api_view(['POST'])
@@ -101,7 +104,10 @@ def request_sms_otp(request):
 
     if result['success']:
         return Response({'message': result['message'], 'channel': 'sms'}, status=status.HTTP_200_OK)
-    return Response({'error': result['message']}, status=status.HTTP_429_TOO_MANY_REQUESTS)
+    resp_data = {'error': result['message']}
+    if result.get('suggest_channel'):
+        resp_data['suggest_channel'] = result['suggest_channel']
+    return Response(resp_data, status=status.HTTP_429_TOO_MANY_REQUESTS)
 
 
 @api_view(['POST'])
@@ -130,7 +136,10 @@ def request_whatsapp_otp(request):
 
     if result['success']:
         return Response({'message': result['message'], 'channel': 'whatsapp'}, status=status.HTTP_200_OK)
-    return Response({'error': result['message']}, status=status.HTTP_429_TOO_MANY_REQUESTS)
+    resp_data = {'error': result['message']}
+    if result.get('suggest_channel'):
+        resp_data['suggest_channel'] = result['suggest_channel']
+    return Response(resp_data, status=status.HTTP_429_TOO_MANY_REQUESTS)
 
 
 @api_view(['POST'])
