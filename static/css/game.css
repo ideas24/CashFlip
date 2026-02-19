@@ -433,7 +433,6 @@ html, body {
 .note-flipper {
     position: absolute; inset: 0; z-index: 5;
     display: flex; align-items: center; justify-content: center;
-    perspective: 1400px;
     touch-action: pan-y;
     cursor: grab;
     -webkit-user-select: none; user-select: none;
@@ -461,9 +460,10 @@ html, body {
 /* Note stage — where the active banknote lives */
 .note-stage {
     position: relative;
-    width: 82vw; max-width: 580px;
-    aspect-ratio: 16 / 8.5;
-    transform-style: preserve-3d;
+    width: 92vw; max-width: 580px;
+    aspect-ratio: 16 / 9;
+    overflow: hidden;
+    border-radius: 12px;
     pointer-events: none;
 }
 
@@ -498,12 +498,13 @@ html, body {
     opacity: 0.2;
 }
 
-/* Individual banknote card — flat slide (no 3D door flip) */
+/* Individual banknote card */
 .banknote-card {
     position: absolute; inset: 0;
-    transition: transform 0.35s cubic-bezier(0.22, 0.61, 0.36, 1), opacity 0.35s ease;
+    overflow: hidden;
+    border-radius: 12px;
+    transition: opacity 0.35s ease;
     cursor: grab;
-    filter: drop-shadow(0 12px 32px rgba(0,0,0,0.6)) drop-shadow(0 0 20px rgba(0,191,166,0.08));
 }
 /* During drag — no CSS transition, JS controls transform directly */
 .banknote-card.dragging { transition: none !important; }
@@ -849,22 +850,22 @@ html, body {
 
 /* Note entrance animation — new note drops onto stack */
 @keyframes noteDropIn {
-    from { transform: translateX(30px) rotateY(8deg) scale(0.95); opacity: 0; }
-    to { transform: translateX(0) rotateY(0) scale(1); opacity: 1; }
+    from { opacity: 0; transform: scale(0.97); }
+    to { opacity: 1; transform: scale(1); }
 }
 .banknote-card.entering {
-    animation: noteDropIn 0.35s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+    animation: noteDropIn 0.25s ease-out both;
 }
 
 /* Note settle to pile — peeled note shrinks into the stack */
 @keyframes noteToPile {
     to {
-        transform: rotateY(-180deg) scale(0.3) translateX(-60px);
+        transform: scale(0.85);
         opacity: 0;
     }
 }
 .banknote-card.to-pile {
-    animation: noteToPile 0.4s ease-in forwards;
+    animation: noteToPile 0.3s ease-in forwards;
 }
 
 .game-hud { position: absolute; inset: 0; z-index: 10; pointer-events: none; }

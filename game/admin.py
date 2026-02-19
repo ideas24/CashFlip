@@ -28,7 +28,7 @@ class SiteBrandingAdmin(admin.ModelAdmin):
 class DenominationInline(admin.TabularInline):
     model = CurrencyDenomination
     extra = 1
-    fields = ['value', 'front_image', 'back_image', 'display_order', 'weight', 'is_zero', 'is_active']
+    fields = ['value', 'face_image_upload', 'flip_gif_upload', 'display_order', 'weight', 'is_zero', 'is_active']
 
 
 @admin.register(Currency)
@@ -45,10 +45,15 @@ class CurrencyDenominationAdmin(admin.ModelAdmin):
     list_editable = ['display_order', 'weight', 'is_active']
     fieldsets = (
         (None, {'fields': ('currency', 'value', 'display_order', 'weight', 'is_zero', 'is_active')}),
-        ('Banknote Images', {
-            'fields': ('front_image', 'back_image'),
-            'description': 'Upload front and back images of the banknote. Both are shown during the flip animation. '
-                         'Recommended: 960×510 px (2x retina) or 1440×765 px (3x). Aspect ratio ~1.88:1. PNG or JPEG, under 200KB.',
+        ('Uploaded Images (priority)', {
+            'fields': ('face_image_upload', 'flip_gif_upload', 'front_image', 'back_image'),
+            'description': 'Upload face image and flip GIF. These take priority over static paths below. '
+                         'Recommended: 1920×1080 (16:9). On Azure Storage for CDN delivery in production.',
+        }),
+        ('Static Asset Paths (fallback)', {
+            'fields': ('face_image_path', 'flip_gif_path', 'flip_sequence_prefix', 'flip_sequence_frames'),
+            'classes': ('collapse',),
+            'description': 'Static file paths used as fallback when no uploaded files exist.',
         }),
     )
 

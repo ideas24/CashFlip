@@ -79,14 +79,22 @@ class CurrencyDenomination(models.Model):
         upload_to='banknotes/back/', null=True, blank=True,
         help_text='Back side of the banknote. Recommended: 960×510 px (2x) or 1440×765 px (3x), PNG/JPEG, < 200KB'
     )
+    face_image_upload = models.FileField(
+        upload_to='banknotes/faces/', null=True, blank=True,
+        help_text='Upload face image (JPG/PNG). Takes priority over face_image_path. 1920×1080 recommended.'
+    )
+    flip_gif_upload = models.FileField(
+        upload_to='banknotes/gifs/', null=True, blank=True,
+        help_text='Upload flip animation GIF. Takes priority over flip_gif_path. 1920×1080 recommended.'
+    )
     face_image_path = models.CharField(max_length=255, blank=True, default='',
-        help_text='Static path to face image, e.g. images/Cedi-Face/5f.jpg')
+        help_text='Static path to face image, e.g. images/Cedi-Face/5f.jpg (fallback if no upload)')
     flip_sequence_prefix = models.CharField(max_length=255, blank=True, default='',
         help_text='Static path to flip sequence folder, e.g. images/Cedi-Sequences/5')
     flip_sequence_frames = models.PositiveIntegerField(default=31,
         help_text='Number of frames in the flip sequence (0-indexed PNGs)')
     flip_gif_path = models.CharField(max_length=255, blank=True, default='',
-        help_text='Static path to flip GIF, e.g. images/Cedi-Gifs/5cedis.gif')
+        help_text='Static path to flip GIF, e.g. images/Cedi-Gifs/5cedis.gif (fallback if no upload)')
     display_order = models.PositiveIntegerField(default=0)
     is_zero = models.BooleanField(default=False, help_text='Is this the zero/loss denomination?')
     is_active = models.BooleanField(default=True)

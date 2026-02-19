@@ -111,6 +111,20 @@ STATICFILES_DIRS = [BASE_DIR / 'static']
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
+# Azure Blob Storage for media (production)
+# Set AZURE_STORAGE_CONNECTION_STRING in .env to enable.
+# Uses django-storages[azure] — pip install django-storages[azure]
+AZURE_STORAGE_CONNECTION_STRING = os.getenv('AZURE_STORAGE_CONNECTION_STRING', '')
+AZURE_STORAGE_CONTAINER = os.getenv('AZURE_STORAGE_CONTAINER', 'media')
+if AZURE_STORAGE_CONNECTION_STRING:
+    DEFAULT_FILE_STORAGE = 'storages.backends.azure_storage.AzureStorage'
+    AZURE_CONTAINER = AZURE_STORAGE_CONTAINER
+    AZURE_CONNECTION_STRING = AZURE_STORAGE_CONNECTION_STRING
+    # CDN custom domain (optional): set AZURE_CUSTOM_DOMAIN for CDN-backed URLs
+    _azure_cdn = os.getenv('AZURE_CDN_DOMAIN', '')
+    if _azure_cdn:
+        AZURE_CUSTOM_DOMAIN = _azure_cdn
+
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # ============ REST Framework ============

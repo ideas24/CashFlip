@@ -258,6 +258,15 @@
         });
     }
 
+    // ==================== ASSET URL HELPER ====================
+    // Uploaded files return full URLs (/media/... or https://cdn...),
+    // static paths need /static/ prefix.
+    function _assetUrl(path) {
+        if (!path) return '';
+        if (path.startsWith('/') || path.startsWith('http')) return path;
+        return `/static/${path}`;
+    }
+
     // ==================== GIF FIRST-FRAME CACHE ====================
     const _gifFrameCache = {};
 
@@ -265,7 +274,7 @@
         const denoms = state.denominations || [];
         denoms.forEach(d => {
             if (d.flip_gif_path && !d.is_zero) {
-                const gifUrl = `/static/${d.flip_gif_path}`;
+                const gifUrl = _assetUrl(d.flip_gif_path);
                 if (_gifFrameCache[gifUrl]) return;
                 const img = new Image();
                 img.onload = function() {
@@ -334,10 +343,14 @@
         // Remove any previous active note (safety)
         const prev = document.getElementById('active-note');
         if (prev) prev.remove();
+        // Also remove any lingering next-note
+        const prevNext = document.getElementById('next-note');
+        if (prevNext) prevNext.remove();
 
         const card = document.createElement('div');
         card.className = 'banknote-card entering';
         card.id = 'active-note';
+        card.style.zIndex = '1';
 
         // Pick a random non-zero denomination — prefer ones with GIF
         const denominations = state.denominations || [];
@@ -349,12 +362,10 @@
         // GIF mode: show first frame of GIF as static flat note
         const gifPath = randomDenom?.flip_gif_path;
         if (gifPath) {
-            const gifUrl = `/static/${gifPath}`;
+            const gifUrl = _assetUrl(gifPath);
             const frozenSrc = _gifFrameCache[gifUrl] || gifUrl;
-            card.innerHTML = `
-                <img id="card-face-img" src="${frozenSrc}" alt="note"
-                     style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:10px;display:block;" />
-            `;
+            card.innerHTML = `<img id="card-face-img" src="${frozenSrc}" alt="note"
+                 style="width:100%;height:100%;object-fit:cover;display:block;" />`;
             // If cache miss, freeze the GIF once it loads
             if (!_gifFrameCache[gifUrl]) {
                 const loader = new Image();
@@ -367,35 +378,24 @@
                         const dataUrl = c.toDataURL('image/jpeg', 0.92);
                         _gifFrameCache[gifUrl] = dataUrl;
                         const el = document.getElementById('card-face-img');
-                        if (el && el.src.includes(gifPath)) el.src = dataUrl;
+                        if (el) el.src = dataUrl;
                     } catch(e) {}
                 };
                 loader.src = gifUrl;
             }
         } else {
-            // Fallback: face image or CSS-generated face
+            // Fallback: face image
             const faceImgPath = randomDenom?.face_image_path
-                ? `/static/${randomDenom.face_image_path}`
+                ? _assetUrl(randomDenom.face_image_path)
                 : (randomDenom?.front_image_url || randomDenom?.back_image_url);
             if (faceImgPath) {
-                card.innerHTML = `
-                    <div class="note-face note-face-front">
-                        <img src="${faceImgPath}" alt="note face" style="width:100%;height:100%;object-fit:cover;border-radius:10px;" />
-                    </div>
-                `;
+                card.innerHTML = `<img src="${faceImgPath}" alt="note"
+                     style="width:100%;height:100%;object-fit:cover;display:block;" />`;
             } else {
-                card.innerHTML = `
-                    <div class="note-face note-face-front">
-                        <div class="nf-guilloche"></div>
-                        <div class="nf-security-thread"></div>
-                        <span class="nf-corner nf-corner-tl">CF</span>
-                        <span class="nf-corner nf-corner-tr">CF</span>
-                        <span class="nf-corner nf-corner-bl">CF</span>
-                        <span class="nf-corner nf-corner-br">CF</span>
-                        <span class="nf-logo">CF</span>
-                        <span class="nf-sub">CASHFLIP</span>
-                    </div>
-                `;
+                card.innerHTML = `<div class="note-face note-face-front">
+                    <span class="nf-logo">CF</span>
+                    <span class="nf-sub">CASHFLIP</span>
+                </div>`;
             }
         }
 
@@ -439,34 +439,16 @@
         _swipeStartY = p.y;
         _swipeDragging = true;
         _swipeCurrentAngle = 0;
-        const card = document.getElementById('active-note');
-        if (card) {
-            card.classList.remove('entering', 'spring-back');
-            card.classList.add('dragging');
-        }
     }
 
     function _onSwipeMove(e) {
         if (!_swipeDragging) return;
-        const card = document.getElementById('active-note');
-        if (!card) return;
         const p = _getXY(e);
         const dx = _swipeStartX - p.x; // positive = swiped left
-        if (dx <= 0) {
-            _swipeCurrentAngle = 0;
-            card.style.transform = 'translateX(0) scale(1)';
-            card.style.opacity = '1';
-            return;
-        }
+        if (dx <= 0) { _swipeCurrentAngle = 0; return; }
         if (e.cancelable) e.preventDefault();
-        const maxDrag = 200;
-        const ratio = Math.min(dx / maxDrag, 1);
+        const ratio = Math.min(dx / 200, 1);
         _swipeCurrentAngle = ratio * ratio * 90;
-        const shiftX = ratio * 40;
-        const scaleDown = 1 - (ratio * 0.05);
-        const opacity = 1 - (ratio * 0.3);
-        card.style.transform = `translateX(-${shiftX}%) scale(${scaleDown})`;
-        card.style.opacity = `${opacity}`;
         if (dx >= SWIPE_THRESHOLD && dx < SWIPE_THRESHOLD + 12) {
             _hapticTick();
         }
@@ -475,23 +457,12 @@
     function _onSwipeEnd() {
         if (!_swipeDragging) return;
         _swipeDragging = false;
-        const card = document.getElementById('active-note');
-        if (!card) return;
-        card.classList.remove('dragging');
-
         if (_swipeCurrentAngle >= 35) {
-            // Commit the flip
             _stopAutoFlipTimer();
-            card.style.transform = '';
-            card.style.opacity = '1';
             _hapticHeavy();
             doFlip();
-        } else {
-            // Spring back
-            card.classList.add('spring-back');
-            card.style.transform = '';
-            _swipeCurrentAngle = 0;
         }
+        _swipeCurrentAngle = 0;
     }
 
     // ---- HAPTIC FEEDBACK ----
@@ -603,7 +574,7 @@
                 card.style.transform = '';
                 card.style.opacity = '1';
                 const zeroFace = denomData?.face_image_path
-                    ? `/static/${denomData.face_image_path}` : '/static/images/Cedi-Face/0f.jpg';
+                    ? _assetUrl(denomData.face_image_path) : '/static/images/Cedi-Face/0f.jpg';
                 const img = card.querySelector('img');
                 if (img) {
                     img.src = zeroFace;
@@ -643,26 +614,25 @@
 
     // ---- GIF FLIP ANIMATION ----
     function _flipWithGif(card, gifPath, durationMs, value, sym, resolve) {
-        const gifUrl = `/static/${gifPath}`;
-        // Cache-bust forces GIF to restart from frame 0 each time
+        const gifUrl = _assetUrl(gifPath);
         const cacheBust = `?t=${Date.now()}`;
 
-        // Clear all CSS classes — no door flip, just play the GIF
-        card.classList.remove('entering', 'dragging', 'spring-back');
-        card.style.transform = '';
-        card.style.opacity = '1';
+        card.classList.remove('entering');
 
-        // Simply swap the existing img src to the animated GIF.
-        // No overlay divs, no black background — just the GIF filling the card.
+        // 1) Place the NEXT card underneath the current one first
+        //    so it's visible when the current card exits.
+        _placeNextCardUnderneath();
+
+        // 2) Swap the img src to the animated GIF (cache-busted to restart)
         const img = card.querySelector('img');
         if (img) {
             img.src = gifUrl + cacheBust;
         } else {
             card.innerHTML = `<img src="${gifUrl}${cacheBust}" alt="flip"
-                 style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:10px;display:block;" />`;
+                 style="width:100%;height:100%;object-fit:cover;display:block;" />`;
         }
 
-        // After GIF plays for the configured duration, show value and move on
+        // 3) After GIF plays, update counters and fade out current card
         setTimeout(() => {
             _noteFlipCount++;
             updateRunningTotal();
@@ -671,20 +641,72 @@
             if (pile) pile.classList.add('visible');
             if (pileCount) pileCount.textContent = _noteFlipCount;
 
-            setTimeout(() => {
-                card.removeAttribute('id');
-                card.classList.add('to-pile');
-                card.addEventListener('animationend', () => card.remove(), { once: true });
-                _placeReadyCard();
-                state.isFlipping = false;
-                resolve();
-            }, 500);
+            // Fade out the current card to reveal next card underneath
+            card.removeAttribute('id');
+            card.classList.add('to-pile');
+            card.addEventListener('animationend', () => card.remove(), { once: true });
+            // Fallback removal if animationend doesn't fire
+            setTimeout(() => { if (card.parentNode) card.remove(); }, 600);
+
+            // Promote the underneath card to active
+            const next = document.getElementById('next-note');
+            if (next) {
+                next.id = 'active-note';
+                next.querySelector('img')?.removeAttribute('id');
+                const faceImg = next.querySelector('img');
+                if (faceImg) faceImg.id = 'card-face-img';
+            }
+            _startAutoFlipTimer();
+            state.isFlipping = false;
+            resolve();
         }, durationMs);
+    }
+
+    // Place a new card underneath the current active card
+    function _placeNextCardUnderneath() {
+        const stage = document.getElementById('note-stage');
+        if (!stage) return;
+        // Don't duplicate
+        if (document.getElementById('next-note')) return;
+
+        const nextCard = document.createElement('div');
+        nextCard.className = 'banknote-card';
+        nextCard.id = 'next-note';
+        nextCard.style.zIndex = '0';
+
+        const denominations = state.denominations || [];
+        const withGif = denominations.filter(d => !d.is_zero && d.flip_gif_path);
+        const nonZero = denominations.filter(d => !d.is_zero);
+        const pool = withGif.length > 0 ? withGif : nonZero;
+        const randomDenom = pool.length > 0 ? pool[Math.floor(Math.random() * pool.length)] : null;
+
+        const gifPath = randomDenom?.flip_gif_path;
+        if (gifPath) {
+            const gifUrl = _assetUrl(gifPath);
+            const frozenSrc = _gifFrameCache[gifUrl] || gifUrl;
+            nextCard.innerHTML = `<img src="${frozenSrc}" alt="note"
+                 style="width:100%;height:100%;object-fit:cover;display:block;" />`;
+        } else {
+            const faceImgPath = randomDenom?.face_image_path
+                ? _assetUrl(randomDenom.face_image_path) : null;
+            if (faceImgPath) {
+                nextCard.innerHTML = `<img src="${faceImgPath}" alt="note"
+                     style="width:100%;height:100%;object-fit:cover;display:block;" />`;
+            }
+        }
+
+        // Insert underneath (before active card)
+        const active = document.getElementById('active-note');
+        if (active) {
+            stage.insertBefore(nextCard, active);
+        } else {
+            stage.appendChild(nextCard);
+        }
     }
 
     // ---- PNG SEQUENCE FLIP ANIMATION ----
     function _flipWithSequence(card, seqPrefix, totalFrames, durationMs, value, sym, resolve) {
-        const staticBase = `/static/${seqPrefix}`;
+        const staticBase = _assetUrl(seqPrefix);
         const denomVal = seqPrefix.split('/').pop();
         const filePrefix = (denomVal === '1') ? `${denomVal}cedi` : `${denomVal}cedis`;
 
@@ -751,7 +773,7 @@
             if (isZero) {
                 // Use zero face image if available
                 const zeroFace = denomData?.face_image_path
-                    ? `/static/${denomData.face_image_path}` : null;
+                    ? _assetUrl(denomData.face_image_path) : null;
                 if (zeroFace) {
                     backFace.classList.add('zero-note', 'has-image');
                     backFace.innerHTML = `
@@ -783,7 +805,7 @@
                 }
             } else {
                 const faceImgPath = denomData?.face_image_path
-                    ? `/static/${denomData.face_image_path}`
+                    ? _assetUrl(denomData.face_image_path)
                     : (denomData?.front_image_url || denomData?.image_url);
                 if (faceImgPath) {
                     backFace.classList.add('has-image');
@@ -1753,9 +1775,6 @@
             if (!data.success) {
                 showToast(data.error || 'Flip failed');
                 state.isFlipping = false;
-                // Spring-back the card if it was mid-swipe
-                const card = document.getElementById('active-note');
-                if (card) { card.classList.remove('dragging'); card.classList.add('spring-back'); card.style.transform = ''; card.style.opacity = '1'; }
                 _startAutoFlipTimer();
                 return;
             }
@@ -1823,8 +1842,6 @@
         } catch (e) {
             showToast('Network error');
             state.isFlipping = false;
-            const card = document.getElementById('active-note');
-            if (card) { card.classList.remove('dragging'); card.classList.add('spring-back'); card.style.transform = ''; card.style.opacity = '1'; }
             _startAutoFlipTimer();
         }
     }

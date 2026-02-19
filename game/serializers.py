@@ -16,6 +16,8 @@ class DenominationSerializer(serializers.ModelSerializer):
     image_url = serializers.SerializerMethodField()
     front_image_url = serializers.SerializerMethodField()
     back_image_url = serializers.SerializerMethodField()
+    face_image_path = serializers.SerializerMethodField()
+    flip_gif_path = serializers.SerializerMethodField()
 
     class Meta:
         model = CurrencyDenomination
@@ -37,6 +39,18 @@ class DenominationSerializer(serializers.ModelSerializer):
         if obj.back_image:
             return obj.back_image.url
         return None
+
+    def get_face_image_path(self, obj):
+        """Uploaded file takes priority; fall back to static path."""
+        if obj.face_image_upload:
+            return obj.face_image_upload.url
+        return obj.face_image_path or ''
+
+    def get_flip_gif_path(self, obj):
+        """Uploaded GIF takes priority; fall back to static path."""
+        if obj.flip_gif_upload:
+            return obj.flip_gif_upload.url
+        return obj.flip_gif_path or ''
 
 
 class GameConfigPublicSerializer(serializers.ModelSerializer):
