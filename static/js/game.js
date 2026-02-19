@@ -454,17 +454,19 @@
         const dx = _swipeStartX - p.x; // positive = swiped left
         if (dx <= 0) {
             _swipeCurrentAngle = 0;
-            card.style.transform = 'rotateY(0deg) translateX(0) scale(1)';
+            card.style.transform = 'translateX(0) scale(1)';
+            card.style.opacity = '1';
             return;
         }
         if (e.cancelable) e.preventDefault();
         const maxDrag = 200;
         const ratio = Math.min(dx / maxDrag, 1);
-        // Eased angle with curve for the flexible bend feel
         _swipeCurrentAngle = ratio * ratio * 90;
-        const shiftX = ratio * 15;
-        const scaleDown = 1 - (ratio * 0.08);
-        card.style.transform = `rotateY(-${_swipeCurrentAngle}deg) translateX(-${shiftX}%) scale(${scaleDown})`;
+        const shiftX = ratio * 40;
+        const scaleDown = 1 - (ratio * 0.05);
+        const opacity = 1 - (ratio * 0.3);
+        card.style.transform = `translateX(-${shiftX}%) scale(${scaleDown})`;
+        card.style.opacity = `${opacity}`;
         if (dx >= SWIPE_THRESHOLD && dx < SWIPE_THRESHOLD + 12) {
             _hapticTick();
         }
@@ -480,12 +482,8 @@
         if (_swipeCurrentAngle >= 35) {
             // Commit the flip
             _stopAutoFlipTimer();
-            // Only do CSS peel if no GIF/PNG assets (CSS fallback mode)
-            const hasAnimAssets = (state.denominations || []).some(d => d.flip_gif_path || d.flip_sequence_prefix);
-            if (!hasAnimAssets) {
-                card.classList.add('flipping');
-            }
             card.style.transform = '';
+            card.style.opacity = '1';
             _hapticHeavy();
             doFlip();
         } else {
@@ -531,9 +529,6 @@
                     if (card) {
                         card.classList.remove('entering', 'spring-back', 'dragging');
                         card.style.transform = '';
-                        // Only CSS peel when no GIF/PNG assets
-                        const hasAnimAssets = (state.denominations || []).some(d => d.flip_gif_path || d.flip_sequence_prefix);
-                        if (!hasAnimAssets) card.classList.add('flipping');
                     }
                     doFlip();
                 }
@@ -601,31 +596,47 @@
             // Play flip sound
             _playFlipSound();
 
-            // Choose animation mode for non-zero flips
-            if (!isZero) {
-                const gifPath = denomData?.flip_gif_path;
-                const seqPrefix = denomData?.flip_sequence_prefix;
-
-                if (animMode === 'gif' && gifPath) {
-                    _flipWithGif(card, gifPath, animSpeed, value, sym, resolve);
-                    return;
-                } else if (animMode === 'png' && seqPrefix) {
-                    const seqFrames = denomData?.flip_sequence_frames || 31;
-                    _flipWithSequence(card, seqPrefix, seqFrames, animSpeed, value, sym, resolve);
-                    return;
-                } else if (gifPath) {
-                    // Fallback: try gif if available regardless of mode
-                    _flipWithGif(card, gifPath, animSpeed, value, sym, resolve);
-                    return;
-                } else if (seqPrefix) {
-                    // Fallback: try png if available regardless of mode
-                    const seqFrames = denomData?.flip_sequence_frames || 31;
-                    _flipWithSequence(card, seqPrefix, seqFrames, animSpeed, value, sym, resolve);
-                    return;
+            // ZERO denomination: show 0f.jpg face image, no animation needed.
+            // The zero popup (zero-note overlay) handles the result display.
+            if (isZero) {
+                card.classList.remove('entering', 'dragging', 'spring-back');
+                card.style.transform = '';
+                card.style.opacity = '1';
+                const zeroFace = denomData?.face_image_path
+                    ? `/static/${denomData.face_image_path}` : '/static/images/Cedi-Face/0f.jpg';
+                const img = card.querySelector('img');
+                if (img) {
+                    img.src = zeroFace;
+                } else {
+                    card.innerHTML = `<img src="${zeroFace}" alt="zero" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:10px;display:block;" />`;
                 }
+                _noteFlipCount++;
+                state.isFlipping = false;
+                resolve();
+                return;
             }
 
-            // --- FALLBACK: CSS-based flip animation (zero notes or no assets) ---
+            // Non-zero: choose animation mode
+            const gifPath = denomData?.flip_gif_path;
+            const seqPrefix = denomData?.flip_sequence_prefix;
+
+            if (animMode === 'gif' && gifPath) {
+                _flipWithGif(card, gifPath, animSpeed, value, sym, resolve);
+                return;
+            } else if (animMode === 'png' && seqPrefix) {
+                const seqFrames = denomData?.flip_sequence_frames || 31;
+                _flipWithSequence(card, seqPrefix, seqFrames, animSpeed, value, sym, resolve);
+                return;
+            } else if (gifPath) {
+                _flipWithGif(card, gifPath, animSpeed, value, sym, resolve);
+                return;
+            } else if (seqPrefix) {
+                const seqFrames = denomData?.flip_sequence_frames || 31;
+                _flipWithSequence(card, seqPrefix, seqFrames, animSpeed, value, sym, resolve);
+                return;
+            }
+
+            // --- FALLBACK: CSS-based animation (no assets available) ---
             _flipWithCSS(card, isZero, value, sym, denomData, resolve);
         });
     }
@@ -636,30 +647,23 @@
         // Cache-bust forces GIF to restart from frame 0 each time
         const cacheBust = `?t=${Date.now()}`;
 
-        // Remove any CSS transform classes - the GIF IS the flip animation
-        card.classList.remove('entering', 'dragging', 'spring-back', 'flipping');
-        card.style.transform = 'none';
+        // Clear all CSS classes — no door flip, just play the GIF
+        card.classList.remove('entering', 'dragging', 'spring-back');
+        card.style.transform = '';
+        card.style.opacity = '1';
 
-        // Overlay the GIF on top of the existing face image for a smooth transition.
-        // The face stays visible briefly while the GIF loads, then the GIF covers it.
-        const gifOverlay = document.createElement('div');
-        gifOverlay.id = 'gif-flip-overlay';
-        gifOverlay.style.cssText = 'position:absolute;inset:0;z-index:10;border-radius:10px;overflow:hidden;background:#0D1117;';
-        gifOverlay.innerHTML = `
-            <img src="${gifUrl}${cacheBust}" alt="flip"
-                 style="width:100%;height:100%;object-fit:cover;border-radius:10px;display:block;" />
-            <div class="nf-denom-overlay seq-value-overlay hidden" id="seq-value-overlay"
-                 style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:2;">
-                <span class="nf-denom-value" style="font-family:'Orbitron',sans-serif;font-size:clamp(1.2rem,4vw,2rem);font-weight:900;color:#fff;text-shadow:0 2px 8px rgba(0,0,0,0.7),0 0 20px rgba(0,191,166,0.4);">+${sym}${parseFloat(value).toFixed(2)}</span>
-            </div>
-        `;
-        card.appendChild(gifOverlay);
+        // Simply swap the existing img src to the animated GIF.
+        // No overlay divs, no black background — just the GIF filling the card.
+        const img = card.querySelector('img');
+        if (img) {
+            img.src = gifUrl + cacheBust;
+        } else {
+            card.innerHTML = `<img src="${gifUrl}${cacheBust}" alt="flip"
+                 style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:10px;display:block;" />`;
+        }
 
         // After GIF plays for the configured duration, show value and move on
         setTimeout(() => {
-            const overlay = document.getElementById('seq-value-overlay');
-            if (overlay) overlay.classList.remove('hidden');
-
             _noteFlipCount++;
             updateRunningTotal();
             const pile = document.getElementById('note-pile');
@@ -684,27 +688,22 @@
         const denomVal = seqPrefix.split('/').pop();
         const filePrefix = (denomVal === '1') ? `${denomVal}cedi` : `${denomVal}cedis`;
 
-        // Remove CSS transforms - the sequence IS the flip animation
-        card.classList.remove('entering', 'dragging', 'spring-back', 'flipping');
-        card.style.transform = 'none';
+        // Clear CSS classes
+        card.classList.remove('entering', 'dragging', 'spring-back');
+        card.style.transform = '';
+        card.style.opacity = '1';
 
-        // Overlay the sequence player on top of the face image
-        const seqOverlay = document.createElement('div');
-        seqOverlay.id = 'seq-player';
-        seqOverlay.style.cssText = 'position:absolute;inset:0;z-index:10;border-radius:10px;overflow:hidden;background:#0D1117;';
-        seqOverlay.innerHTML = `
-            <img id="seq-frame" src="${staticBase}/${filePrefix}_00000.png" alt="flip"
-                 style="width:100%;height:100%;object-fit:cover;border-radius:10px;display:block;" />
-            <div class="nf-denom-overlay seq-value-overlay hidden" id="seq-value-overlay"
-                 style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:2;">
-                <span class="nf-denom-value" style="font-family:'Orbitron',sans-serif;font-size:clamp(1.2rem,4vw,2rem);font-weight:900;color:#fff;text-shadow:0 2px 8px rgba(0,0,0,0.7),0 0 20px rgba(0,191,166,0.4);">+${sym}${parseFloat(value).toFixed(2)}</span>
-            </div>
-        `;
-        card.appendChild(seqOverlay);
+        // Use existing img element to play frames — no overlay
+        let frameImg = card.querySelector('img');
+        if (!frameImg) {
+            card.innerHTML = `<img src="${staticBase}/${filePrefix}_00000.png" alt="flip"
+                 style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:10px;display:block;" />`;
+            frameImg = card.querySelector('img');
+        } else {
+            frameImg.src = `${staticBase}/${filePrefix}_00000.png`;
+        }
 
-        const frameImg = document.getElementById('seq-frame');
         let currentFrame = 0;
-        // Calculate interval from total duration and frame count
         const interval = Math.max(16, Math.floor(durationMs / totalFrames));
 
         // Preload first few frames
@@ -717,8 +716,6 @@
             currentFrame++;
             if (currentFrame >= totalFrames) {
                 clearInterval(seqTimer);
-                const overlay = document.getElementById('seq-value-overlay');
-                if (overlay) overlay.classList.remove('hidden');
 
                 _noteFlipCount++;
                 updateRunningTotal();
@@ -820,15 +817,11 @@
         }
 
         card.classList.remove('entering', 'dragging', 'spring-back');
-        if (!card.classList.contains('flipping')) {
-            void card.offsetWidth;
-            card.classList.add('flipping');
-        }
+        card.style.transform = '';
+        card.style.opacity = '1';
 
+        // Simple fade-based reveal (no 3D rotateY)
         setTimeout(() => {
-            card.classList.remove('flipping');
-            card.classList.add('reveal');
-
             _noteFlipCount++;
             if (!isZero) {
                 updateRunningTotal();
@@ -1762,7 +1755,7 @@
                 state.isFlipping = false;
                 // Spring-back the card if it was mid-swipe
                 const card = document.getElementById('active-note');
-                if (card) { card.classList.remove('flipping', 'dragging'); card.classList.add('spring-back'); card.style.transform = ''; }
+                if (card) { card.classList.remove('dragging'); card.classList.add('spring-back'); card.style.transform = ''; card.style.opacity = '1'; }
                 _startAutoFlipTimer();
                 return;
             }
@@ -1831,7 +1824,7 @@
             showToast('Network error');
             state.isFlipping = false;
             const card = document.getElementById('active-note');
-            if (card) { card.classList.remove('flipping', 'dragging'); card.classList.add('spring-back'); card.style.transform = ''; }
+            if (card) { card.classList.remove('dragging'); card.classList.add('spring-back'); card.style.transform = ''; card.style.opacity = '1'; }
             _startAutoFlipTimer();
         }
     }

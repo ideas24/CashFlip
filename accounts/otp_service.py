@@ -153,14 +153,11 @@ def _send_whatsapp_otp(phone, code):
     if normalized.startswith('0'):
         normalized = '233' + normalized[1:]
     
-    # Build ordered list of phone IDs to try: GH first for Ghana numbers, then default
+    # Build ordered list of phone IDs: default first, GH as fallback for Ghana numbers
     is_ghana = normalized.startswith('233')
-    phone_ids = []
-    if is_ghana and phone_number_id_gh:
+    phone_ids = [phone_number_id_default]
+    if is_ghana and phone_number_id_gh and phone_number_id_gh != phone_number_id_default:
         phone_ids.append(phone_number_id_gh)
-    phone_ids.append(phone_number_id_default)
-    # Deduplicate while preserving order
-    phone_ids = list(dict.fromkeys(phone_ids))
     
     headers = {
         'Authorization': f'Bearer {access_token}',
