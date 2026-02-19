@@ -68,6 +68,26 @@ class ApiClient {
   delete<T>(endpoint: string) {
     return this.request<T>(endpoint, { method: 'DELETE' })
   }
+
+  async upload<T = Record<string, string>>(endpoint: string, formData: FormData): Promise<T> {
+    const url = `${API_BASE}${endpoint}`
+    const headers: Record<string, string> = {}
+    const token = this.getToken()
+    if (token) headers['Authorization'] = `Bearer ${token}`
+
+    const resp = await fetch(url, { method: 'POST', headers, body: formData })
+
+    if (resp.status === 401) {
+      this.setToken(null)
+      window.location.href = '/login'
+      throw new Error('Unauthorized')
+    }
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({ error: resp.statusText }))
+      throw new Error(err.error || err.detail || resp.statusText)
+    }
+    return resp.json()
+  }
 }
 
 export const api = new ApiClient()

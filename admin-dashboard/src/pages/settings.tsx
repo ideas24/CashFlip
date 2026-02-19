@@ -101,6 +101,17 @@ interface Denomination {
   weight: number
 }
 
+interface BrandingSettings {
+  logo_url: string
+  logo_icon_url: string
+  loading_animation_url: string
+  primary_color: string
+  secondary_color: string
+  accent_color: string
+  background_color: string
+  tagline: string
+}
+
 interface OutcomeChoice { value: string; label: string }
 
 interface AllSettings {
@@ -109,6 +120,7 @@ interface AllSettings {
   features: FeatureSettings
   wheel: WheelSettings
   denominations: Denomination[]
+  branding: BrandingSettings
   simulated_configs: SimConfig[]
   outcome_mode_choices: OutcomeChoice[]
 }
@@ -119,7 +131,8 @@ export default function SettingsPage() {
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
-  const [tab, setTab] = useState<'auth' | 'game' | 'denominations' | 'features' | 'wheel' | 'simulated'>('auth')
+  const [tab, setTab] = useState<'auth' | 'game' | 'denominations' | 'features' | 'wheel' | 'branding' | 'simulated'>('auth')
+  const [uploading, setUploading] = useState(false)
 
   const refresh = () => {
     api.get<AllSettings>('/settings/')
@@ -135,7 +148,7 @@ export default function SettingsPage() {
     setSaving(true)
     setSaved(false)
     try {
-      await api.post('/settings/', { auth: settings.auth, game: settings.game, features: settings.features, wheel: settings.wheel, denominations: settings.denominations })
+      await api.post('/settings/', { auth: settings.auth, game: settings.game, features: settings.features, wheel: settings.wheel, denominations: settings.denominations, branding: settings.branding })
       setSaved(true)
       setTimeout(() => setSaved(false), 2000)
     } catch {}
@@ -160,6 +173,32 @@ export default function SettingsPage() {
   const updateWheel = (key: keyof WheelSettings, value: boolean | number | WheelSegment[]) => {
     if (!settings) return
     setSettings({ ...settings, wheel: { ...settings.wheel, [key]: value } })
+  }
+
+  const updateBranding = (key: keyof BrandingSettings, value: string) => {
+    if (!settings) return
+    setSettings({ ...settings, branding: { ...settings.branding, [key]: value } })
+  }
+
+  const uploadBrandingFile = async (field: string, file: File) => {
+    setUploading(true)
+    try {
+      const formData = new FormData()
+      formData.append(field, file)
+      const resp = await api.upload('/settings/branding/upload/', formData)
+      if (settings) {
+        setSettings({
+          ...settings,
+          branding: {
+            ...settings.branding,
+            logo_url: resp.logo_url || settings.branding.logo_url,
+            logo_icon_url: resp.logo_icon_url || settings.branding.logo_icon_url,
+            loading_animation_url: resp.loading_animation_url || settings.branding.loading_animation_url,
+          }
+        })
+      }
+    } catch {}
+    setUploading(false)
   }
 
   const createSimConfig = async () => {
@@ -216,6 +255,7 @@ export default function SettingsPage() {
             { key: 'denominations' as const, label: 'Denominations', icon: Gamepad2 },
             { key: 'features' as const, label: 'Features', icon: Gamepad2 },
             { key: 'wheel' as const, label: 'Daily Wheel', icon: Gamepad2 },
+            { key: 'branding' as const, label: 'Branding', icon: Gamepad2 },
             { key: 'simulated' as const, label: 'Simulation', icon: FlaskConical },
           ].map(t => (
             <button
@@ -712,6 +752,80 @@ export default function SettingsPage() {
                     </div>
                   ))}
                 </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* ===== BRANDING TAB ===== */}
+        {tab === 'branding' && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Branding & Appearance</CardTitle>
+              <CardDescription>Upload logos, favicon, and configure brand colors for both the main site and admin console</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* File uploads */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {[
+                  { field: 'logo', label: 'Main Logo', url: s.branding?.logo_url, hint: 'SVG/PNG, displayed in header & auth screens' },
+                  { field: 'logo_icon', label: 'Favicon / App Icon', url: s.branding?.logo_icon_url, hint: 'Square SVG/PNG, used as favicon & PWA icon' },
+                  { field: 'loading_animation', label: 'Loading Animation', url: s.branding?.loading_animation_url, hint: 'GIF/SVG shown during loading screens' },
+                ].map(item => (
+                  <div key={item.field} className="p-4 rounded-lg border border-border bg-card">
+                    <p className="text-sm font-medium text-white mb-1">{item.label}</p>
+                    <p className="text-[10px] text-muted mb-3">{item.hint}</p>
+                    {item.url && (
+                      <div className="mb-3 p-2 bg-zinc-900 rounded border border-border flex items-center justify-center" style={{minHeight: 80}}>
+                        <img src={item.url} alt={item.label} className="max-h-16 max-w-full object-contain" />
+                      </div>
+                    )}
+                    <label className="block">
+                      <span className="inline-flex items-center gap-1 px-3 py-1.5 bg-primary/20 text-primary text-xs rounded cursor-pointer hover:bg-primary/30 transition">
+                        {uploading ? 'Uploading...' : 'Upload'}
+                      </span>
+                      <input type="file" className="hidden" accept="image/*,.svg" disabled={uploading}
+                        onChange={e => {
+                          const file = e.target.files?.[0]
+                          if (file) uploadBrandingFile(item.field, file)
+                          e.target.value = ''
+                        }} />
+                    </label>
+                  </div>
+                ))}
+              </div>
+
+              {/* Brand colors */}
+              <div>
+                <h3 className="text-sm font-medium text-white mb-3">Brand Colors</h3>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  {([
+                    { key: 'primary_color' as const, label: 'Primary (Teal)', desc: 'Main accent color' },
+                    { key: 'secondary_color' as const, label: 'Secondary (Gold)', desc: 'Win highlights' },
+                    { key: 'accent_color' as const, label: 'Accent (Lime)', desc: 'Success states' },
+                    { key: 'background_color' as const, label: 'Background', desc: 'Page background' },
+                  ]).map(item => (
+                    <div key={item.key} className="p-3 rounded-lg border border-border bg-card">
+                      <p className="text-xs font-medium text-white mb-0.5">{item.label}</p>
+                      <p className="text-[10px] text-muted mb-2">{item.desc}</p>
+                      <div className="flex items-center gap-2">
+                        <input type="color" value={s.branding?.[item.key] || '#000000'}
+                          onChange={e => updateBranding(item.key, e.target.value)}
+                          className="w-8 h-8 rounded border border-border cursor-pointer" />
+                        <Input value={s.branding?.[item.key] || ''} onChange={e => updateBranding(item.key, e.target.value)}
+                          className="font-mono text-xs" placeholder="#000000" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Tagline */}
+              <div>
+                <label className="block text-sm font-medium text-white mb-1">Tagline</label>
+                <Input value={s.branding?.tagline || ''} onChange={e => updateBranding('tagline', e.target.value)}
+                  placeholder="Flip Notes. Stack Cash. Win Big." />
+                <p className="text-[10px] text-muted mt-1">Displayed on auth/loading screens</p>
               </div>
             </CardContent>
           </Card>

@@ -1242,12 +1242,27 @@ def settings_view(request):
                     'weight': d.weight,
                 })
 
+        # Branding
+        from game.models import SiteBranding
+        branding = SiteBranding.get_branding()
+        branding_data = {
+            'logo_url': branding.logo.url if branding.logo else '',
+            'logo_icon_url': branding.logo_icon.url if branding.logo_icon else '',
+            'loading_animation_url': branding.loading_animation.url if branding.loading_animation else '',
+            'primary_color': branding.primary_color,
+            'secondary_color': branding.secondary_color,
+            'accent_color': branding.accent_color,
+            'background_color': branding.background_color,
+            'tagline': branding.tagline,
+        }
+
         return Response({
             'auth': AuthSettingsSerializer(auth_config).data,
             'game': game_data,
             'features': feature_data,
             'wheel': wheel_data,
             'denominations': denoms,
+            'branding': branding_data,
             'simulated_configs': sim_list,
             'outcome_mode_choices': [
                 {'value': c[0], 'label': c[1]} for c in SimulatedGameConfig.OUTCOME_CHOICES
@@ -1342,7 +1357,53 @@ def settings_view(request):
                 currency=game_config.currency
             ).exclude(id__in=existing_ids).delete()
 
+    # Save branding (text fields only — file uploads via separate endpoint)
+    from game.models import SiteBranding
+    branding_data = request.data.get('branding', {})
+    if branding_data:
+        branding = SiteBranding.get_branding()
+        branding_fields = ['primary_color', 'secondary_color', 'accent_color',
+                           'background_color', 'tagline']
+        updated = []
+        for field in branding_fields:
+            if field in branding_data:
+                setattr(branding, field, branding_data[field])
+                updated.append(field)
+        if updated:
+            branding.save(update_fields=updated + ['updated_at'])
+
     return Response({'status': 'saved'})
+
+
+@api_view(['POST'])
+@permission_classes([IsStaffAdmin])
+def branding_upload(request):
+    """Upload branding files (logo, favicon/icon, loading animation)."""
+    from game.models import SiteBranding
+    branding = SiteBranding.get_branding()
+
+    field_map = {
+        'logo': 'logo',
+        'logo_icon': 'logo_icon',
+        'loading_animation': 'loading_animation',
+    }
+
+    updated = []
+    for param, model_field in field_map.items():
+        if param in request.FILES:
+            file = request.FILES[param]
+            getattr(branding, model_field).save(file.name, file, save=False)
+            updated.append(model_field)
+
+    if updated:
+        branding.save(update_fields=updated + ['updated_at'])
+
+    return Response({
+        'status': 'uploaded',
+        'logo_url': branding.logo.url if branding.logo else '',
+        'logo_icon_url': branding.logo_icon.url if branding.logo_icon else '',
+        'loading_animation_url': branding.loading_animation.url if branding.loading_animation else '',
+    })
 
 
 @api_view(['POST', 'PATCH', 'DELETE'])

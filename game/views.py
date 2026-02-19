@@ -631,6 +631,30 @@ def check_and_award_badges(player, session=None, flip_data=None):
     if total_sessions >= 50:
         award('veteran')
 
+    # Daily player (7 consecutive days with at least 1 session)
+    if not PlayerBadge.objects.filter(player=player, badge__code='daily_player').exists():
+        from django.db.models.functions import TruncDate
+        recent_dates = (
+            GameSession.objects.filter(player=player, created_at__gte=timezone.now() - timezone.timedelta(days=7))
+            .annotate(day=TruncDate('created_at'))
+            .values_list('day', flat=True)
+            .distinct()
+        )
+        if len(set(recent_dates)) >= 7:
+            award('daily_player')
+
+    # Social badge (referred a friend)
+    if not PlayerBadge.objects.filter(player=player, badge__code='social').exists():
+        from referrals.models import Referral
+        if Referral.objects.filter(referrer=player).exists():
+            award('social')
+
+    # Depositor badge (first deposit)
+    if not PlayerBadge.objects.filter(player=player, badge__code='depositor').exists():
+        from payments.models import Deposit
+        if Deposit.objects.filter(player=player, status='completed').exists():
+            award('depositor')
+
     return awarded
 
 

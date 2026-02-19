@@ -156,10 +156,10 @@ def _send_whatsapp_otp(phone, code):
                 },
                 {
                     'type': 'button',
-                    'sub_type': 'url',
+                    'sub_type': 'copy_code',
                     'index': '0',
                     'parameters': [
-                        {'type': 'text', 'text': code}
+                        {'type': 'coupon_code', 'coupon_code': code}
                     ]
                 }
             ]

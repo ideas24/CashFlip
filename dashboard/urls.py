@@ -51,6 +51,7 @@ urlpatterns = [
 
     # Settings
     path('settings/', views.settings_view, name='settings_view'),
+    path('settings/branding/upload/', views.branding_upload, name='branding_upload'),
     path('settings/simulated/', views.simulated_config_manage, name='simulated_config_create'),
     path('settings/simulated/<int:config_id>/', views.simulated_config_manage, name='simulated_config_manage'),
 ]
