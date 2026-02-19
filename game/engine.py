@@ -256,6 +256,7 @@ def execute_flip(session):
             'face_image_path': denomination.face_image_path or None,
             'flip_sequence_prefix': denomination.flip_sequence_prefix or None,
             'flip_sequence_frames': denomination.flip_sequence_frames,
+            'flip_gif_path': denomination.flip_gif_path or None,
             'payout_multiplier': str(denomination.payout_multiplier),
         }
     

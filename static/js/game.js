@@ -523,6 +523,22 @@
         }, 5000);
     }
 
+    // ---- FLIP SOUND ----
+    let _flipSound = null;
+    function _playFlipSound() {
+        if (!state.gameConfig?.flip_sound_enabled) return;
+        try {
+            if (!_flipSound) {
+                // Try mp3 first, fallback to wav
+                _flipSound = new Audio('/static/sounds/money-flip.mp3');
+                _flipSound.onerror = () => { _flipSound = new Audio('/static/sounds/money-flip.wav'); };
+                _flipSound.volume = 0.6;
+            }
+            _flipSound.currentTime = 0;
+            _flipSound.play().catch(() => {});
+        } catch (e) {}
+    }
+
     // ---- FLIP NOTE ANIMATION (called after API returns) ----
     function flipNoteAnimation(isZero, value, denomData) {
         return new Promise((resolve) => {
@@ -531,21 +547,162 @@
             const card = document.getElementById('active-note');
             if (!card) { state.isFlipping = false; resolve(); return; }
 
-            // Check if PNG sequence is available for this denomination
-            const seqPrefix = denomData?.flip_sequence_prefix;
-            const seqFrames = denomData?.flip_sequence_frames || 31;
+            // Get animation config from game config
+            const animMode = state.gameConfig?.flip_animation_mode || 'gif';
+            const animSpeed = state.gameConfig?.flip_animation_speed_ms || 1500;
 
-            if (seqPrefix && !isZero) {
-                // --- PNG SEQUENCE FLIP ANIMATION ---
-                _flipWithSequence(card, seqPrefix, seqFrames, value, sym, resolve);
+            // Play flip sound
+            _playFlipSound();
+
+            // Choose animation mode for non-zero flips
+            if (!isZero) {
+                const gifPath = denomData?.flip_gif_path;
+                const seqPrefix = denomData?.flip_sequence_prefix;
+
+                if (animMode === 'gif' && gifPath) {
+                    _flipWithGif(card, gifPath, animSpeed, value, sym, resolve);
+                    return;
+                } else if (animMode === 'png' && seqPrefix) {
+                    const seqFrames = denomData?.flip_sequence_frames || 31;
+                    _flipWithSequence(card, seqPrefix, seqFrames, animSpeed, value, sym, resolve);
+                    return;
+                } else if (gifPath) {
+                    // Fallback: try gif if available regardless of mode
+                    _flipWithGif(card, gifPath, animSpeed, value, sym, resolve);
+                    return;
+                } else if (seqPrefix) {
+                    // Fallback: try png if available regardless of mode
+                    const seqFrames = denomData?.flip_sequence_frames || 31;
+                    _flipWithSequence(card, seqPrefix, seqFrames, animSpeed, value, sym, resolve);
+                    return;
+                }
+            }
+
+            // --- FALLBACK: CSS-based flip animation (zero notes or no assets) ---
+            _flipWithCSS(card, isZero, value, sym, denomData, resolve);
+        });
+    }
+
+    // ---- GIF FLIP ANIMATION ----
+    function _flipWithGif(card, gifPath, durationMs, value, sym, resolve) {
+        const gifUrl = `/static/${gifPath}`;
+        // Add cache-bust to force GIF restart from frame 0
+        const cacheBust = `?t=${Date.now()}`;
+
+        card.classList.remove('entering', 'dragging', 'spring-back', 'flipping');
+        card.innerHTML = `
+            <div class="seq-player" id="seq-player" style="position:relative;width:100%;height:100%;">
+                <img id="seq-frame" src="${gifUrl}${cacheBust}" alt="flip"
+                     style="width:100%;height:100%;object-fit:contain;border-radius:10px;" />
+                <div class="nf-denom-overlay seq-value-overlay hidden" id="seq-value-overlay">
+                    <span class="nf-denom-value">+${sym}${parseFloat(value).toFixed(2)}</span>
+                </div>
+            </div>
+        `;
+
+        // After GIF plays for the configured duration, show value and move on
+        setTimeout(() => {
+            const overlay = document.getElementById('seq-value-overlay');
+            if (overlay) overlay.classList.remove('hidden');
+
+            _noteFlipCount++;
+            updateRunningTotal();
+            const pile = document.getElementById('note-pile');
+            const pileCount = document.getElementById('pile-count');
+            if (pile) pile.classList.add('visible');
+            if (pileCount) pileCount.textContent = _noteFlipCount;
+
+            setTimeout(() => {
+                card.removeAttribute('id');
+                card.classList.add('to-pile');
+                card.addEventListener('animationend', () => card.remove(), { once: true });
+                _placeReadyCard();
+                state.isFlipping = false;
+                resolve();
+            }, 500);
+        }, durationMs);
+    }
+
+    // ---- PNG SEQUENCE FLIP ANIMATION ----
+    function _flipWithSequence(card, seqPrefix, totalFrames, durationMs, value, sym, resolve) {
+        const staticBase = `/static/${seqPrefix}`;
+        const denomVal = seqPrefix.split('/').pop();
+        const filePrefix = (denomVal === '1') ? `${denomVal}cedi` : `${denomVal}cedis`;
+
+        card.classList.remove('entering', 'dragging', 'spring-back', 'flipping');
+        card.innerHTML = `
+            <div class="seq-player" id="seq-player" style="position:relative;width:100%;height:100%;">
+                <img id="seq-frame" src="${staticBase}/${filePrefix}_00000.png" alt="flip"
+                     style="width:100%;height:100%;object-fit:contain;border-radius:10px;" />
+                <div class="nf-denom-overlay seq-value-overlay hidden" id="seq-value-overlay">
+                    <span class="nf-denom-value">+${sym}${parseFloat(value).toFixed(2)}</span>
+                </div>
+            </div>
+        `;
+
+        const frameImg = document.getElementById('seq-frame');
+        let currentFrame = 0;
+        // Calculate interval from total duration and frame count
+        const interval = Math.max(16, Math.floor(durationMs / totalFrames));
+
+        // Preload first few frames
+        for (let i = 1; i <= Math.min(5, totalFrames - 1); i++) {
+            const img = new Image();
+            img.src = `${staticBase}/${filePrefix}_${String(i).padStart(5, '0')}.png`;
+        }
+
+        const seqTimer = setInterval(() => {
+            currentFrame++;
+            if (currentFrame >= totalFrames) {
+                clearInterval(seqTimer);
+                const overlay = document.getElementById('seq-value-overlay');
+                if (overlay) overlay.classList.remove('hidden');
+
+                _noteFlipCount++;
+                updateRunningTotal();
+                const pile = document.getElementById('note-pile');
+                const pileCount = document.getElementById('pile-count');
+                if (pile) pile.classList.add('visible');
+                if (pileCount) pileCount.textContent = _noteFlipCount;
+
+                setTimeout(() => {
+                    card.removeAttribute('id');
+                    card.classList.add('to-pile');
+                    card.addEventListener('animationend', () => card.remove(), { once: true });
+                    _placeReadyCard();
+                    state.isFlipping = false;
+                    resolve();
+                }, 500);
                 return;
             }
 
-            // --- FALLBACK: CSS-based flip animation ---
-            const backFace = document.getElementById('active-note-back');
-            if (backFace) {
-                const serial = 'CF-' + Math.random().toString(36).substring(2, 10).toUpperCase();
-                if (isZero) {
+            if (currentFrame + 3 < totalFrames) {
+                const preload = new Image();
+                preload.src = `${staticBase}/${filePrefix}_${String(currentFrame + 3).padStart(5, '0')}.png`;
+            }
+            frameImg.src = `${staticBase}/${filePrefix}_${String(currentFrame).padStart(5, '0')}.png`;
+        }, interval);
+    }
+
+    // ---- CSS FALLBACK FLIP ANIMATION ----
+    function _flipWithCSS(card, isZero, value, sym, denomData, resolve) {
+        const backFace = document.getElementById('active-note-back');
+        if (backFace) {
+            const serial = 'CF-' + Math.random().toString(36).substring(2, 10).toUpperCase();
+            if (isZero) {
+                // Use zero face image if available
+                const zeroFace = denomData?.face_image_path
+                    ? `/static/${denomData.face_image_path}` : null;
+                if (zeroFace) {
+                    backFace.classList.add('zero-note', 'has-image');
+                    backFace.innerHTML = `
+                        <img src="${zeroFace}" alt="ZERO" />
+                        <div class="nf-denom-overlay">
+                            <span class="nf-denom-value">ZERO</span>
+                            <span class="nf-denom-label">GAME OVER</span>
+                        </div>
+                    `;
+                } else {
                     backFace.classList.add('zero-note');
                     backFace.innerHTML = `
                         <div class="nf-guilloche-back"></div>
@@ -564,151 +721,77 @@
                             <span class="nf-denom-label">GAME OVER</span>
                         </div>
                     `;
+                }
+            } else {
+                const faceImgPath = denomData?.face_image_path
+                    ? `/static/${denomData.face_image_path}`
+                    : (denomData?.front_image_url || denomData?.image_url);
+                if (faceImgPath) {
+                    backFace.classList.add('has-image');
+                    backFace.innerHTML = `
+                        <img src="${faceImgPath}" alt="${sym}${value}" />
+                        <div class="nf-denom-overlay">
+                            <span class="nf-denom-value">+${sym}${parseFloat(value).toFixed(2)}</span>
+                        </div>
+                    `;
                 } else {
-                    // Use face image if available
-                    const faceImgPath = denomData?.face_image_path
-                        ? `/static/${denomData.face_image_path}`
-                        : (denomData?.front_image_url || denomData?.image_url);
-                    if (faceImgPath) {
-                        backFace.classList.add('has-image');
-                        backFace.innerHTML = `
-                            <img src="${faceImgPath}" alt="${sym}${value}" />
-                            <div class="nf-denom-overlay">
-                                <span class="nf-denom-value">+${sym}${parseFloat(value).toFixed(2)}</span>
-                            </div>
-                        `;
-                    } else {
-                        const shortVal = parseFloat(denomData?.value || value).toFixed(0);
-                        backFace.innerHTML = `
-                            <div class="nf-guilloche-back"></div>
-                            <div class="nf-watermark"></div>
-                            <div class="nf-security-strip"></div>
-                            <div class="nf-inner-frame-back">
-                                <div class="nf-bank-name">BANK OF GHANA</div>
-                                <span class="nf-corner-val nf-cv-tl">${shortVal}</span>
-                                <span class="nf-corner-val nf-cv-tr">${shortVal}</span>
-                                <span class="nf-corner-val nf-cv-bl">${shortVal}</span>
-                                <span class="nf-corner-val nf-cv-br">${shortVal}</span>
-                                <div class="nf-serial">${serial}</div>
-                            </div>
-                            <div class="nf-denom-overlay">
-                                <span class="nf-denom-value">+${sym}${parseFloat(value).toFixed(2)}</span>
-                                <span class="nf-denom-label">GHANA CEDI</span>
-                            </div>
-                        `;
-                    }
+                    const shortVal = parseFloat(denomData?.value || value).toFixed(0);
+                    backFace.innerHTML = `
+                        <div class="nf-guilloche-back"></div>
+                        <div class="nf-watermark"></div>
+                        <div class="nf-security-strip"></div>
+                        <div class="nf-inner-frame-back">
+                            <div class="nf-bank-name">BANK OF GHANA</div>
+                            <span class="nf-corner-val nf-cv-tl">${shortVal}</span>
+                            <span class="nf-corner-val nf-cv-tr">${shortVal}</span>
+                            <span class="nf-corner-val nf-cv-bl">${shortVal}</span>
+                            <span class="nf-corner-val nf-cv-br">${shortVal}</span>
+                            <div class="nf-serial">${serial}</div>
+                        </div>
+                        <div class="nf-denom-overlay">
+                            <span class="nf-denom-value">+${sym}${parseFloat(value).toFixed(2)}</span>
+                            <span class="nf-denom-label">GHANA CEDI</span>
+                        </div>
+                    `;
                 }
             }
-
-            // Ensure the card is in flipping state
-            card.classList.remove('entering', 'dragging', 'spring-back');
-            if (!card.classList.contains('flipping')) {
-                void card.offsetWidth;
-                card.classList.add('flipping');
-            }
-
-            // Phase 1: peel left (~450ms), then Phase 2: reveal back face
-            setTimeout(() => {
-                // Snap to reveal (back face fully visible)
-                card.classList.remove('flipping');
-                card.classList.add('reveal');
-
-                _noteFlipCount++;
-                if (!isZero) {
-                    updateRunningTotal();
-                    const pile = document.getElementById('note-pile');
-                    const pileCount = document.getElementById('pile-count');
-                    if (pile) pile.classList.add('visible');
-                    if (pileCount) pileCount.textContent = _noteFlipCount;
-                }
-
-                // Phase 3: settle and place next card
-                setTimeout(() => {
-                    card.removeAttribute('id');
-                    document.getElementById('active-note-back')?.removeAttribute('id');
-                    card.classList.add('to-pile');
-                    card.addEventListener('animationend', () => card.remove(), { once: true });
-
-                    if (!isZero) {
-                        _placeReadyCard();
-                    } else {
-                        _stopAutoFlipTimer();
-                    }
-
-                    state.isFlipping = false;
-                    resolve();
-                }, isZero ? 600 : 500);
-            }, 500);
-        });
-    }
-
-    function _flipWithSequence(card, seqPrefix, totalFrames, value, sym, resolve) {
-        // Replace card content with a sequence player
-        const staticBase = `/static/${seqPrefix}`;
-        // Derive the filename prefix by reading the first file pattern in the folder
-        // Convention: {value}cedi(s)_00000.png - detect from seqPrefix
-        const denomVal = seqPrefix.split('/').pop();
-        // Handle inconsistent naming (1cedi vs 2cedis)
-        const filePrefix = (denomVal === '1') ? `${denomVal}cedi` : `${denomVal}cedis`;
-
-        // Hide original card faces, show sequence canvas
-        card.classList.remove('entering', 'dragging', 'spring-back', 'flipping');
-        card.innerHTML = `
-            <div class="seq-player" id="seq-player">
-                <img id="seq-frame" src="${staticBase}/${filePrefix}_00000.png" alt="flip"
-                     style="width:100%;height:100%;object-fit:contain;border-radius:10px;" />
-                <div class="nf-denom-overlay seq-value-overlay hidden" id="seq-value-overlay">
-                    <span class="nf-denom-value">+${sym}${parseFloat(value).toFixed(2)}</span>
-                </div>
-            </div>
-        `;
-
-        const frameImg = document.getElementById('seq-frame');
-        let currentFrame = 0;
-        const fps = 24;
-        const interval = 1000 / fps;
-
-        // Preload first few frames
-        for (let i = 1; i <= Math.min(5, totalFrames - 1); i++) {
-            const img = new Image();
-            img.src = `${staticBase}/${filePrefix}_${String(i).padStart(5, '0')}.png`;
         }
 
-        const seqTimer = setInterval(() => {
-            currentFrame++;
-            if (currentFrame >= totalFrames) {
-                clearInterval(seqTimer);
-                // Show value overlay on last frame
-                const overlay = document.getElementById('seq-value-overlay');
-                if (overlay) overlay.classList.remove('hidden');
+        card.classList.remove('entering', 'dragging', 'spring-back');
+        if (!card.classList.contains('flipping')) {
+            void card.offsetWidth;
+            card.classList.add('flipping');
+        }
 
-                _noteFlipCount++;
+        setTimeout(() => {
+            card.classList.remove('flipping');
+            card.classList.add('reveal');
+
+            _noteFlipCount++;
+            if (!isZero) {
                 updateRunningTotal();
                 const pile = document.getElementById('note-pile');
                 const pileCount = document.getElementById('pile-count');
                 if (pile) pile.classList.add('visible');
                 if (pileCount) pileCount.textContent = _noteFlipCount;
+            }
 
-                // Settle and place next card
-                setTimeout(() => {
-                    card.removeAttribute('id');
-                    card.classList.add('to-pile');
-                    card.addEventListener('animationend', () => card.remove(), { once: true });
+            setTimeout(() => {
+                card.removeAttribute('id');
+                document.getElementById('active-note-back')?.removeAttribute('id');
+                card.classList.add('to-pile');
+                card.addEventListener('animationend', () => card.remove(), { once: true });
+
+                if (!isZero) {
                     _placeReadyCard();
-                    state.isFlipping = false;
-                    resolve();
-                }, 500);
-                return;
-            }
+                } else {
+                    _stopAutoFlipTimer();
+                }
 
-            // Preload ahead
-            if (currentFrame + 3 < totalFrames) {
-                const preload = new Image();
-                preload.src = `${staticBase}/${filePrefix}_${String(currentFrame + 3).padStart(5, '0')}.png`;
-            }
-
-            frameImg.src = `${staticBase}/${filePrefix}_${String(currentFrame).padStart(5, '0')}.png`;
-        }, interval);
+                state.isFlipping = false;
+                resolve();
+            }, isZero ? 600 : 500);
+        }, 500);
     }
 
     function updateRunningTotal() {

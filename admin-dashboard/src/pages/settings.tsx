@@ -36,6 +36,9 @@ interface GameSettings {
   min_flips_before_zero: number
   max_session_duration_minutes: number
   auto_flip_seconds: number
+  flip_animation_mode: string
+  flip_animation_speed_ms: number
+  flip_sound_enabled: boolean
   simulated_feed_enabled: boolean
   simulated_feed_data: SimFeedEntry[]
   is_active: boolean
@@ -95,6 +98,7 @@ interface Denomination {
   face_image_path: string
   flip_sequence_prefix: string
   flip_sequence_frames: number
+  flip_gif_path: string
   display_order: number
   is_zero: boolean
   is_active: boolean
@@ -424,6 +428,45 @@ export default function SettingsPage() {
                       </div>
                     </div>
 
+                    {/* Flip Animation Settings */}
+                    <div>
+                      <h3 className="text-sm font-semibold text-white mb-3">Flip Animation</h3>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div>
+                          <label className="block text-xs font-medium text-slate-400 mb-1.5">Animation Mode</label>
+                          <select value={s.game.flip_animation_mode || 'gif'}
+                            onChange={e => updateGame('flip_animation_mode', e.target.value)}
+                            className="w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-white">
+                            <option value="gif">GIF Animation</option>
+                            <option value="png">PNG Sequence</option>
+                          </select>
+                          <p className="text-xs text-muted mt-1">GIF = single file per denomination, PNG = frame sequence</p>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-slate-400 mb-1.5">Animation Speed (ms)</label>
+                          <Input type="number" min="500" max="15000" step="100" value={s.game.flip_animation_speed_ms || 1500}
+                            onChange={e => updateGame('flip_animation_speed_ms', parseInt(e.target.value) || 1500)} />
+                          <p className="text-xs text-muted mt-1">{((s.game.flip_animation_speed_ms || 1500) / 1000).toFixed(1)}s — controls how long the flip animation plays</p>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-slate-400 mb-1.5">Flip Sound</label>
+                          <div className="flex items-center gap-3 mt-2">
+                            <button
+                              onClick={() => updateGame('flip_sound_enabled', !s.game.flip_sound_enabled)}
+                              className={`relative w-11 h-6 rounded-full transition-colors cursor-pointer ${
+                                s.game.flip_sound_enabled ? 'bg-emerald-500' : 'bg-slate-600'
+                              }`}
+                            >
+                              <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${
+                                s.game.flip_sound_enabled ? 'translate-x-5' : ''
+                              }`} />
+                            </button>
+                            <span className="text-sm text-slate-300">{s.game.flip_sound_enabled ? 'Sound on' : 'Sound off'}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
                     {/* Simulated Live Feed */}
                     <div>
                       <h3 className="text-sm font-semibold text-white mb-3">Simulated Live Feed (Demo Mode)</h3>
@@ -509,7 +552,7 @@ export default function SettingsPage() {
                 <Button size="sm" onClick={() => {
                   const denoms = [...(s.denominations || []), {
                     id: null, value: '1.00', payout_multiplier: '8.00',
-                    face_image_path: '', flip_sequence_prefix: '', flip_sequence_frames: 31,
+                    face_image_path: '', flip_sequence_prefix: '', flip_sequence_frames: 31, flip_gif_path: '',
                     display_order: (s.denominations?.length || 0), is_zero: false, is_active: true, weight: 10
                   }]
                   setSettings({ ...s, denominations: denoms })
@@ -598,32 +641,44 @@ export default function SettingsPage() {
                         </div>
                       </div>
                       {!denom.is_zero && (
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3">
-                          <div>
-                            <label className="block text-xs text-slate-400 mb-1">Face Image Path</label>
-                            <Input type="text" placeholder="images/Cedi-Face/5f.jpg" value={denom.face_image_path} onChange={e => {
-                              const denoms = [...s.denominations]
-                              denoms[i] = { ...denom, face_image_path: e.target.value }
-                              setSettings({ ...s, denominations: denoms })
-                            }} />
+                        <>
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3">
+                            <div>
+                              <label className="block text-xs text-slate-400 mb-1">Face Image Path</label>
+                              <Input type="text" placeholder="images/Cedi-Face/5f.jpg" value={denom.face_image_path} onChange={e => {
+                                const denoms = [...s.denominations]
+                                denoms[i] = { ...denom, face_image_path: e.target.value }
+                                setSettings({ ...s, denominations: denoms })
+                              }} />
+                            </div>
+                            <div>
+                              <label className="block text-xs text-slate-400 mb-1">Flip GIF Path</label>
+                              <Input type="text" placeholder="images/Cedi-Gifs/5cedis.gif" value={denom.flip_gif_path} onChange={e => {
+                                const denoms = [...s.denominations]
+                                denoms[i] = { ...denom, flip_gif_path: e.target.value }
+                                setSettings({ ...s, denominations: denoms })
+                              }} />
+                            </div>
+                            <div>
+                              <label className="block text-xs text-slate-400 mb-1">PNG Sequence Folder</label>
+                              <Input type="text" placeholder="images/Cedi-Sequences/5" value={denom.flip_sequence_prefix} onChange={e => {
+                                const denoms = [...s.denominations]
+                                denoms[i] = { ...denom, flip_sequence_prefix: e.target.value }
+                                setSettings({ ...s, denominations: denoms })
+                              }} />
+                            </div>
                           </div>
-                          <div>
-                            <label className="block text-xs text-slate-400 mb-1">Flip Sequence Folder</label>
-                            <Input type="text" placeholder="images/Cedi-Sequences/5" value={denom.flip_sequence_prefix} onChange={e => {
-                              const denoms = [...s.denominations]
-                              denoms[i] = { ...denom, flip_sequence_prefix: e.target.value }
-                              setSettings({ ...s, denominations: denoms })
-                            }} />
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-2">
+                            <div>
+                              <label className="block text-xs text-slate-400 mb-1">Sequence Frames</label>
+                              <Input type="number" value={denom.flip_sequence_frames} onChange={e => {
+                                const denoms = [...s.denominations]
+                                denoms[i] = { ...denom, flip_sequence_frames: parseInt(e.target.value) || 31 }
+                                setSettings({ ...s, denominations: denoms })
+                              }} />
+                            </div>
                           </div>
-                          <div>
-                            <label className="block text-xs text-slate-400 mb-1">Sequence Frames</label>
-                            <Input type="number" value={denom.flip_sequence_frames} onChange={e => {
-                              const denoms = [...s.denominations]
-                              denoms[i] = { ...denom, flip_sequence_frames: parseInt(e.target.value) || 31 }
-                              setSettings({ ...s, denominations: denoms })
-                            }} />
-                          </div>
-                        </div>
+                        </>
                       )}
                       <div className="flex items-center gap-2 mt-2">
                         <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">

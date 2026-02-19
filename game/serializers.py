@@ -20,7 +20,7 @@ class DenominationSerializer(serializers.ModelSerializer):
     class Meta:
         model = CurrencyDenomination
         fields = ['id', 'value', 'payout_multiplier', 'image_url', 'front_image_url', 'back_image_url',
-                  'face_image_path', 'flip_sequence_prefix', 'flip_sequence_frames',
+                  'face_image_path', 'flip_sequence_prefix', 'flip_sequence_frames', 'flip_gif_path',
                   'display_order', 'is_zero', 'weight']
 
     def get_image_url(self, obj):
@@ -45,7 +45,8 @@ class GameConfigPublicSerializer(serializers.ModelSerializer):
     class Meta:
         model = GameConfig
         fields = ['currency', 'min_deposit', 'max_cashout', 'min_stake', 'pause_cost_percent',
-                  'auto_flip_seconds', 'simulated_feed_enabled']
+                  'auto_flip_seconds', 'flip_animation_mode', 'flip_animation_speed_ms',
+                  'flip_sound_enabled', 'simulated_feed_enabled']
 
 
 class StartGameSerializer(serializers.Serializer):

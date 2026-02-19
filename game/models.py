@@ -85,6 +85,8 @@ class CurrencyDenomination(models.Model):
         help_text='Static path to flip sequence folder, e.g. images/Cedi-Sequences/5')
     flip_sequence_frames = models.PositiveIntegerField(default=31,
         help_text='Number of frames in the flip sequence (0-indexed PNGs)')
+    flip_gif_path = models.CharField(max_length=255, blank=True, default='',
+        help_text='Static path to flip GIF, e.g. images/Cedi-Gifs/5cedis.gif')
     display_order = models.PositiveIntegerField(default=0)
     is_zero = models.BooleanField(default=False, help_text='Is this the zero/loss denomination?')
     is_active = models.BooleanField(default=True)
@@ -120,6 +122,13 @@ class GameConfig(models.Model):
     max_session_duration_minutes = models.PositiveIntegerField(default=120)
     auto_flip_seconds = models.PositiveIntegerField(default=8,
         help_text='Seconds before auto-flip triggers if player idles (0 = disabled)')
+    flip_animation_mode = models.CharField(max_length=10, default='gif',
+        choices=[('gif', 'GIF Animation'), ('png', 'PNG Sequence')],
+        help_text='Which animation format to use for note flips')
+    flip_animation_speed_ms = models.PositiveIntegerField(default=1500,
+        help_text='Duration of the flip animation in milliseconds (e.g. 1500 = 1.5s)')
+    flip_sound_enabled = models.BooleanField(default=True,
+        help_text='Play money-flipping sound during flip animation')
     simulated_feed_enabled = models.BooleanField(default=False,
         help_text='Enable simulated live feed for demo/pitching (fake leaderboard entries)')
     simulated_feed_data = models.JSONField(default=list, blank=True,

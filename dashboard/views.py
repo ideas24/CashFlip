@@ -1154,6 +1154,9 @@ def settings_view(request):
                 'min_flips_before_zero': game_config.min_flips_before_zero,
                 'max_session_duration_minutes': game_config.max_session_duration_minutes,
                 'auto_flip_seconds': game_config.auto_flip_seconds,
+                'flip_animation_mode': game_config.flip_animation_mode,
+                'flip_animation_speed_ms': game_config.flip_animation_speed_ms,
+                'flip_sound_enabled': game_config.flip_sound_enabled,
                 'simulated_feed_enabled': game_config.simulated_feed_enabled,
                 'simulated_feed_data': game_config.simulated_feed_data or [],
                 'is_active': game_config.is_active,
@@ -1172,6 +1175,9 @@ def settings_view(request):
                 'min_flips_before_zero': 2,
                 'max_session_duration_minutes': 120,
                 'auto_flip_seconds': 8,
+                'flip_animation_mode': 'gif',
+                'flip_animation_speed_ms': 1500,
+                'flip_sound_enabled': True,
                 'simulated_feed_enabled': False,
                 'simulated_feed_data': [],
                 'is_active': True,
@@ -1236,6 +1242,7 @@ def settings_view(request):
                     'face_image_path': d.face_image_path,
                     'flip_sequence_prefix': d.flip_sequence_prefix,
                     'flip_sequence_frames': d.flip_sequence_frames,
+                    'flip_gif_path': d.flip_gif_path,
                     'display_order': d.display_order,
                     'is_zero': d.is_zero,
                     'is_active': d.is_active,
@@ -1283,7 +1290,8 @@ def settings_view(request):
         game_fields = ['house_edge_percent', 'min_deposit', 'max_cashout', 'min_stake',
                        'pause_cost_percent', 'zero_base_rate', 'zero_growth_rate',
                        'min_flips_before_zero', 'max_session_duration_minutes',
-                       'auto_flip_seconds', 'simulated_feed_enabled', 'simulated_feed_data']
+                       'auto_flip_seconds', 'flip_animation_mode', 'flip_animation_speed_ms',
+                       'flip_sound_enabled', 'simulated_feed_enabled', 'simulated_feed_data']
         updated = []
         for field in game_fields:
             if field in game_data:
@@ -1344,6 +1352,7 @@ def settings_view(request):
             d.face_image_path = dd.get('face_image_path', '')
             d.flip_sequence_prefix = dd.get('flip_sequence_prefix', '')
             d.flip_sequence_frames = dd.get('flip_sequence_frames', 31)
+            d.flip_gif_path = dd.get('flip_gif_path', '')
             d.display_order = dd.get('display_order', 0)
             d.is_zero = dd.get('is_zero', False)
             d.is_active = dd.get('is_active', True)
