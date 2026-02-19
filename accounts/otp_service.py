@@ -164,7 +164,7 @@ def _send_whatsapp_otp(phone, code):
         'Content-Type': 'application/json',
     }
     
-    # Try template first, then fall back to plain text message
+    # Authentication template: body has {{1}} = code, URL button has otp{{1}} suffix
     template_payload = {
         'messaging_product': 'whatsapp',
         'recipient_type': 'individual',
