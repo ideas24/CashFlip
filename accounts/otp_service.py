@@ -129,18 +129,15 @@ def verify_otp(phone, code):
 
 def _send_whatsapp_otp(phone, code):
     """
-    Send OTP via WhatsApp using Meta Authentication template with copy-code button.
+    Send OTP via WhatsApp using Meta Authentication template.
     
-    Authentication template guidelines (Meta):
-    - Category: AUTHENTICATION
-    - No URLs, media, or emojis in content or parameters
-    - Parameters restricted to 15 characters (6-digit code = OK)
-    - Uses copy-code button so user can tap to copy the OTP
+    For Ghana (+233) numbers: tries WHATSAPP_PHONE_NUMBER_ID_GH first,
+    falls back to WHATSAPP_PHONE_NUMBER_ID if GH number fails.
     
     Template must be pre-registered on Meta Business Manager:
       Name: cashflip_auth_otp (or WHATSAPP_AUTH_TEMPLATE_NAME env)
       Body: {{1}} is your verification code.
-      Button: Copy code
+      Button: Copy code (copy_code type)
     """
     access_token = settings.WHATSAPP_ACCESS_TOKEN
     phone_number_id_default = settings.WHATSAPP_PHONE_NUMBER_ID
@@ -156,12 +153,15 @@ def _send_whatsapp_otp(phone, code):
     if normalized.startswith('0'):
         normalized = '233' + normalized[1:]
     
-    # Use Ghana-specific phone number ID for +233 numbers, fallback to default
+    # Build ordered list of phone IDs to try: GH first for Ghana numbers, then default
     is_ghana = normalized.startswith('233')
-    phone_number_id = phone_number_id_gh if (is_ghana and phone_number_id_gh) else phone_number_id_default
-    logger.info(f'WhatsApp OTP: sending to {normalized}, template={template_name}, phone_id={phone_number_id} (GH={is_ghana})')
+    phone_ids = []
+    if is_ghana and phone_number_id_gh:
+        phone_ids.append(phone_number_id_gh)
+    phone_ids.append(phone_number_id_default)
+    # Deduplicate while preserving order
+    phone_ids = list(dict.fromkeys(phone_ids))
     
-    url = f"https://graph.facebook.com/v23.0/{phone_number_id}/messages"
     headers = {
         'Authorization': f'Bearer {access_token}',
         'Content-Type': 'application/json',
@@ -194,18 +194,28 @@ def _send_whatsapp_otp(phone, code):
         }
     }
     
-    try:
-        response = requests.post(url, json=payload, headers=headers, timeout=30)
-        logger.info(f'WhatsApp API response: status={response.status_code}, body={response.text[:500]}')
-        if response.status_code in [200, 201]:
-            logger.info(f'WhatsApp auth template OTP sent to {normalized}')
-            return True
-        else:
-            logger.error(f'WhatsApp auth template OTP failed: {response.status_code} {response.text}')
-            return False
-    except Exception as e:
-        logger.error(f'WhatsApp OTP error: {e}', exc_info=True)
-        return False
+    for pid in phone_ids:
+        url = f"https://graph.facebook.com/v23.0/{pid}/messages"
+        logger.info(f'WhatsApp OTP: sending to {normalized}, template={template_name}, phone_id={pid} (GH={is_ghana})')
+        try:
+            response = requests.post(url, json=payload, headers=headers, timeout=30)
+            logger.info(f'WhatsApp API response (phone_id={pid}): status={response.status_code}, body={response.text[:500]}')
+            if response.status_code in [200, 201]:
+                logger.info(f'WhatsApp auth template OTP sent to {normalized} via phone_id={pid}')
+                return True
+            else:
+                logger.warning(f'WhatsApp OTP failed with phone_id={pid}: {response.status_code} {response.text[:300]}')
+                if pid == phone_ids[-1]:
+                    logger.error(f'All WhatsApp phone IDs exhausted for {normalized}')
+                    return False
+                logger.info(f'Retrying with next WhatsApp phone ID...')
+        except Exception as e:
+            logger.error(f'WhatsApp OTP error (phone_id={pid}): {e}', exc_info=True)
+            if pid == phone_ids[-1]:
+                return False
+            logger.info(f'Retrying with next WhatsApp phone ID...')
+    
+    return False
 
 
 def _send_sms_otp(phone, code):
