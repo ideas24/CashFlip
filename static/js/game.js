@@ -1357,10 +1357,21 @@
                     if (signupStep) signupStep.style.display = 'none';
                 }
 
-                // If NO OTP channels enabled but email is, show email login by default
-                if (!methods.sms_otp && !methods.whatsapp_otp && methods.email_password) {
-                    document.getElementById('otp-step-1')?.classList.remove('active');
-                    if (emailStep) emailStep.classList.add('active');
+                // Hide Phone tab if NO OTP channels are enabled
+                const phoneTab = document.getElementById('auth-tab-phone');
+                if (!methods.sms_otp && !methods.whatsapp_otp) {
+                    if (phoneTab) phoneTab.style.display = 'none';
+                    // If only email is enabled, show it by default
+                    if (methods.email_password && emailStep) {
+                        document.getElementById('otp-step-1')?.classList.remove('active');
+                        emailStep.classList.add('active');
+                        // Make email tab active since phone tab is hidden
+                        const emailTab = document.getElementById('auth-tab-email');
+                        if (emailTab) emailTab.classList.add('active');
+                    }
+                } else {
+                    // Show Phone tab if any OTP is enabled
+                    if (phoneTab) phoneTab.style.display = '';
                 }
             })
             .catch(() => {}); // Fail silently — buttons stay hidden
