@@ -136,7 +136,7 @@ echo '.env installed ($(wc -l < /opt/cashflip/.env) lines)'
 # ---- Action: Deploy code (git pull + restart) ----
 deploy_code() {
     log "Deploying code to App VMs..."
-    run_on_vmss "$APP_VMSS" "git config --system --add safe.directory /opt/cashflip/app 2>/dev/null || true; bash /opt/cashflip/deploy.sh" "Deploy code"
+    run_on_vmss "$APP_VMSS" "git config --system --add safe.directory /opt/cashflip/app 2>/dev/null || true; bash -c 'cd /opt/cashflip/app && . /opt/cashflip/.env && /opt/cashflip/deploy.sh'" "Deploy code"
 
     log "Deploying code to Celery VMs..."
     run_on_vmss "$CELERY_VMSS" "git config --system --add safe.directory /opt/cashflip/app 2>/dev/null || true; bash /opt/cashflip/deploy.sh" "Deploy code"

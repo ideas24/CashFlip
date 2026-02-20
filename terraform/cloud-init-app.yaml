@@ -89,7 +89,7 @@ write_files:
       mv "$APP_DIR/gunicorn.conf.py" "$APP_DIR/gunicorn.conf.py.staging" 2>/dev/null || true
       
       # Source .env for Django management commands
-      set -a; source /opt/cashflip/.env; set +a
+      set -a; . /opt/cashflip/.env; set +a
       
       # Django management
       cd "$APP_DIR"
