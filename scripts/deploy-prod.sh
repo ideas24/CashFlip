@@ -67,15 +67,20 @@ run_on_vmss() {
         count=$((count + 1))
         log "[$vmss_name] Instance $instance_id ($count/$total): $label"
 
-        az vmss run-command invoke \
+        local output
+        output=$(az vmss run-command invoke \
             --resource-group "$RESOURCE_GROUP" \
             --name "$vmss_name" \
             --instance-id "$instance_id" \
             --command-id RunShellScript \
             --scripts "$script" \
-            --output json 2>&1 | jq -r '.value[0].message // "No output"' || {
-                err "Failed on $vmss_name instance $instance_id"
-            }
+            --output json 2>&1)
+        if [ $? -eq 0 ]; then
+            echo "$output" | jq -r '.value[0].message // "No output"' 2>/dev/null || echo "$output"
+        else
+            err "Failed on $vmss_name instance $instance_id"
+            echo "$output"
+        fi
 
         log "[$vmss_name] Instance $instance_id: Done"
         echo ""
@@ -142,18 +147,18 @@ deploy_code() {
 # ---- Action: Rebuild React admin console + restart pm2 ----
 deploy_admin() {
     log "Rebuilding React admin console on App VMs..."
-    local script="
+    local script='
 export HOME=/root
 cd /opt/cashflip/app/admin-dashboard
-echo 'Installing deps...'
+echo "Installing deps..."
 npm ci --production=false 2>&1 | tail -2
-echo 'Building...'
+echo "Building..."
 npm run build 2>&1 | tail -3
 # Restart PM2 properly - try restart first, then start if not exists
 pm2 restart cashflip-admin 2>/dev/null || pm2 start npm --name cashflip-admin -- start 2>/dev/null || echo "PM2 start failed"
 pm2 list 2>&1 | tail -5
-echo 'Admin console rebuilt and pm2 restarted'
-"
+echo "Admin console rebuilt and pm2 restarted"
+'
     run_on_vmss "$APP_VMSS" "$script" "Rebuild admin console"
     log "Admin console rebuilt on all App VMs"
 }
