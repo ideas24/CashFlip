@@ -11,7 +11,7 @@
     {% load static %}
     <link rel="icon" type="image/svg+xml" href="{% static 'images/cashflip-favicon.svg' %}">
     <meta name="theme-color" content="#0D1117">
-    <link rel="stylesheet" href="{% static 'css/game.css' %}?v=20260220b">
+    <link rel="stylesheet" href="{% static 'css/game.css' %}?v=20260220c">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
 <body>
@@ -99,6 +99,11 @@
                     <input type="password" id="password-input" placeholder="Password" class="auth-input" autocomplete="current-password">
                 </div>
                 <button id="email-login-btn" class="btn-primary">Log In</button>
+                
+                <!-- WhatsApp option when enabled -->
+                <div id="email-step-whatsapp-divider" class="divider" style="display:none;margin:16px 0"><span>or</span></div>
+                <button id="email-step-whatsapp-btn" class="btn-secondary" style="display:none;width:100%;margin-bottom:8px;">💬 Continue with WhatsApp</button>
+                
                 <p style="text-align:center;margin:8px 0 0;font-size:0.8rem;color:rgba(255,255,255,0.5);">
                     Don't have an account? <a href="#" id="switch-to-signup" style="color:#00e5a0;">Sign Up</a>
                 </p>
@@ -798,6 +803,6 @@
         <span id="toast-message"></span>
     </div>
 
-    <script src="{% static 'js/game.js' %}?v=20260220b"></script>
+    <script src="{% static 'js/game.js' %}?v=20260220c"></script>
 </body>
 </html>

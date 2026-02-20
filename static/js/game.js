@@ -1379,6 +1379,11 @@
                         // Make email tab active since phone tab is hidden
                         const emailTab = document.getElementById('auth-tab-email');
                         if (emailTab) emailTab.classList.add('active');
+                        // Hide WhatsApp option in Email step
+                        const waDivider = document.getElementById('email-step-whatsapp-divider');
+                        const waBtn = document.getElementById('email-step-whatsapp-btn');
+                        if (waDivider) waDivider.style.display = 'none';
+                        if (waBtn) waBtn.style.display = 'none';
                     }
                     // If both Email and WhatsApp are enabled, show tabs with Email active
                     else if (methods.email_password && methods.whatsapp_otp) {
@@ -1388,6 +1393,11 @@
                         // Make email tab active since phone tab is hidden
                         const emailTab = document.getElementById('auth-tab-email');
                         if (emailTab) emailTab.classList.add('active');
+                        // Show WhatsApp option in Email step
+                        const waDivider = document.getElementById('email-step-whatsapp-divider');
+                        const waBtn = document.getElementById('email-step-whatsapp-btn');
+                        if (waDivider) waDivider.style.display = '';
+                        if (waBtn) waBtn.style.display = '';
                     }
                 } else {
                     // Show Phone tab when SMS is enabled
@@ -1468,6 +1478,18 @@
                 }
             } catch (e) { showError('Network error'); }
             btn.disabled = false; btn.textContent = 'Create Account';
+        });
+
+        // WhatsApp button in Email step
+        document.getElementById('email-step-whatsapp-btn')?.addEventListener('click', () => {
+            // Switch to OTP step and set WhatsApp as active channel
+            document.getElementById('email-auth-step')?.classList.remove('active');
+            document.getElementById('otp-step-1')?.classList.add('active');
+            // Set WhatsApp as active channel
+            state.otpChannel = 'whatsapp';
+            document.querySelectorAll('.channel-btn').forEach(btn => btn.classList.remove('active'));
+            document.querySelector('.channel-btn[data-channel="whatsapp"]')?.classList.add('active');
+            showError('');
         });
 
         // Switch between login/signup
