@@ -1485,6 +1485,9 @@
             // Switch to OTP step and set WhatsApp as active channel
             document.getElementById('email-auth-step')?.classList.remove('active');
             document.getElementById('otp-step-1')?.classList.add('active');
+            // Hide tabs when in WhatsApp flow (no tabs needed for OTP)
+            const authTabsContainer = document.getElementById('auth-tabs');
+            if (authTabsContainer) authTabsContainer.style.display = 'none';
             // Set WhatsApp as active channel
             state.otpChannel = 'whatsapp';
             document.querySelectorAll('.channel-btn').forEach(btn => btn.classList.remove('active'));
@@ -1599,6 +1602,18 @@
             document.getElementById('otp-step-2').classList.remove('active');
             document.getElementById('otp-step-1').classList.add('active');
             document.querySelectorAll('.otp-digit').forEach(d => d.value = '');
+            showError('');
+            
+            // If we came from Email step (tabs are hidden), show tabs with Email active
+            const authTabsContainer = document.getElementById('auth-tabs');
+            if (authTabsContainer && authTabsContainer.style.display === 'none') {
+                authTabsContainer.style.display = '';
+                document.getElementById('otp-step-1')?.classList.remove('active');
+                document.getElementById('email-auth-step')?.classList.add('active');
+                // Make Email tab active
+                document.querySelectorAll('.auth-tab-btn').forEach(t => t.classList.remove('active'));
+                document.getElementById('auth-tab-email')?.classList.add('active');
+            }
         });
     }
 
