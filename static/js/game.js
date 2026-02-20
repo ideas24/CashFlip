@@ -1357,21 +1357,42 @@
                     if (signupStep) signupStep.style.display = 'none';
                 }
 
-                // Hide Phone tab if NO OTP channels are enabled
+                // Hide Phone tab if SMS is not enabled (WhatsApp doesn't need a tab)
                 const phoneTab = document.getElementById('auth-tab-phone');
-                if (!methods.sms_otp && !methods.whatsapp_otp) {
+                const authTabsContainer = document.getElementById('auth-tabs');
+                
+                if (!methods.sms_otp) {
+                    // Hide Phone tab when SMS is disabled
                     if (phoneTab) phoneTab.style.display = 'none';
-                    // If only email is enabled, show it by default
-                    if (methods.email_password && emailStep) {
+                    
+                    // If only WhatsApp is enabled (no SMS, no Email), hide tabs entirely
+                    if (!methods.email_password && methods.whatsapp_otp) {
+                        if (authTabsContainer) authTabsContainer.style.display = 'none';
+                        // Show OTP step by default since no tabs
+                        document.getElementById('otp-step-1')?.classList.add('active');
+                    }
+                    // If only Email is enabled, show it by default
+                    else if (methods.email_password && !methods.whatsapp_otp) {
+                        if (authTabsContainer) authTabsContainer.style.display = '';
                         document.getElementById('otp-step-1')?.classList.remove('active');
-                        emailStep.classList.add('active');
+                        if (emailStep) emailStep.classList.add('active');
+                        // Make email tab active since phone tab is hidden
+                        const emailTab = document.getElementById('auth-tab-email');
+                        if (emailTab) emailTab.classList.add('active');
+                    }
+                    // If both Email and WhatsApp are enabled, show tabs with Email active
+                    else if (methods.email_password && methods.whatsapp_otp) {
+                        if (authTabsContainer) authTabsContainer.style.display = '';
+                        document.getElementById('otp-step-1')?.classList.remove('active');
+                        if (emailStep) emailStep.classList.add('active');
                         // Make email tab active since phone tab is hidden
                         const emailTab = document.getElementById('auth-tab-email');
                         if (emailTab) emailTab.classList.add('active');
                     }
                 } else {
-                    // Show Phone tab if any OTP is enabled
+                    // Show Phone tab when SMS is enabled
                     if (phoneTab) phoneTab.style.display = '';
+                    if (authTabsContainer) authTabsContainer.style.display = '';
                 }
             })
             .catch(() => {}); // Fail silently — buttons stay hidden
