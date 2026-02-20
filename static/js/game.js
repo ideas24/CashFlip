@@ -261,32 +261,67 @@
     // ==================== ASSET URL HELPER ====================
     // Uploaded files return full URLs (/media/... or https://cdn...),
     // static paths need /static/ prefix.
+    // For Cloudinary URLs, inject c_fill,ar_16:9,g_center to ensure
+    // images fill the 16:9 card area without black bars.
     function _assetUrl(path) {
         if (!path) return '';
         if (path.startsWith('/') || path.startsWith('http')) return path;
         return `/static/${path}`;
     }
 
-    // ==================== GIF FIRST-FRAME CACHE ====================
+    function _cloudinaryFill(url) {
+        if (!url) return url;
+        const marker = '/image/upload/';
+        const idx = url.indexOf(marker);
+        if (idx === -1) return url;
+        const before = url.substring(0, idx + marker.length);
+        const after = url.substring(idx + marker.length);
+        if (after.startsWith('c_') || after.startsWith('w_') || after.startsWith('ar_')) return url;
+        return before + 'c_fill,ar_16:9,g_center/' + after;
+    }
+
+    function _gifStaticFrame(url) {
+        if (!url) return url;
+        const marker = '/image/upload/';
+        const idx = url.indexOf(marker);
+        if (idx === -1) return url;
+        const before = url.substring(0, idx + marker.length);
+        const after = url.substring(idx + marker.length);
+        if (after.startsWith('c_') || after.startsWith('pg_')) return url;
+        return before + 'c_fill,ar_16:9,g_center,pg_1/' + after;
+    }
+
+    // ==================== GIF / FACE PRELOAD CACHE ====================
     const _gifFrameCache = {};
+    const _preloadedImages = {};
 
     function _preloadGifFirstFrames() {
         const denoms = state.denominations || [];
         denoms.forEach(d => {
+            if (d.face_image_path && !d.is_zero) {
+                const faceUrl = _cloudinaryFill(_assetUrl(d.face_image_path));
+                if (!_preloadedImages[faceUrl]) {
+                    const img = new Image();
+                    img.crossOrigin = 'anonymous';
+                    img.src = faceUrl;
+                    _preloadedImages[faceUrl] = img;
+                }
+            }
             if (d.flip_gif_path && !d.is_zero) {
-                const gifUrl = _assetUrl(d.flip_gif_path);
-                if (_gifFrameCache[gifUrl]) return;
-                const img = new Image();
-                img.onload = function() {
-                    try {
-                        const c = document.createElement('canvas');
-                        c.width = this.naturalWidth;
-                        c.height = this.naturalHeight;
-                        c.getContext('2d').drawImage(this, 0, 0);
-                        _gifFrameCache[gifUrl] = c.toDataURL('image/jpeg', 0.92);
-                    } catch(e) { /* CORS — acceptable, GIF will show animated briefly */ }
-                };
-                img.src = gifUrl;
+                const gifUrl = _cloudinaryFill(_assetUrl(d.flip_gif_path));
+                if (!_preloadedImages[gifUrl]) {
+                    const img = new Image();
+                    img.crossOrigin = 'anonymous';
+                    img.src = gifUrl;
+                    _preloadedImages[gifUrl] = img;
+                }
+                if (!_gifFrameCache[gifUrl]) {
+                    const staticUrl = _gifStaticFrame(_assetUrl(d.flip_gif_path));
+                    _gifFrameCache[gifUrl] = staticUrl;
+                    const sImg = new Image();
+                    sImg.src = staticUrl;
+                    _preloadedImages[staticUrl] = sImg;
+                }
             }
         });
     }
@@ -337,6 +372,17 @@
         stage.appendChild(stack);
     }
 
+    function _getCardImageUrl(denom) {
+        const displayMode = state.gameConfig?.flip_display_mode || 'face_then_gif';
+        if (displayMode === 'gif_only' && denom?.flip_gif_path) {
+            return _gifStaticFrame(_assetUrl(denom.flip_gif_path));
+        }
+        if (denom?.face_image_path) {
+            return _cloudinaryFill(_assetUrl(denom.face_image_path));
+        }
+        return denom?.front_image_url || denom?.back_image_url || null;
+    }
+
     function _placeReadyCard() {
         const stage = document.getElementById('note-stage');
         if (!stage) return;
@@ -352,17 +398,14 @@
         card.id = 'active-note';
         card.style.zIndex = '1';
 
-        // Pick a random non-zero denomination
+        // Pick a random non-zero denomination for visual placeholder
         const denominations = state.denominations || [];
         const nonZero = denominations.filter(d => !d.is_zero);
         const randomDenom = nonZero.length > 0 ? nonZero[Math.floor(Math.random() * nonZero.length)] : null;
 
-        // Always use face_image_path for the STATIC flat card (never the animated GIF)
-        const faceImgPath = randomDenom?.face_image_path
-            ? _assetUrl(randomDenom.face_image_path)
-            : (randomDenom?.front_image_url || randomDenom?.back_image_url);
-        if (faceImgPath) {
-            card.innerHTML = `<img id="card-face-img" src="${faceImgPath}" alt="note"
+        const imgUrl = _getCardImageUrl(randomDenom);
+        if (imgUrl) {
+            card.innerHTML = `<img id="card-face-img" src="${imgUrl}" alt="note"
                  style="width:100%;height:100%;object-fit:cover;display:block;" />`;
         } else {
             card.innerHTML = `<div class="note-face note-face-front">
@@ -546,7 +589,7 @@
                 card.style.transform = '';
                 card.style.opacity = '1';
                 const zeroFace = denomData?.face_image_path
-                    ? _assetUrl(denomData.face_image_path) : '/static/images/Cedi-Face/0f.jpg';
+                    ? _cloudinaryFill(_assetUrl(denomData.face_image_path)) : '/static/images/Cedi-Face/0f.jpg';
                 const img = card.querySelector('img');
                 if (img) {
                     img.src = zeroFace;
@@ -564,14 +607,14 @@
             const seqPrefix = denomData?.flip_sequence_prefix;
 
             if (animMode === 'gif' && gifPath) {
-                _flipWithGif(card, gifPath, animSpeed, value, sym, resolve);
+                _flipWithGif(card, gifPath, animSpeed, value, sym, resolve, denomData);
                 return;
             } else if (animMode === 'png' && seqPrefix) {
                 const seqFrames = denomData?.flip_sequence_frames || 31;
                 _flipWithSequence(card, seqPrefix, seqFrames, animSpeed, value, sym, resolve);
                 return;
             } else if (gifPath) {
-                _flipWithGif(card, gifPath, animSpeed, value, sym, resolve);
+                _flipWithGif(card, gifPath, animSpeed, value, sym, resolve, denomData);
                 return;
             } else if (seqPrefix) {
                 const seqFrames = denomData?.flip_sequence_frames || 31;
@@ -585,53 +628,67 @@
     }
 
     // ---- GIF FLIP ANIMATION ----
-    function _flipWithGif(card, gifPath, durationMs, value, sym, resolve) {
-        const gifUrl = _assetUrl(gifPath);
+    function _flipWithGif(card, gifPath, durationMs, value, sym, resolve, denomData) {
+        const gifUrl = _cloudinaryFill(_assetUrl(gifPath));
         const cacheBust = `?t=${Date.now()}`;
 
         card.classList.remove('entering');
 
-        // 1) Place the NEXT card underneath the current one first
-        //    so it's visible when the current card exits.
-        _placeNextCardUnderneath();
+        // 1) Swap the face to the CORRECT denomination's face first (fixes mismatch)
+        const displayMode = state.gameConfig?.flip_display_mode || 'face_then_gif';
+        const correctFaceUrl = (displayMode === 'gif_only' && denomData?.flip_gif_path)
+            ? _gifStaticFrame(_assetUrl(denomData.flip_gif_path))
+            : (denomData?.face_image_path ? _cloudinaryFill(_assetUrl(denomData.face_image_path)) : null);
 
-        // 2) Swap the img src to the animated GIF (cache-busted to restart)
         const img = card.querySelector('img');
-        if (img) {
-            img.src = gifUrl + cacheBust;
-        } else {
-            card.innerHTML = `<img src="${gifUrl}${cacheBust}" alt="flip"
-                 style="width:100%;height:100%;object-fit:cover;display:block;" />`;
+        if (correctFaceUrl && img) {
+            img.src = correctFaceUrl;
         }
 
-        // 3) After GIF plays, update counters and fade out current card
+        // 2) After a brief flash of the correct face, start the GIF animation
+        const faceFlashMs = 120;
         setTimeout(() => {
-            _noteFlipCount++;
-            updateRunningTotal();
-            const pile = document.getElementById('note-pile');
-            const pileCount = document.getElementById('pile-count');
-            if (pile) pile.classList.add('visible');
-            if (pileCount) pileCount.textContent = _noteFlipCount;
+            // Place the NEXT card underneath before starting the flip
+            _placeNextCardUnderneath();
 
-            // Fade out the current card to reveal next card underneath
-            card.removeAttribute('id');
-            card.classList.add('to-pile');
-            card.addEventListener('animationend', () => card.remove(), { once: true });
-            // Fallback removal if animationend doesn't fire
-            setTimeout(() => { if (card.parentNode) card.remove(); }, 600);
-
-            // Promote the underneath card to active
-            const next = document.getElementById('next-note');
-            if (next) {
-                next.id = 'active-note';
-                next.querySelector('img')?.removeAttribute('id');
-                const faceImg = next.querySelector('img');
-                if (faceImg) faceImg.id = 'card-face-img';
+            // Swap to the animated GIF (cache-busted to restart from frame 0)
+            const cardImg = card.querySelector('img');
+            if (cardImg) {
+                cardImg.src = gifUrl + cacheBust;
+            } else {
+                card.innerHTML = `<img src="${gifUrl}${cacheBust}" alt="flip"
+                     style="width:100%;height:100%;object-fit:cover;display:block;" />`;
             }
-            _startAutoFlipTimer();
-            state.isFlipping = false;
-            resolve();
-        }, durationMs);
+
+            // 3) After GIF plays, update counters and fade out current card
+            setTimeout(() => {
+                _noteFlipCount++;
+                updateRunningTotal();
+                const pile = document.getElementById('note-pile');
+                const pileCount = document.getElementById('pile-count');
+                if (pile) pile.classList.add('visible');
+                if (pileCount) pileCount.textContent = _noteFlipCount;
+
+                // Fade out the current card to reveal next card underneath
+                card.removeAttribute('id');
+                card.classList.add('to-pile');
+                card.addEventListener('animationend', () => card.remove(), { once: true });
+                // Fallback removal if animationend doesn't fire
+                setTimeout(() => { if (card.parentNode) card.remove(); }, 600);
+
+                // Promote the underneath card to active
+                const next = document.getElementById('next-note');
+                if (next) {
+                    next.id = 'active-note';
+                    next.querySelector('img')?.removeAttribute('id');
+                    const faceImg = next.querySelector('img');
+                    if (faceImg) faceImg.id = 'card-face-img';
+                }
+                _startAutoFlipTimer();
+                state.isFlipping = false;
+                resolve();
+            }, durationMs);
+        }, faceFlashMs);
     }
 
     // Place a new card underneath the current active card
@@ -650,11 +707,9 @@
         const nonZero = denominations.filter(d => !d.is_zero);
         const randomDenom = nonZero.length > 0 ? nonZero[Math.floor(Math.random() * nonZero.length)] : null;
 
-        // Always use face_image_path for the static next card (never animated GIF)
-        const faceImgPath = randomDenom?.face_image_path
-            ? _assetUrl(randomDenom.face_image_path) : null;
-        if (faceImgPath) {
-            nextCard.innerHTML = `<img src="${faceImgPath}" alt="note"
+        const imgUrl = _getCardImageUrl(randomDenom);
+        if (imgUrl) {
+            nextCard.innerHTML = `<img src="${imgUrl}" alt="note"
                  style="width:100%;height:100%;object-fit:cover;display:block;" />`;
         }
 
@@ -736,7 +791,7 @@
             if (isZero) {
                 // Use zero face image if available
                 const zeroFace = denomData?.face_image_path
-                    ? _assetUrl(denomData.face_image_path) : null;
+                    ? _cloudinaryFill(_assetUrl(denomData.face_image_path)) : null;
                 if (zeroFace) {
                     backFace.classList.add('zero-note', 'has-image');
                     backFace.innerHTML = `
@@ -768,7 +823,7 @@
                 }
             } else {
                 const faceImgPath = denomData?.face_image_path
-                    ? _assetUrl(denomData.face_image_path)
+                    ? _cloudinaryFill(_assetUrl(denomData.face_image_path))
                     : (denomData?.front_image_url || denomData?.image_url);
                 if (faceImgPath) {
                     backFace.classList.add('has-image');

@@ -1155,6 +1155,7 @@ def settings_view(request):
                 'max_session_duration_minutes': game_config.max_session_duration_minutes,
                 'auto_flip_seconds': game_config.auto_flip_seconds,
                 'flip_animation_mode': game_config.flip_animation_mode,
+                'flip_display_mode': game_config.flip_display_mode,
                 'flip_animation_speed_ms': game_config.flip_animation_speed_ms,
                 'flip_sound_enabled': game_config.flip_sound_enabled,
                 'simulated_feed_enabled': game_config.simulated_feed_enabled,
@@ -1176,6 +1177,7 @@ def settings_view(request):
                 'max_session_duration_minutes': 120,
                 'auto_flip_seconds': 8,
                 'flip_animation_mode': 'gif',
+                'flip_display_mode': 'face_then_gif',
                 'flip_animation_speed_ms': 1500,
                 'flip_sound_enabled': True,
                 'simulated_feed_enabled': False,
@@ -1290,7 +1292,7 @@ def settings_view(request):
         game_fields = ['house_edge_percent', 'min_deposit', 'max_cashout', 'min_stake',
                        'pause_cost_percent', 'zero_base_rate', 'zero_growth_rate',
                        'min_flips_before_zero', 'max_session_duration_minutes',
-                       'auto_flip_seconds', 'flip_animation_mode', 'flip_animation_speed_ms',
+                       'auto_flip_seconds', 'flip_animation_mode', 'flip_display_mode', 'flip_animation_speed_ms',
                        'flip_sound_enabled', 'simulated_feed_enabled', 'simulated_feed_data']
         updated = []
         for field in game_fields:

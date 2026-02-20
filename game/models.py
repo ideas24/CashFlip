@@ -133,6 +133,10 @@ class GameConfig(models.Model):
     flip_animation_mode = models.CharField(max_length=10, default='gif',
         choices=[('gif', 'GIF Animation'), ('png', 'PNG Sequence')],
         help_text='Which animation format to use for note flips')
+    flip_display_mode = models.CharField(max_length=20, default='face_then_gif',
+        choices=[('face_then_gif', 'Face Image then GIF'), ('gif_only', 'GIF Only (static first frame)')],
+        help_text='face_then_gif = show face JPG then play GIF on flip. '
+                  'gif_only = show GIF first frame as static, play full GIF on flip.')
     flip_animation_speed_ms = models.PositiveIntegerField(default=1500,
         help_text='Duration of the flip animation in milliseconds (e.g. 1500 = 1.5s)')
     flip_sound_enabled = models.BooleanField(default=True,

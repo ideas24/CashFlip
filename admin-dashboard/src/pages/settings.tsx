@@ -38,6 +38,7 @@ interface GameSettings {
   max_session_duration_minutes: number
   auto_flip_seconds: number
   flip_animation_mode: string
+  flip_display_mode: string
   flip_animation_speed_ms: number
   flip_sound_enabled: boolean
   simulated_feed_enabled: boolean
@@ -447,7 +448,7 @@ export default function SettingsPage() {
                     {/* Flip Animation Settings */}
                     <div>
                       <h3 className="text-sm font-semibold text-white mb-3">Flip Animation</h3>
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                         <div>
                           <label className="block text-xs font-medium text-slate-400 mb-1.5">Animation Mode</label>
                           <select value={s.game.flip_animation_mode || 'gif'}
@@ -457,6 +458,16 @@ export default function SettingsPage() {
                             <option value="png">PNG Sequence</option>
                           </select>
                           <p className="text-xs text-muted mt-1">GIF = single file per denomination, PNG = frame sequence</p>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-slate-400 mb-1.5">Display Mode</label>
+                          <select value={s.game.flip_display_mode || 'face_then_gif'}
+                            onChange={e => updateGame('flip_display_mode', e.target.value)}
+                            className="w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-white">
+                            <option value="face_then_gif">Face Image then GIF</option>
+                            <option value="gif_only">GIF Only (static first frame)</option>
+                          </select>
+                          <p className="text-xs text-muted mt-1">Face+GIF = show face JPG then flip GIF. GIF Only = use GIF first frame as static card</p>
                         </div>
                         <div>
                           <label className="block text-xs font-medium text-slate-400 mb-1.5">Animation Speed (ms)</label>

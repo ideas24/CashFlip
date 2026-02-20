@@ -59,8 +59,8 @@ class GameConfigPublicSerializer(serializers.ModelSerializer):
     class Meta:
         model = GameConfig
         fields = ['currency', 'min_deposit', 'max_cashout', 'min_stake', 'pause_cost_percent',
-                  'auto_flip_seconds', 'flip_animation_mode', 'flip_animation_speed_ms',
-                  'flip_sound_enabled', 'simulated_feed_enabled']
+                  'auto_flip_seconds', 'flip_animation_mode', 'flip_display_mode',
+                  'flip_animation_speed_ms', 'flip_sound_enabled', 'simulated_feed_enabled']
 
 
 class StartGameSerializer(serializers.Serializer):
