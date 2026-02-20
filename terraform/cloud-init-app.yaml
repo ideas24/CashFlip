@@ -12,13 +12,14 @@ packages:
   - python3.10-venv
   - python3-pip
   - nginx
-  - certbot
-  - python3-certbot-nginx
   - git
   - libpq-dev
   - build-essential
   - redis-tools
   - jq
+  - postgresql-client
+  - certbot
+  - python3-certbot-dns-porkbun
 
 write_files:
   # ---- SSH config for GitHub deploy key ----

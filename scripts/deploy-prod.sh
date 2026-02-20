@@ -149,7 +149,9 @@ echo 'Installing deps...'
 npm ci --production=false 2>&1 | tail -2
 echo 'Building...'
 npm run build 2>&1 | tail -3
-pm2 restart cashflip-admin 2>&1 | tail -2
+# Restart PM2 properly - try restart first, then start if not exists
+pm2 restart cashflip-admin 2>/dev/null || pm2 start npm --name cashflip-admin -- start 2>/dev/null || echo "PM2 start failed"
+pm2 list 2>&1 | tail -5
 echo 'Admin console rebuilt and pm2 restarted'
 "
     run_on_vmss "$APP_VMSS" "$script" "Rebuild admin console"
