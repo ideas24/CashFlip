@@ -133,13 +133,25 @@ echo '.env installed ($(wc -l < /opt/cashflip/.env) lines)'
     log "Environment file deployed to all VMs"
 }
 
-# ---- Action: Deploy code (git pull + restart) ----
+# ---- Action: Deploy code (git fetch + reset --hard + restart) ----
 deploy_code() {
     log "Deploying code to App VMs..."
-    run_on_vmss "$APP_VMSS" "git config --system --add safe.directory /opt/cashflip/app 2>/dev/null || true; bash -c 'cd /opt/cashflip/app && . /opt/cashflip/.env && /opt/cashflip/deploy.sh'" "Deploy code"
+    run_on_vmss "$APP_VMSS" "bash -c '
+        if [ ! -f /opt/cashflip/.env ]; then echo \"SKIP: no .env on this instance\"; exit 0; fi
+        if [ ! -f /opt/cashflip/deploy.sh ]; then echo \"SKIP: no deploy.sh on this instance\"; exit 0; fi
+        git config --system --add safe.directory /opt/cashflip/app 2>/dev/null || true
+        export GIT_SSH_COMMAND=\"ssh -i /opt/cashflip/.ssh/id_ed25519 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null\"
+        bash /opt/cashflip/deploy.sh
+    '" "Deploy code"
 
     log "Deploying code to Celery VMs..."
-    run_on_vmss "$CELERY_VMSS" "git config --system --add safe.directory /opt/cashflip/app 2>/dev/null || true; bash /opt/cashflip/deploy.sh" "Deploy code"
+    run_on_vmss "$CELERY_VMSS" "bash -c '
+        if [ ! -f /opt/cashflip/.env ]; then echo \"SKIP: no .env on this instance\"; exit 0; fi
+        if [ ! -f /opt/cashflip/deploy.sh ]; then echo \"SKIP: no deploy.sh on this instance\"; exit 0; fi
+        git config --system --add safe.directory /opt/cashflip/app 2>/dev/null || true
+        export GIT_SSH_COMMAND=\"ssh -i /opt/cashflip/.ssh/id_ed25519 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null\"
+        bash /opt/cashflip/deploy.sh
+    '" "Deploy code"
 
     log "Code deployed to all VMs"
 }
