@@ -99,6 +99,8 @@ write_files:
       "$VENV_DIR/bin/python" manage.py collectstatic --noinput
       log "Seeding data..."
       "$VENV_DIR/bin/python" manage.py seed_data || true
+      log "Seeding legal documents..."
+      "$VENV_DIR/bin/python" manage.py seed_legal || true
       
       # Restart service
       log "Restarting cashflip.service..."
