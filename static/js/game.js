@@ -309,7 +309,7 @@
         const numFrames = frames || 31;
         const delayMs = (durationMs || 1500) / numFrames;
         const dlVal = Math.max(2, Math.round(delayMs / 10)); // minimum 20ms per frame
-        return before + `dl_${dlVal}/e_trim/c_pad,ar_16:9,g_center,b_rgb:0d0d1a/` + after;
+        return before + `dl_${dlVal}/c_pad,ar_16:9,g_center,b_rgb:0d0d1a/` + after;
     }
 
     // ==================== STAKE TIER DENOMINATION FILTER ====================
@@ -511,14 +511,10 @@
         card.id = 'active-note';
         card.style.zIndex = '1';
 
-        // First card of session: show configurable start flip image.
-        // All subsequent cards: show random denomination glimpse.
-        if (_isFirstCard) {
-            card.innerHTML = _startFlipCardHTML();
-            _isFirstCard = false;
-        } else {
-            card.innerHTML = _randomDenomCardHTML();
-        }
+        // Show configurable start flip image (or random denom fallback).
+        // Using start image for ALL cards prevents denomination mismatch —
+        // the GIF animation itself reveals the actual denomination.
+        card.innerHTML = _startFlipCardHTML();
 
         stage.appendChild(card);
         _startAutoFlipTimer();
@@ -954,8 +950,9 @@
         nextCard.style.zIndex = '0';
         nextCard.style.opacity = '0'; // Hidden until current card exits
 
-        // Random denomination glimpse — decorative while waiting for next flip
-        nextCard.innerHTML = _randomDenomCardHTML();
+        // Show start flip image (or random denom fallback) — neutral waiting state.
+        // The GIF animation itself reveals the actual denomination.
+        nextCard.innerHTML = _startFlipCardHTML();
 
         // Insert underneath (before active card)
         const active = document.getElementById('active-note');
