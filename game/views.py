@@ -593,9 +593,12 @@ def live_feed(request):
 def feature_config(request):
     """Return global feature toggles for frontend."""
     fc = FeatureConfig.get_config()
+    # Daily wheel button shows only when BOTH feature toggle AND wheel config are enabled
+    wheel_cfg = DailyBonusConfig.get_config()
+    wheel_enabled = fc.daily_wheel_enabled and (wheel_cfg.is_enabled if wheel_cfg else False)
     return Response({
         'badges_enabled': fc.badges_enabled,
-        'daily_wheel_enabled': fc.daily_wheel_enabled,
+        'daily_wheel_enabled': wheel_enabled,
         'sounds_enabled': fc.sounds_enabled,
         'haptics_enabled': fc.haptics_enabled,
         'social_proof_enabled': fc.social_proof_enabled,
