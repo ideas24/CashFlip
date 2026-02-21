@@ -57,6 +57,7 @@ interface GameSettings {
   holiday_boost_pct: string
   holiday_frequency: number
   holiday_max_tier_name: string
+  // Kept for backward compat but not shown in UI
 }
 
 interface SimConfig {
@@ -379,7 +380,7 @@ export default function SettingsPage() {
                 <div className="flex items-center justify-between">
                   <div>
                     <CardTitle>Game Engine Configuration</CardTitle>
-                    <CardDescription>Core parameters for the provably fair coin flip engine ({s.game.currency})</CardDescription>
+                    <CardDescription>WYSIWYG payout engine — the denomination shown IS the payout ({s.game.currency})</CardDescription>
                   </div>
                   {s.game.id && <Badge variant={s.game.is_active ? 'success' : 'danger'}>{s.game.is_active ? 'Active' : 'Inactive'}</Badge>}
                 </div>
@@ -393,12 +394,21 @@ export default function SettingsPage() {
                   </div>
                 ) : (
                   <div className="space-y-6">
-                    {/* Payout Mode */}
-                    <div className="p-4 rounded-xl border-2 border-primary/30 bg-primary/5">
-                      <div className="flex items-center justify-between mb-3">
+
+                    {/* ── WYSIWYG PAYOUT ENGINE ── */}
+                    <div className="p-4 rounded-xl border-2 border-cyan-500/30 bg-cyan-500/5">
+                      <h3 className="text-sm font-semibold text-white mb-1">💰 WYSIWYG Payout Engine</h3>
+                      <p className="text-xs text-muted mb-4">
+                        "What You See Is What You Get" — the banknote denomination shown IS the payout added to the player's cashout balance.
+                        Budget = stake × payout target %. The decay formula distributes this budget across flips: weight<sub>i</sub> = e<sup>-k×(i-1)</sup>.
+                        When the budget can't cover the smallest denomination → ZERO note (session ends).
+                      </p>
+
+                      {/* Payout Mode Toggle */}
+                      <div className="flex items-center justify-between p-3 rounded-lg bg-zinc-800/50 border border-zinc-700/50 mb-4">
                         <div>
-                          <h3 className="text-sm font-semibold text-white">Payout Mode</h3>
-                          <p className="text-xs text-muted">Toggle between Normal (70/30) and Boost (60/40) when participation is down</p>
+                          <span className="text-xs font-semibold text-white">Payout Mode</span>
+                          <span className="text-xs text-muted ml-2">Switch to Boost when participation is low</span>
                         </div>
                         <div className="flex items-center gap-3">
                           <span className={`text-xs font-bold ${s.game.payout_mode === 'normal' ? 'text-primary' : 'text-muted'}`}>Normal</span>
@@ -415,80 +425,35 @@ export default function SettingsPage() {
                           <span className={`text-xs font-bold ${s.game.payout_mode === 'boost' ? 'text-warning' : 'text-muted'}`}>Boost</span>
                         </div>
                       </div>
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                         <div>
                           <label className="block text-xs font-medium text-slate-400 mb-1.5">Normal Payout Target (%)</label>
                           <Input type="text" value={s.game.normal_payout_target}
                             onChange={e => updateGame('normal_payout_target', e.target.value)} />
-                          <p className="text-xs text-muted mt-1">Players get back this % of stakes (30 = 70% house edge)</p>
+                          <p className="text-xs text-muted mt-1">30% = players get 30% back → 70% house edge</p>
                         </div>
                         <div>
                           <label className="block text-xs font-medium text-slate-400 mb-1.5">Boost Payout Target (%)</label>
                           <Input type="text" value={s.game.boost_payout_target}
                             onChange={e => updateGame('boost_payout_target', e.target.value)} />
-                          <p className="text-xs text-muted mt-1">Higher payout when participation is low (40 = 60% house edge)</p>
+                          <p className="text-xs text-muted mt-1">40% = players get 40% back → 60% house edge</p>
                         </div>
-                        <div>
-                          <label className="block text-xs font-medium text-slate-400 mb-1.5">Boost Multiplier Factor</label>
-                          <Input type="text" value={s.game.boost_multiplier_factor}
-                            onChange={e => updateGame('boost_multiplier_factor', e.target.value)} />
-                          <p className="text-xs text-muted mt-1">Auto-scales normal multipliers (1.33 = +33%)</p>
-                        </div>
-                      </div>
-                      {/* Theoretical Edge Display */}
-                      {(() => {
-                        const denoms = (s.denominations || []).filter(d => !d.is_zero && d.is_active)
-                        const totalWt = denoms.reduce((s, d) => s + d.weight, 0)
-                        const isBoost = s.game.payout_mode === 'boost'
-                        const factor = parseFloat(s.game.boost_multiplier_factor) || 1.33
-                        const avgMult = totalWt > 0
-                          ? denoms.reduce((s, d) => {
-                              const m = isBoost
-                                ? (parseFloat(d.boost_payout_multiplier) > 0 ? parseFloat(d.boost_payout_multiplier) : parseFloat(d.payout_multiplier) * factor)
-                                : parseFloat(d.payout_multiplier)
-                              return s + m * d.weight
-                            }, 0) / totalWt
-                          : 0
-                        const expectedPayout = (5 * avgMult).toFixed(1)
-                        const houseEdge = (100 - 5 * avgMult).toFixed(1)
-                        return (
-                          <div className={`mt-3 p-3 rounded-lg text-sm font-medium ${
-                            isBoost ? 'bg-warning/10 border border-warning/30 text-warning' : 'bg-primary/10 border border-primary/30 text-primary'
-                          }`}>
-                            <strong>Theoretical Edge ({isBoost ? 'BOOST' : 'Normal'}):</strong> Avg multiplier {avgMult.toFixed(2)}% × ~5 flips = <strong>{expectedPayout}% payout</strong> → <strong>{houseEdge}% house edge</strong>
-                          </div>
-                        )
-                      })()}
-                    </div>
-
-                    {/* Exponential Decay Engine */}
-                    <div className="p-4 rounded-xl border-2 border-cyan-500/30 bg-cyan-500/5">
-                      <h3 className="text-sm font-semibold text-white mb-1">WYSIWYG Payout Engine (Exponential Decay)</h3>
-                      <p className="text-xs text-muted mb-3">
-                        "What You See Is What You Get" — the denomination note shown IS the payout.
-                        Budget = stake × payout%. Decay formula distributes budget across flips: weight<sub>i</sub> = e<sup>-k×(i-1)</sup>
-                      </p>
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div>
                           <label className="block text-xs font-medium text-slate-400 mb-1.5">Decay Factor (k)</label>
                           <Input type="text" value={s.game.decay_factor}
                             onChange={e => updateGame('decay_factor', e.target.value)} />
-                          <p className="text-xs text-muted mt-1">Small k = equal payouts, large k = front-loaded. Default: 0.05</p>
+                          <p className="text-xs text-muted mt-1">0.01 = flat, 0.05 = gradual, 0.3 = front-loaded</p>
                         </div>
                         <div>
                           <label className="block text-xs font-medium text-slate-400 mb-1.5">Max Flips Per Session</label>
                           <Input type="number" min="3" max="50" value={s.game.max_flips_per_session}
                             onChange={e => updateGame('max_flips_per_session', parseInt(e.target.value) || 10)} />
-                          <p className="text-xs text-muted mt-1">Budget may end sooner if denominations exhaust it</p>
-                        </div>
-                        <div>
-                          <label className="block text-xs font-medium text-slate-400 mb-1.5">Min Flips Before Cashout</label>
-                          <Input type="number" value={s.game.min_flips_before_cashout}
-                            onChange={e => updateGame('min_flips_before_cashout', parseInt(e.target.value) || 0)} />
-                          <p className="text-xs text-muted mt-1">Prevents risk-free profit exploit</p>
+                          <p className="text-xs text-muted mt-1">May end sooner when budget is exhausted</p>
                         </div>
                       </div>
-                      {/* Budget Preview */}
+
+                      {/* Live Budget Preview */}
                       {(() => {
                         const stake = parseFloat(s.game.min_stake) || 50
                         const pct = s.game.payout_mode === 'boost'
@@ -501,22 +466,32 @@ export default function SettingsPage() {
                         const total = raw.reduce((a, b) => a + b, 0)
                         const norm = raw.map(w => w / total)
                         const payouts = norm.map(w => (w * parseFloat(budget)).toFixed(1))
-                        const preview = payouts.slice(0, 5).join(', ') + (maxFlips > 5 ? ', ...' : '')
+                        const preview = payouts.slice(0, 6).join(' → ') + (maxFlips > 6 ? ' → ...' : '')
+                        const houseEdge = (100 - pct).toFixed(0)
                         return (
-                          <div className="mt-3 p-3 rounded-lg bg-cyan-500/10 border border-cyan-500/30 text-sm text-cyan-300">
-                            <strong>Preview (min stake {s.game.currency}{stake}):</strong> Budget = {s.game.currency}{budget} ({pct}% of {stake}). 
-                            Target per flip: [{preview}] {s.game.currency}
+                          <div className={`mt-4 p-3 rounded-lg text-sm ${
+                            s.game.payout_mode === 'boost'
+                              ? 'bg-warning/10 border border-warning/30 text-warning'
+                              : 'bg-cyan-500/10 border border-cyan-500/30 text-cyan-300'
+                          }`}>
+                            <div className="font-semibold mb-1">
+                              {s.game.payout_mode === 'boost' ? '⚡ Boost' : '📊 Normal'} Mode — {houseEdge}% House Edge
+                            </div>
+                            <div className="text-xs opacity-80">
+                              Example ({s.game.currency}{stake} stake): Budget = {s.game.currency}{budget} ({pct}% of {stake}).
+                              Target per flip: {preview}
+                            </div>
                           </div>
                         )
                       })()}
                     </div>
 
-                    {/* Holiday Trigger */}
+                    {/* ── HOLIDAY TRIGGER ── */}
                     <div className="p-4 rounded-xl border-2 border-pink-500/30 bg-pink-500/5">
                       <div className="flex items-center justify-between mb-3">
                         <div>
-                          <h3 className="text-sm font-semibold text-white">Holiday Trigger</h3>
-                          <p className="text-xs text-muted">Randomly boost payout for selected low-stake players to increase engagement</p>
+                          <h3 className="text-sm font-semibold text-white">🎄 Holiday Trigger</h3>
+                          <p className="text-xs text-muted">Randomly boost payout for low-stake players to drive engagement</p>
                         </div>
                         <button
                           onClick={() => updateGame('holiday_mode_enabled', !s.game.holiday_mode_enabled)}
@@ -535,34 +510,28 @@ export default function SettingsPage() {
                             <label className="block text-xs font-medium text-slate-400 mb-1.5">Boost Payout (%)</label>
                             <Input type="text" value={s.game.holiday_boost_pct}
                               onChange={e => updateGame('holiday_boost_pct', e.target.value)} />
-                            <p className="text-xs text-muted mt-1">Boosted players get this % back (e.g. 70 = 70% payout)</p>
+                            <p className="text-xs text-muted mt-1">Boosted players get this % back (e.g. 70)</p>
                           </div>
                           <div>
                             <label className="block text-xs font-medium text-slate-400 mb-1.5">Frequency (1 in N)</label>
                             <Input type="number" min="1" value={s.game.holiday_frequency}
                               onChange={e => updateGame('holiday_frequency', parseInt(e.target.value) || 1000)} />
-                            <p className="text-xs text-muted mt-1">1 in {s.game.holiday_frequency} players gets boosted ({(100 / (s.game.holiday_frequency || 1000)).toFixed(2)}%)</p>
+                            <p className="text-xs text-muted mt-1">1 in {s.game.holiday_frequency} sessions boosted ({(100 / (s.game.holiday_frequency || 1000)).toFixed(2)}%)</p>
                           </div>
                           <div>
                             <label className="block text-xs font-medium text-slate-400 mb-1.5">Max Tier (name)</label>
                             <Input type="text" value={s.game.holiday_max_tier_name}
                               onChange={e => updateGame('holiday_max_tier_name', e.target.value)} />
-                            <p className="text-xs text-muted mt-1">Only this tier or lower gets boost (empty = all)</p>
+                            <p className="text-xs text-muted mt-1">Only this tier or lower (empty = all)</p>
                           </div>
                         </div>
                       )}
                     </div>
 
-                    {/* House Edge & Stakes */}
-                    <div>
-                      <h3 className="text-sm font-semibold text-white mb-3">House Edge & Stakes</h3>
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div>
-                          <label className="block text-xs font-medium text-slate-400 mb-1.5">House Edge (%)</label>
-                          <Input type="text" value={s.game.house_edge_percent}
-                            onChange={e => updateGame('house_edge_percent', e.target.value)} />
-                          <p className="text-xs text-muted mt-1">House retention rate (70 = house keeps 70%)</p>
-                        </div>
+                    {/* ── STAKES & LIMITS ── */}
+                    <div className="p-4 rounded-xl border border-border bg-card">
+                      <h3 className="text-sm font-semibold text-white mb-3">📏 Stakes & Limits</h3>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                         <div>
                           <label className="block text-xs font-medium text-slate-400 mb-1.5">Min Stake ({s.game.currency})</label>
                           <Input type="text" value={s.game.min_stake}
@@ -573,83 +542,26 @@ export default function SettingsPage() {
                           <Input type="text" value={s.game.min_deposit}
                             onChange={e => updateGame('min_deposit', e.target.value)} />
                         </div>
-                      </div>
-                    </div>
-
-                    {/* Cashout & Pause */}
-                    <div>
-                      <h3 className="text-sm font-semibold text-white mb-3">Cashout & Pause</h3>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
                           <label className="block text-xs font-medium text-slate-400 mb-1.5">Max Cashout ({s.game.currency})</label>
                           <Input type="text" value={s.game.max_cashout}
                             onChange={e => updateGame('max_cashout', e.target.value)} />
                         </div>
                         <div>
-                          <label className="block text-xs font-medium text-slate-400 mb-1.5">Pause Cost (%)</label>
-                          <Input type="text" value={s.game.pause_cost_percent}
-                            onChange={e => updateGame('pause_cost_percent', e.target.value)} />
-                          <p className="text-xs text-muted mt-1">% of cashout balance charged to pause</p>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Zero Probability Curve */}
-                    <div>
-                      <h3 className="text-sm font-semibold text-white mb-3">Zero Probability Curve (Sigmoid)</h3>
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div>
-                          <label className="block text-xs font-medium text-slate-400 mb-1.5">Zero Base Rate</label>
-                          <Input type="text" value={s.game.zero_base_rate}
-                            onChange={e => updateGame('zero_base_rate', e.target.value)} />
-                          <p className="text-xs text-muted mt-1">Base probability of zero (0.05 = 5%)</p>
-                        </div>
-                        <div>
-                          <label className="block text-xs font-medium text-slate-400 mb-1.5">Zero Growth Rate (k)</label>
-                          <Input type="text" value={s.game.zero_growth_rate}
-                            onChange={e => updateGame('zero_growth_rate', e.target.value)} />
-                          <p className="text-xs text-muted mt-1">Growth factor for sigmoid curve</p>
-                        </div>
-                        <div>
-                          <label className="block text-xs font-medium text-slate-400 mb-1.5">Min Flips Before Zero</label>
-                          <Input type="number" value={s.game.min_flips_before_zero}
-                            onChange={e => updateGame('min_flips_before_zero', parseInt(e.target.value) || 0)} />
-                          <p className="text-xs text-muted mt-1">Guaranteed safe flips</p>
-                        </div>
-                        <div>
                           <label className="block text-xs font-medium text-slate-400 mb-1.5">Min Flips Before Cashout</label>
                           <Input type="number" value={s.game.min_flips_before_cashout}
                             onChange={e => updateGame('min_flips_before_cashout', parseInt(e.target.value) || 0)} />
-                          <p className="text-xs text-muted mt-1">Prevents risk-free profit exploit</p>
+                          <p className="text-xs text-muted mt-1">Anti-exploit guard</p>
                         </div>
                       </div>
                     </div>
 
-                    {/* Instant Cashout */}
-                    <div>
-                      <h3 className="text-sm font-semibold text-white mb-3">Instant MoMo Cashout</h3>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="flex items-center gap-3">
-                          <input type="checkbox" checked={s.game.instant_cashout_enabled}
-                            onChange={e => updateGame('instant_cashout_enabled', e.target.checked)}
-                            className="w-4 h-4 rounded border-border" />
-                          <label className="text-xs font-medium text-slate-400">Enable instant MoMo cashout on win screen</label>
-                        </div>
+                    {/* ── SESSION & PAUSE ── */}
+                    <div className="p-4 rounded-xl border border-border bg-card">
+                      <h3 className="text-sm font-semibold text-white mb-3">⏱ Session & Pause</h3>
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                         <div>
-                          <label className="block text-xs font-medium text-slate-400 mb-1.5">Min Amount for Instant Cashout</label>
-                          <Input type="text" value={s.game.instant_cashout_min_amount}
-                            onChange={e => updateGame('instant_cashout_min_amount', e.target.value)} />
-                          <p className="text-xs text-muted mt-1">Below this amount, only wallet credit</p>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Session Limits */}
-                    <div>
-                      <h3 className="text-sm font-semibold text-white mb-3">Session Limits</h3>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-xs font-medium text-slate-400 mb-1.5">Max Session Duration (minutes)</label>
+                          <label className="block text-xs font-medium text-slate-400 mb-1.5">Max Duration (minutes)</label>
                           <Input type="number" value={s.game.max_session_duration_minutes}
                             onChange={e => updateGame('max_session_duration_minutes', parseInt(e.target.value) || 120)} />
                         </div>
@@ -657,15 +569,48 @@ export default function SettingsPage() {
                           <label className="block text-xs font-medium text-slate-400 mb-1.5">Auto-Flip Timer (seconds)</label>
                           <Input type="number" min="0" max="60" value={s.game.auto_flip_seconds}
                             onChange={e => updateGame('auto_flip_seconds', parseInt(e.target.value) || 0)} />
-                          <p className="text-xs text-muted mt-1">Auto-flip if player idles (0 = disabled)</p>
+                          <p className="text-xs text-muted mt-1">0 = disabled</p>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-slate-400 mb-1.5">Pause Cost (%)</label>
+                          <Input type="text" value={s.game.pause_cost_percent}
+                            onChange={e => updateGame('pause_cost_percent', e.target.value)} />
+                          <p className="text-xs text-muted mt-1">% of balance charged to pause</p>
                         </div>
                       </div>
                     </div>
 
-                    {/* Flip Animation Settings */}
-                    <div>
-                      <h3 className="text-sm font-semibold text-white mb-3">Flip Animation</h3>
-                      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    {/* ── INSTANT CASHOUT ── */}
+                    <div className="p-4 rounded-xl border border-border bg-card">
+                      <h3 className="text-sm font-semibold text-white mb-3">💸 Instant MoMo Cashout</h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="flex items-center gap-3">
+                          <button
+                            onClick={() => updateGame('instant_cashout_enabled', !s.game.instant_cashout_enabled)}
+                            className={`relative w-11 h-6 rounded-full transition-colors cursor-pointer ${
+                              s.game.instant_cashout_enabled ? 'bg-emerald-500' : 'bg-zinc-600'
+                            }`}
+                          >
+                            <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition-transform ${
+                              s.game.instant_cashout_enabled ? 'translate-x-5' : ''
+                            }`} />
+                          </button>
+                          <label className="text-xs font-medium text-slate-300">Show "Send to MoMo" on win screen</label>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-slate-400 mb-1.5">Min Amount ({s.game.currency})</label>
+                          <Input type="text" value={s.game.instant_cashout_min_amount}
+                            onChange={e => updateGame('instant_cashout_min_amount', e.target.value)} />
+                          <p className="text-xs text-muted mt-1">Below this → wallet credit only</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* ── FLIP ANIMATION ── */}
+                    <div className="p-4 rounded-xl border border-border bg-card">
+                      <h3 className="text-sm font-semibold text-white mb-3">🎬 Flip Animation</h3>
+                      <p className="text-xs text-muted mb-3">Cards show a generic back. On flip, the animation reveals the actual denomination (WYSIWYG).</p>
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                         <div>
                           <label className="block text-xs font-medium text-slate-400 mb-1.5">Animation Mode</label>
                           <select value={s.game.flip_animation_mode || 'gif'}
@@ -675,23 +620,13 @@ export default function SettingsPage() {
                             <option value="png">PNG Sequence</option>
                             <option value="video">MP4/WebM Video</option>
                           </select>
-                          <p className="text-xs text-muted mt-1">GIF = single file, PNG = frame sequence, Video = MP4/WebM</p>
-                        </div>
-                        <div>
-                          <label className="block text-xs font-medium text-slate-400 mb-1.5">Display Mode</label>
-                          <select value={s.game.flip_display_mode || 'face_then_gif'}
-                            onChange={e => updateGame('flip_display_mode', e.target.value)}
-                            className="w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-white">
-                            <option value="face_then_gif">Face Image then GIF</option>
-                            <option value="gif_only">GIF Only (static first frame)</option>
-                          </select>
-                          <p className="text-xs text-muted mt-1">Face+GIF = show face JPG then flip GIF. GIF Only = use GIF first frame as static card</p>
+                          <p className="text-xs text-muted mt-1">GIF recommended. Video for premium feel.</p>
                         </div>
                         <div>
                           <label className="block text-xs font-medium text-slate-400 mb-1.5">Animation Speed (ms)</label>
                           <Input type="number" min="500" max="15000" step="100" value={s.game.flip_animation_speed_ms || 1500}
                             onChange={e => updateGame('flip_animation_speed_ms', parseInt(e.target.value) || 1500)} />
-                          <p className="text-xs text-muted mt-1">{((s.game.flip_animation_speed_ms || 1500) / 1000).toFixed(1)}s — controls how long the flip animation plays</p>
+                          <p className="text-xs text-muted mt-1">{((s.game.flip_animation_speed_ms || 1500) / 1000).toFixed(1)}s — controls GIF/video playback duration</p>
                         </div>
                         <div>
                           <label className="block text-xs font-medium text-slate-400 mb-1.5">Flip Sound</label>
@@ -712,8 +647,8 @@ export default function SettingsPage() {
                       </div>
                     </div>
 
-                    {/* Simulated Live Feed */}
-                    <div>
+                    {/* ── SIMULATED LIVE FEED ── */}
+                    <div className="p-4 rounded-xl border border-border bg-card">
                       <h3 className="text-sm font-semibold text-white mb-3">Simulated Live Feed (Demo Mode)</h3>
                       <p className="text-xs text-muted mb-3">Enable fake leaderboard entries for demo/pitching. These mix with real results in the live feed.</p>
                       <div className="flex items-center gap-3 mb-4">
@@ -792,7 +727,7 @@ export default function SettingsPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <CardTitle>Currency Denominations</CardTitle>
-                  <CardDescription>Configure banknote denominations, payout multipliers, and flip animation assets ({s.game.currency})</CardDescription>
+                  <CardDescription>Configure banknote face values and flip animation assets ({s.game.currency}). Face value = payout amount (WYSIWYG).</CardDescription>
                 </div>
                 <Button size="sm" onClick={() => {
                   const denoms: Denomination[] = [...(s.denominations || []), {
@@ -813,9 +748,10 @@ export default function SettingsPage() {
                 </div>
               ) : (
                 <div className="space-y-3">
-                  <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-sm text-amber-300">
-                    <strong>House Edge Math:</strong> Avg payout multiplier × expected flips (~5) should be &lt; 100% for house profit.
-                    Target: avg multiplier ~6% × 5 flips = 30% payout → <strong>70% house edge</strong>. Boost: ~8% × 5 = 40% payout → 60% house edge.
+                  <div className="p-3 rounded-lg bg-cyan-500/10 border border-cyan-500/30 text-sm text-cyan-300">
+                    <strong>WYSIWYG Denominations:</strong> Each denomination's face value IS the payout amount.
+                    The engine selects denominations that fit within the session's remaining budget.
+                    Configure the flip GIF/video for each denomination below.
                   </div>
                   {s.denominations.map((denom, i) => (
                     <div key={i} className={`p-4 rounded-lg border ${
@@ -849,41 +785,15 @@ export default function SettingsPage() {
                           }} className="text-red-400 hover:text-red-300 cursor-pointer"><Trash2 size={14} /></button>
                         </div>
                       </div>
-                      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                      <div className="grid grid-cols-2 md:grid-cols-2 gap-3">
                         <div>
-                          <label className="block text-xs text-slate-400 mb-1">Face Value</label>
+                          <label className="block text-xs text-slate-400 mb-1">Face Value ({s.game.currency})</label>
                           <Input type="text" value={denom.value} onChange={e => {
                             const denoms = [...s.denominations]
                             denoms[i] = { ...denom, value: e.target.value }
                             setSettings({ ...s, denominations: denoms })
                           }} />
-                        </div>
-                        <div>
-                          <label className="block text-xs text-slate-400 mb-1">Normal Multiplier (%)</label>
-                          <Input type="text" value={denom.payout_multiplier} onChange={e => {
-                            const denoms = [...s.denominations]
-                            denoms[i] = { ...denom, payout_multiplier: e.target.value }
-                            setSettings({ ...s, denominations: denoms })
-                          }} />
-                          <p className="text-[10px] text-muted mt-0.5">% of stake per flip (normal mode)</p>
-                        </div>
-                        <div>
-                          <label className="block text-xs text-slate-400 mb-1">Boost Multiplier (%)</label>
-                          <Input type="text" value={denom.boost_payout_multiplier} onChange={e => {
-                            const denoms = [...s.denominations]
-                            denoms[i] = { ...denom, boost_payout_multiplier: e.target.value }
-                            setSettings({ ...s, denominations: denoms })
-                          }} />
-                          <p className="text-[10px] text-muted mt-0.5">0 = auto from factor</p>
-                        </div>
-                        <div>
-                          <label className="block text-xs text-slate-400 mb-1">Weight</label>
-                          <Input type="number" value={denom.weight} onChange={e => {
-                            const denoms = [...s.denominations]
-                            denoms[i] = { ...denom, weight: parseInt(e.target.value) || 1 }
-                            setSettings({ ...s, denominations: denoms })
-                          }} />
-                          <p className="text-[10px] text-muted mt-0.5">Higher = more frequent</p>
+                          <p className="text-[10px] text-muted mt-0.5">This IS the payout amount (WYSIWYG)</p>
                         </div>
                         <div>
                           <label className="block text-xs text-slate-400 mb-1">Display Order</label>
@@ -896,35 +806,6 @@ export default function SettingsPage() {
                       </div>
                       {!denom.is_zero && (
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3">
-                          {/* Face Image */}
-                          <div className="p-3 rounded-lg border border-border/50 bg-zinc-900/50">
-                            <label className="block text-xs text-slate-400 mb-2 font-medium">Face Image (static first frame)</label>
-                            {denom.face_image_path && (
-                              <div className="mb-2 rounded overflow-hidden border border-border bg-black" style={{maxHeight: 80}}>
-                                <img src={denom.face_image_path.startsWith('http') ? denom.face_image_path : `/static/${denom.face_image_path}`}
-                                  alt="face" className="w-full h-20 object-cover" />
-                              </div>
-                            )}
-                            <div className="flex items-center gap-2">
-                              <Input type="text" placeholder="Cloudinary URL or static path" value={denom.face_image_path}
-                                className="text-xs flex-1" onChange={e => {
-                                const denoms = [...s.denominations]
-                                denoms[i] = { ...denom, face_image_path: e.target.value }
-                                setSettings({ ...s, denominations: denoms })
-                              }} />
-                              <label className="shrink-0">
-                                <span className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-primary/20 text-primary text-xs rounded cursor-pointer hover:bg-primary/30 transition">
-                                  <Upload size={12} /> {uploading ? '...' : 'Upload'}
-                                </span>
-                                <input type="file" className="hidden" accept="image/*" disabled={uploading}
-                                  onChange={e => {
-                                    const file = e.target.files?.[0]
-                                    if (file) uploadDenomFile(i, 'face_image_path', file)
-                                    e.target.value = ''
-                                  }} />
-                              </label>
-                            </div>
-                          </div>
                           {/* Flip GIF */}
                           <div className="p-3 rounded-lg border border-border/50 bg-zinc-900/50">
                             <label className="block text-xs text-slate-400 mb-2 font-medium">Flip Animation GIF</label>
