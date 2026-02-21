@@ -821,6 +821,7 @@
     // GIF plays on the current card as a transition effect.
     // Next card underneath already shows the new denomination face.
     // Uses Cloudinary w_480 resize for fast loading on mobile.
+    // Fades out current card in the second half so denomination underneath is revealed.
     function _flipWithGif(card, gifPath, durationMs, value, sym, resolve, denomData) {
         const rawGifUrl = _assetUrl(gifPath);
         const gifUrl = _gifOptimized(rawGifUrl);
@@ -837,6 +838,15 @@
         // Load the resized denomination flip GIF onto the current card
         card.innerHTML = `<img src="${gifUrl}${cacheBust}" alt="flip" style="${_imgStyle}" />`;
 
+        // Fade out current card in the second half of the GIF,
+        // progressively revealing the denomination face underneath
+        const fadeStart = Math.round(durationMs * 0.55);
+        const fadeDuration = Math.round(durationMs * 0.40);
+        setTimeout(() => {
+            card.style.transition = `opacity ${fadeDuration}ms ease-out`;
+            card.style.opacity = '0';
+        }, fadeStart);
+
         const onGifEnd = () => {
             if (_gifFired) return;
             _gifFired = true;
@@ -848,7 +858,7 @@
             if (pile) pile.classList.add('visible');
             if (pileCount) pileCount.textContent = _noteFlipCount;
 
-            // Instant removal — next card underneath already shows denomination
+            // Remove current card — next card underneath already shows denomination
             card.removeAttribute('id');
             if (card.parentNode) card.remove();
 
