@@ -463,7 +463,7 @@
     // Used for all cards AFTER the first flip (next-card-underneath).
     function _randomDenomCardHTML() {
         const denoms = state.session?.currency?.denominations || state.denominations || [];
-        const nonZero = denoms.filter(d => !d.is_zero && d.is_active);
+        const nonZero = denoms.filter(d => !d.is_zero);
         if (nonZero.length > 0) {
             const denom = nonZero[Math.floor(Math.random() * nonZero.length)];
             const imgUrl = _getCardImageUrl(denom);
