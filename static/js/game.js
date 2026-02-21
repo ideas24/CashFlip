@@ -444,15 +444,25 @@
         return mode === 'gif';
     }
 
-    // Card back — shown before flip, denomination revealed by animation.
-    // Uses configurable image from admin (card_back_image_url).
-    // MUST output an <img> element so _flipWithGif can seamlessly swap src.
-    function _cardBackHTML() {
+    // Random denomination glimpse — shows a denomination's static first frame.
+    // The GIF flip animation shows the note back as it leaves, so no separate
+    // card back is needed. This is purely decorative while waiting for the next flip.
+    // Falls back to card_back_image_url or SVG if no denominations available.
+    function _randomDenomCardHTML() {
+        const denoms = state.session?.currency?.denominations || state.denominations || [];
+        const nonZero = denoms.filter(d => !d.is_zero && d.is_active);
+        if (nonZero.length > 0) {
+            const denom = nonZero[Math.floor(Math.random() * nonZero.length)];
+            const imgUrl = _getCardImageUrl(denom);
+            if (imgUrl) {
+                return `<img src="${imgUrl}" alt="card" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:inherit;display:block;" />`;
+            }
+        }
+        // Fallback: configurable card back image or SVG
         const backUrl = state.gameConfig?.card_back_image_url;
         if (backUrl) {
             return `<img src="${backUrl}" alt="card" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:inherit;display:block;" />`;
         }
-        // Fallback: inline SVG card back (renders as <img> for seamless GIF swap)
         const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='400' height='225' viewBox='0 0 400 225'>`
             + `<rect width='400' height='225' fill='%230d0d2b'/>`
             + `<text x='200' y='105' text-anchor='middle' font-size='36' font-weight='800' fill='%23ffd700'>FLIP</text>`
@@ -492,10 +502,9 @@
         card.id = 'active-note';
         card.style.zIndex = '1';
 
-        // Show a generic card back — denomination is revealed by the flip animation
-        // This prevents mismatch where the static card shows one denomination
-        // but the API returns a different one (WYSIWYG: you see it on flip)
-        card.innerHTML = _cardBackHTML();
+        // Show a random denomination glimpse — the GIF animation reveals the actual
+        // payout denomination. This is purely decorative while waiting for the flip.
+        card.innerHTML = _randomDenomCardHTML();
 
         stage.appendChild(card);
         _startAutoFlipTimer();
@@ -931,8 +940,8 @@
         nextCard.style.zIndex = '0';
         nextCard.style.opacity = '0'; // Hidden until current card exits
 
-        // Generic card back — denomination is revealed by the flip animation
-        nextCard.innerHTML = _cardBackHTML();
+        // Random denomination glimpse — decorative while waiting for next flip
+        nextCard.innerHTML = _randomDenomCardHTML();
 
         // Insert underneath (before active card)
         const active = document.getElementById('active-note');
