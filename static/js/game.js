@@ -294,16 +294,22 @@
     }
 
     // Cloudinary transform for animated GIFs:
-    // e_trim removes excess transparent borders, c_pad adds dark bg to reach 16:9
-    function _gifAnimatedFill(url) {
+    // dl_X controls frame delay (centiseconds), e_trim removes transparent borders,
+    // c_pad adds dark bg to reach 16:9.
+    // durationMs = desired total animation time, frames = number of GIF frames.
+    function _gifAnimatedFill(url, durationMs, frames) {
         if (!url) return url;
         const marker = '/image/upload/';
         const idx = url.indexOf(marker);
         if (idx === -1) return url;
         const before = url.substring(0, idx + marker.length);
         const after = url.substring(idx + marker.length);
-        if (after.startsWith('c_') || after.startsWith('e_')) return url;
-        return before + 'e_trim/c_pad,ar_16:9,g_center,b_rgb:0d0d1a/' + after;
+        if (after.startsWith('c_') || after.startsWith('e_') || after.startsWith('dl_')) return url;
+        // Compute frame delay: dl_X where X is centiseconds (1/100 sec)
+        const numFrames = frames || 31;
+        const delayMs = (durationMs || 1500) / numFrames;
+        const dlVal = Math.max(2, Math.round(delayMs / 10)); // minimum 20ms per frame
+        return before + `dl_${dlVal}/e_trim/c_pad,ar_16:9,g_center,b_rgb:0d0d1a/` + after;
     }
 
     // ==================== STAKE TIER DENOMINATION FILTER ====================
@@ -345,8 +351,10 @@
                     sImg.src = staticUrl;
                     _preloadedImages[staticUrl] = sImg;
                 }
-                // Preload animated GIF with fill transform (for flip animation)
-                const animUrl = _gifAnimatedFill(_assetUrl(d.flip_gif_path));
+                // Preload animated GIF with fill + speed transform (for flip animation)
+                const animSpeed = state.gameConfig?.flip_animation_speed_ms || 1500;
+                const animFrames = d.flip_sequence_frames || 31;
+                const animUrl = _gifAnimatedFill(_assetUrl(d.flip_gif_path), animSpeed, animFrames);
                 if (!_preloadedImages[animUrl]) {
                     const aImg = new Image();
                     aImg.crossOrigin = 'anonymous';
@@ -436,6 +444,15 @@
         return mode === 'gif';
     }
 
+    // Generic card back — shown before flip, denomination revealed by animation
+    function _cardBackHTML() {
+        const sym = state.session?.currency?.symbol || 'GH₵';
+        return `<div class="note-face note-face-front" style="width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;border-radius:inherit;background:linear-gradient(135deg,#1a1a3e 0%,#0d0d2b 100%);">
+            <span class="nf-logo" style="font-size:2.2rem;font-weight:800;color:#ffd700;text-shadow:0 2px 8px rgba(255,215,0,0.3);">FLIP</span>
+            <span class="nf-sub" style="font-size:0.75rem;color:rgba(255,255,255,0.5);margin-top:4px;letter-spacing:2px;">TAP TO REVEAL</span>
+        </div>`;
+    }
+
     function _getCardImageUrl(denom) {
         // GIF mode: the GIF's first frame IS the card face (no separate face image)
         if (_isGifMode() && denom?.flip_gif_path) {
@@ -467,33 +484,10 @@
         card.id = 'active-note';
         card.style.zIndex = '1';
 
-        // Pick a random denomination from the tier matching current stake
-        const stakeAmt = state.session?.stake_amount || state.gameConfig?.min_stake;
-        const tierDenoms = _getDenomsForStake(stakeAmt);
-        const randomDenom = tierDenoms.length > 0 ? tierDenoms[Math.floor(Math.random() * tierDenoms.length)] : null;
-
-        // VIDEO MODE: card IS a <video> paused at frame 0 — looks like static image
-        if (_isVideoMode() && randomDenom?.flip_video_path) {
-            const videoUrl = _assetUrl(randomDenom.flip_video_path);
-            card.innerHTML = `<video id="card-face-video" muted playsinline preload="auto"
-                 style="${_videoCardStyle}" src="${videoUrl}"></video>`;
-            const vid = card.querySelector('video');
-            if (vid) {
-                vid.pause();
-                vid.addEventListener('loadeddata', () => { vid.currentTime = 0; vid.pause(); }, { once: true });
-            }
-        } else {
-            const imgUrl = _getCardImageUrl(randomDenom);
-            if (imgUrl) {
-                card.innerHTML = `<img id="card-face-img" src="${imgUrl}" alt="note"
-                     style="width:100%;height:100%;object-fit:cover;display:block;" />`;
-            } else {
-                card.innerHTML = `<div class="note-face note-face-front">
-                    <span class="nf-logo">CF</span>
-                    <span class="nf-sub">CASHFLIP</span>
-                </div>`;
-            }
-        }
+        // Show a generic card back — denomination is revealed by the flip animation
+        // This prevents mismatch where the static card shows one denomination
+        // but the API returns a different one (WYSIWYG: you see it on flip)
+        card.innerHTML = _cardBackHTML();
 
         stage.appendChild(card);
         _startAutoFlipTimer();
@@ -718,20 +712,22 @@
     }
 
     // ---- GIF FLIP ANIMATION ----
-    // The card already shows the GIF's first frame (static, via Cloudinary pg_1 + c_fill).
-    // On flip: swap src to the animated GIF — the animation IS the flip.
+    // The card shows a generic card back. On flip: replace with the actual denomination's
+    // animated GIF — the animation reveals the denomination (WYSIWYG).
+    // Cloudinary dl_X controls frame timing to match flip_animation_speed_ms.
     // Cache-bust forces GIF to restart from frame 0 every time.
     function _flipWithGif(card, gifPath, durationMs, value, sym, resolve, denomData) {
-        const gifUrl = _gifAnimatedFill(_assetUrl(gifPath));
+        const frames = denomData?.flip_sequence_frames || 31;
+        const gifUrl = _gifAnimatedFill(_assetUrl(gifPath), durationMs, frames);
         const cacheBust = `?t=${Date.now()}`;
         let _gifFired = false; // Double-fire guard
 
         card.classList.remove('entering');
 
-        // Pre-place next card underneath (hidden — shows static GIF first frame)
+        // Pre-place next card underneath (hidden — shows generic card back)
         _placeNextCardUnderneath();
 
-        // Swap the existing static-frame <img> to the animated GIF
+        // Replace card back with the animated GIF (reveals the denomination)
         const rawGifUrl = _assetUrl(gifPath);
         const imgStyle = 'width:100%;height:100%;object-fit:cover;display:block;border-radius:inherit;';
         const cardImg = card.querySelector('img');
@@ -913,27 +909,8 @@
         nextCard.style.zIndex = '0';
         nextCard.style.opacity = '0'; // Hidden until current card exits
 
-        const stakeAmt = state.session?.stake_amount || state.gameConfig?.min_stake;
-        const tierDenoms = _getDenomsForStake(stakeAmt);
-        const randomDenom = tierDenoms.length > 0 ? tierDenoms[Math.floor(Math.random() * tierDenoms.length)] : null;
-
-        // VIDEO MODE: next card is also a <video> paused at frame 0
-        if (_isVideoMode() && randomDenom?.flip_video_path) {
-            const videoUrl = _assetUrl(randomDenom.flip_video_path);
-            nextCard.innerHTML = `<video muted playsinline preload="auto"
-                 style="${_videoCardStyle}" src="${videoUrl}"></video>`;
-            const vid = nextCard.querySelector('video');
-            if (vid) {
-                vid.pause();
-                vid.addEventListener('loadeddata', () => { vid.currentTime = 0; vid.pause(); }, { once: true });
-            }
-        } else {
-            const imgUrl = _getCardImageUrl(randomDenom);
-            if (imgUrl) {
-                nextCard.innerHTML = `<img src="${imgUrl}" alt="note"
-                     style="width:100%;height:100%;object-fit:cover;display:block;border-radius:inherit;" />`;
-            }
-        }
+        // Generic card back — denomination is revealed by the flip animation
+        nextCard.innerHTML = _cardBackHTML();
 
         // Insert underneath (before active card)
         const active = document.getElementById('active-note');
