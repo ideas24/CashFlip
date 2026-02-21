@@ -51,6 +51,12 @@ interface GameSettings {
   normal_payout_target: string
   boost_payout_target: string
   boost_multiplier_factor: string
+  decay_factor: string
+  max_flips_per_session: number
+  holiday_mode_enabled: boolean
+  holiday_boost_pct: string
+  holiday_frequency: number
+  holiday_max_tier_name: string
 }
 
 interface SimConfig {
@@ -109,6 +115,7 @@ interface Denomination {
   flip_sequence_prefix: string
   flip_sequence_frames: number
   flip_gif_path: string
+  flip_video_path: string
   display_order: number
   is_zero: boolean
   is_active: boolean
@@ -228,10 +235,10 @@ export default function SettingsPage() {
     setUploading(false)
   }
 
-  const uploadDenomFile = async (denomIndex: number, field: 'face_image_path' | 'flip_gif_path', file: File) => {
+  const uploadDenomFile = async (denomIndex: number, field: 'face_image_path' | 'flip_gif_path' | 'flip_video_path', file: File) => {
     setUploading(true)
     try {
-      const folder = field === 'face_image_path' ? 'cashflip/faces' : 'cashflip/gifs'
+      const folder = field === 'face_image_path' ? 'cashflip/faces' : field === 'flip_video_path' ? 'cashflip/videos' : 'cashflip/gifs'
       const formData = new FormData()
       formData.append('file', file)
       formData.append('folder', folder)
@@ -454,6 +461,98 @@ export default function SettingsPage() {
                       })()}
                     </div>
 
+                    {/* Exponential Decay Engine */}
+                    <div className="p-4 rounded-xl border-2 border-cyan-500/30 bg-cyan-500/5">
+                      <h3 className="text-sm font-semibold text-white mb-1">WYSIWYG Payout Engine (Exponential Decay)</h3>
+                      <p className="text-xs text-muted mb-3">
+                        "What You See Is What You Get" — the denomination note shown IS the payout.
+                        Budget = stake × payout%. Decay formula distributes budget across flips: weight<sub>i</sub> = e<sup>-k×(i-1)</sup>
+                      </p>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div>
+                          <label className="block text-xs font-medium text-slate-400 mb-1.5">Decay Factor (k)</label>
+                          <Input type="text" value={s.game.decay_factor}
+                            onChange={e => updateGame('decay_factor', e.target.value)} />
+                          <p className="text-xs text-muted mt-1">Small k = equal payouts, large k = front-loaded. Default: 0.05</p>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-slate-400 mb-1.5">Max Flips Per Session</label>
+                          <Input type="number" min="3" max="50" value={s.game.max_flips_per_session}
+                            onChange={e => updateGame('max_flips_per_session', parseInt(e.target.value) || 10)} />
+                          <p className="text-xs text-muted mt-1">Budget may end sooner if denominations exhaust it</p>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-slate-400 mb-1.5">Min Flips Before Cashout</label>
+                          <Input type="number" value={s.game.min_flips_before_cashout}
+                            onChange={e => updateGame('min_flips_before_cashout', parseInt(e.target.value) || 0)} />
+                          <p className="text-xs text-muted mt-1">Prevents risk-free profit exploit</p>
+                        </div>
+                      </div>
+                      {/* Budget Preview */}
+                      {(() => {
+                        const stake = parseFloat(s.game.min_stake) || 50
+                        const pct = s.game.payout_mode === 'boost'
+                          ? parseFloat(s.game.boost_payout_target) || 40
+                          : parseFloat(s.game.normal_payout_target) || 30
+                        const budget = (stake * pct / 100).toFixed(2)
+                        const k = parseFloat(s.game.decay_factor) || 0.05
+                        const maxFlips = s.game.max_flips_per_session || 10
+                        const raw = Array.from({length: maxFlips}, (_, i) => Math.exp(-k * i))
+                        const total = raw.reduce((a, b) => a + b, 0)
+                        const norm = raw.map(w => w / total)
+                        const payouts = norm.map(w => (w * parseFloat(budget)).toFixed(1))
+                        const preview = payouts.slice(0, 5).join(', ') + (maxFlips > 5 ? ', ...' : '')
+                        return (
+                          <div className="mt-3 p-3 rounded-lg bg-cyan-500/10 border border-cyan-500/30 text-sm text-cyan-300">
+                            <strong>Preview (min stake {s.game.currency}{stake}):</strong> Budget = {s.game.currency}{budget} ({pct}% of {stake}). 
+                            Target per flip: [{preview}] {s.game.currency}
+                          </div>
+                        )
+                      })()}
+                    </div>
+
+                    {/* Holiday Trigger */}
+                    <div className="p-4 rounded-xl border-2 border-pink-500/30 bg-pink-500/5">
+                      <div className="flex items-center justify-between mb-3">
+                        <div>
+                          <h3 className="text-sm font-semibold text-white">Holiday Trigger</h3>
+                          <p className="text-xs text-muted">Randomly boost payout for selected low-stake players to increase engagement</p>
+                        </div>
+                        <button
+                          onClick={() => updateGame('holiday_mode_enabled', !s.game.holiday_mode_enabled)}
+                          className={`relative w-14 h-7 rounded-full transition-colors cursor-pointer ${
+                            s.game.holiday_mode_enabled ? 'bg-pink-500' : 'bg-zinc-600'
+                          }`}
+                        >
+                          <span className={`absolute top-0.5 left-0.5 w-6 h-6 rounded-full bg-white transition-transform ${
+                            s.game.holiday_mode_enabled ? 'translate-x-7' : ''
+                          }`} />
+                        </button>
+                      </div>
+                      {s.game.holiday_mode_enabled && (
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                          <div>
+                            <label className="block text-xs font-medium text-slate-400 mb-1.5">Boost Payout (%)</label>
+                            <Input type="text" value={s.game.holiday_boost_pct}
+                              onChange={e => updateGame('holiday_boost_pct', e.target.value)} />
+                            <p className="text-xs text-muted mt-1">Boosted players get this % back (e.g. 70 = 70% payout)</p>
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-slate-400 mb-1.5">Frequency (1 in N)</label>
+                            <Input type="number" min="1" value={s.game.holiday_frequency}
+                              onChange={e => updateGame('holiday_frequency', parseInt(e.target.value) || 1000)} />
+                            <p className="text-xs text-muted mt-1">1 in {s.game.holiday_frequency} players gets boosted ({(100 / (s.game.holiday_frequency || 1000)).toFixed(2)}%)</p>
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-slate-400 mb-1.5">Max Tier (name)</label>
+                            <Input type="text" value={s.game.holiday_max_tier_name}
+                              onChange={e => updateGame('holiday_max_tier_name', e.target.value)} />
+                            <p className="text-xs text-muted mt-1">Only this tier or lower gets boost (empty = all)</p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
                     {/* House Edge & Stakes */}
                     <div>
                       <h3 className="text-sm font-semibold text-white mb-3">House Edge & Stakes</h3>
@@ -574,8 +673,9 @@ export default function SettingsPage() {
                             className="w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-white">
                             <option value="gif">GIF Animation</option>
                             <option value="png">PNG Sequence</option>
+                            <option value="video">MP4/WebM Video</option>
                           </select>
-                          <p className="text-xs text-muted mt-1">GIF = single file per denomination, PNG = frame sequence</p>
+                          <p className="text-xs text-muted mt-1">GIF = single file, PNG = frame sequence, Video = MP4/WebM</p>
                         </div>
                         <div>
                           <label className="block text-xs font-medium text-slate-400 mb-1.5">Display Mode</label>
@@ -698,7 +798,7 @@ export default function SettingsPage() {
                   const denoms: Denomination[] = [...(s.denominations || []), {
                     id: null, value: '1.00', payout_multiplier: '6.00', boost_payout_multiplier: '0',
                     face_image_path: '', flip_sequence_prefix: '', flip_sequence_frames: 31, flip_gif_path: '',
-                    display_order: (s.denominations?.length || 0), is_zero: false, is_active: true, weight: 10
+                    flip_video_path: '', display_order: (s.denominations?.length || 0), is_zero: false, is_active: true, weight: 10
                   }]
                   setSettings({ ...s, denominations: denoms })
                 }}><Plus size={14} className="mr-1" /> Add Denomination</Button>
@@ -849,6 +949,35 @@ export default function SettingsPage() {
                                   onChange={e => {
                                     const file = e.target.files?.[0]
                                     if (file) uploadDenomFile(i, 'flip_gif_path', file)
+                                    e.target.value = ''
+                                  }} />
+                              </label>
+                            </div>
+                          </div>
+                          {/* Flip Video (MP4/WebM) */}
+                          <div className="p-3 rounded-lg border border-border/50 bg-zinc-900/50">
+                            <label className="block text-xs text-slate-400 mb-2 font-medium">Flip Video (MP4/WebM)</label>
+                            {denom.flip_video_path && (
+                              <div className="mb-2 rounded overflow-hidden border border-border bg-black" style={{maxHeight: 80}}>
+                                <video src={denom.flip_video_path.startsWith('http') ? denom.flip_video_path : `/static/${denom.flip_video_path}`}
+                                  className="w-full h-20 object-cover" muted />
+                              </div>
+                            )}
+                            <div className="flex items-center gap-2">
+                              <Input type="text" placeholder="Cloudinary URL or static path" value={denom.flip_video_path}
+                                className="text-xs flex-1" onChange={e => {
+                                const denoms = [...s.denominations]
+                                denoms[i] = { ...denom, flip_video_path: e.target.value }
+                                setSettings({ ...s, denominations: denoms })
+                              }} />
+                              <label className="shrink-0">
+                                <span className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-cyan-500/20 text-cyan-400 text-xs rounded cursor-pointer hover:bg-cyan-500/30 transition">
+                                  <Upload size={12} /> {uploading ? '...' : 'Upload'}
+                                </span>
+                                <input type="file" className="hidden" accept="video/mp4,video/webm,video/*" disabled={uploading}
+                                  onChange={e => {
+                                    const file = e.target.files?.[0]
+                                    if (file) uploadDenomFile(i, 'flip_video_path', file)
                                     e.target.value = ''
                                   }} />
                               </label>
@@ -1199,19 +1328,27 @@ export default function SettingsPage() {
                   <div>
                     <label className="block text-xs font-medium text-slate-400 mb-1">Regulatory Logo</label>
                     {s.branding?.regulatory_logo_url && (
-                      <img src={s.branding.regulatory_logo_url} alt="Regulatory" className="h-8 mb-2 rounded" />
+                      <div className="mb-2 p-2 bg-zinc-900 rounded border border-border flex items-center justify-center" style={{minHeight: 48}}>
+                        <img src={s.branding.regulatory_logo_url} alt="Regulatory" className="max-h-10 max-w-full object-contain" />
+                      </div>
                     )}
-                    <input type="file" accept="image/*"
-                      onChange={async (e) => {
-                        const file = e.target.files?.[0]; if (!file) return;
-                        setUploading(true);
-                        const fd = new FormData(); fd.append('regulatory_logo', file);
-                        try {
-                          const res = await api.upload('/settings/branding/upload/', fd);
-                          if (res.regulatory_logo_url) updateBranding('regulatory_logo_url', res.regulatory_logo_url);
-                        } catch {} finally { setUploading(false); }
-                      }}
-                      className="text-xs text-slate-400" />
+                    <label className="block">
+                      <span className="inline-flex items-center gap-1 px-3 py-1.5 bg-primary/20 text-primary text-xs rounded cursor-pointer hover:bg-primary/30 transition">
+                        <Upload size={12} /> {uploading ? 'Uploading...' : 'Upload'}
+                      </span>
+                      <input type="file" className="hidden" accept="image/*,.svg" disabled={uploading}
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0]; if (!file) return;
+                          setUploading(true);
+                          try {
+                            const formData = new FormData();
+                            formData.append('file', file);
+                            formData.append('folder', 'cashflip/branding');
+                            const resp = await api.upload<{ url: string }>('/settings/cloudinary-upload/', formData);
+                            if (resp.url) updateBranding('regulatory_logo_url', resp.url);
+                          } catch {} finally { setUploading(false); e.target.value = ''; }
+                        }} />
+                    </label>
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-slate-400 mb-1">Regulatory Text</label>
