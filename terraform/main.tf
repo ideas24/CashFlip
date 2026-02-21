@@ -37,23 +37,23 @@ variable "db_admin_password" {
 }
 
 variable "app_vm_count" {
-  default = 6
-  description = "App VMSS instance count — 6-8 for production gaming load"
+  default = 4
+  description = "App VMSS instance count — increase to 6-8 after Azure quota increase to 40+ cores"
 }
 
 variable "celery_vm_count" {
-  default = 3
-  description = "Celery worker VMSS instance count — 3 for parallel task processing"
+  default = 1
+  description = "Celery worker VMSS instance count — increase to 3 after Azure quota increase"
 }
 
 variable "vm_size_app" {
-  default = "Standard_D4s_v3"
-  description = "4 vCPU, 16GB RAM — fast for concurrent game sessions"
+  default = "Standard_D2s_v3"
+  description = "2 vCPU, 8GB RAM — upgrade to D4s_v3 after quota increase"
 }
 
 variable "vm_size_celery" {
-  default = "Standard_D4s_v3"
-  description = "4 vCPU, 16GB RAM — handles auto-flip, webhooks, settlements"
+  default = "Standard_D2s_v3"
+  description = "2 vCPU, 8GB RAM — upgrade to D4s_v3 after quota increase"
 }
 
 # ==================== Resource Group ====================
@@ -373,6 +373,7 @@ resource "azurerm_postgresql_flexible_server" "main" {
   public_network_access_enabled = false
   administrator_login           = "cashflip_admin"
   administrator_password        = var.db_admin_password
+  zone                          = "3"
 
   storage_mb = 65536
   sku_name   = "GP_Standard_D2s_v3"
