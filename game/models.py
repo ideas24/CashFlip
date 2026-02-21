@@ -115,6 +115,8 @@ class CurrencyDenomination(models.Model):
         help_text='Number of frames in the flip sequence (0-indexed PNGs)')
     flip_gif_path = models.CharField(max_length=255, blank=True, default='',
         help_text='Static path to flip GIF, e.g. images/Cedi-Gifs/5cedis.gif (fallback if no upload)')
+    flip_video_path = models.CharField(max_length=500, blank=True, default='',
+        help_text='Path or Cloudinary URL to flip MP4/WebM video, e.g. videos/5cedis.mp4')
     display_order = models.PositiveIntegerField(default=0)
     is_zero = models.BooleanField(default=False, help_text='Is this the zero/loss denomination?')
     is_active = models.BooleanField(default=True)
@@ -167,8 +169,23 @@ class GameConfig(models.Model):
     max_session_duration_minutes = models.PositiveIntegerField(default=120)
     auto_flip_seconds = models.PositiveIntegerField(default=8,
         help_text='Seconds before auto-flip triggers if player idles (0 = disabled)')
+    # Exponential decay payout engine
+    decay_factor = models.DecimalField(max_digits=6, decimal_places=4, default=0.0500,
+        help_text='Decay factor k for exponential weight curve. Small k=equal payouts, large k=front-loaded. '
+                  'Formula: weight_i = e^(-k * (i-1))')
+    max_flips_per_session = models.PositiveIntegerField(default=10,
+        help_text='Maximum number of flips allowed per session (budget may end sooner)')
+    # Holiday trigger
+    holiday_mode_enabled = models.BooleanField(default=False,
+        help_text='Enable Holiday trigger: randomly boost payout for selected low-stake players')
+    holiday_boost_pct = models.DecimalField(max_digits=5, decimal_places=2, default=70.00,
+        help_text='Payout percentage for holiday-boosted players (e.g. 70 = they get 70% back instead of 40%)')
+    holiday_frequency = models.PositiveIntegerField(default=1000,
+        help_text='1 in N active players gets the holiday boost (e.g. 1000 = 0.1% chance)')
+    holiday_max_tier_name = models.CharField(max_length=50, default='Standard', blank=True,
+        help_text='Only players in this tier or lower get holiday boost (empty = all tiers)')
     flip_animation_mode = models.CharField(max_length=10, default='gif',
-        choices=[('gif', 'GIF Animation'), ('png', 'PNG Sequence')],
+        choices=[('gif', 'GIF Animation'), ('png', 'PNG Sequence'), ('video', 'MP4/WebM Video')],
         help_text='Which animation format to use for note flips')
     flip_display_mode = models.CharField(max_length=20, default='face_then_gif',
         choices=[('face_then_gif', 'Face Image then GIF'), ('gif_only', 'GIF Only (static first frame)')],
@@ -322,6 +339,14 @@ class GameSession(models.Model):
     currency = models.ForeignKey(Currency, on_delete=models.PROTECT, related_name='sessions')
     stake_amount = models.DecimalField(max_digits=12, decimal_places=2)
     cashout_balance = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    payout_budget = models.DecimalField(max_digits=12, decimal_places=2, default=0,
+        help_text='Total payout budget for this session = stake × payout_pct. Denomination face values deducted from this.')
+    remaining_budget = models.DecimalField(max_digits=12, decimal_places=2, default=0,
+        help_text='Remaining payout budget (decreases as player flips). Zero when exhausted.')
+    payout_pct_used = models.DecimalField(max_digits=5, decimal_places=2, default=0,
+        help_text='The actual payout percentage used for this session (may be boosted by holiday trigger)')
+    is_holiday_boosted = models.BooleanField(default=False,
+        help_text='Whether this session received the holiday boost')
     status = models.CharField(max_length=15, choices=STATUS_CHOICES, default='active', db_index=True)
     flip_count = models.PositiveIntegerField(default=0)
     server_seed = models.CharField(max_length=64, blank=True, default='')

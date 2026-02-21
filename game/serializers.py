@@ -23,7 +23,7 @@ class DenominationSerializer(serializers.ModelSerializer):
         model = CurrencyDenomination
         fields = ['id', 'value', 'payout_multiplier', 'image_url', 'front_image_url', 'back_image_url',
                   'face_image_path', 'flip_sequence_prefix', 'flip_sequence_frames', 'flip_gif_path',
-                  'display_order', 'is_zero', 'weight']
+                  'flip_video_path', 'display_order', 'is_zero', 'weight']
 
     def get_image_url(self, obj):
         if obj.front_image:
@@ -73,7 +73,8 @@ class GameConfigPublicSerializer(serializers.ModelSerializer):
                   'min_flips_before_cashout', 'instant_cashout_enabled', 'instant_cashout_min_amount',
                   'auto_flip_seconds', 'flip_animation_mode', 'flip_display_mode',
                   'flip_animation_speed_ms', 'flip_sound_enabled', 'simulated_feed_enabled',
-                  'payout_mode']
+                  'payout_mode', 'decay_factor', 'max_flips_per_session',
+                  'holiday_mode_enabled']
 
 
 class StartGameSerializer(serializers.Serializer):
@@ -97,7 +98,9 @@ class GameSessionSerializer(serializers.ModelSerializer):
     class Meta:
         model = GameSession
         fields = [
-            'id', 'currency', 'stake_amount', 'cashout_balance', 'status',
+            'id', 'currency', 'stake_amount', 'cashout_balance',
+            'payout_budget', 'remaining_budget', 'payout_pct_used',
+            'is_holiday_boosted', 'status',
             'flip_count', 'server_seed_hash', 'created_at', 'ended_at', 'flips',
         ]
 
@@ -108,8 +111,9 @@ class GameSessionListSerializer(serializers.ModelSerializer):
     class Meta:
         model = GameSession
         fields = [
-            'id', 'currency', 'stake_amount', 'cashout_balance', 'status',
-            'flip_count', 'created_at', 'ended_at',
+            'id', 'currency', 'stake_amount', 'cashout_balance',
+            'payout_budget', 'remaining_budget', 'is_holiday_boosted',
+            'status', 'flip_count', 'created_at', 'ended_at',
         ]
 
 

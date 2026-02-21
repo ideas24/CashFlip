@@ -1,22 +1,41 @@
 """
-Cashflip Game Engine - Provably Fair Flip Logic
+Cashflip Game Engine — WYSIWYG Budget-Based Payout with Exponential Decay
 
-Server-authoritative game engine with configurable zero probability curve.
-House edge target: 60% retention / 40% payout (configurable via GameConfig).
+"What You See Is What You Get" — the denomination note shown IS the
+payout added to the player's cashout balance.
+
+House edge is enforced via a per-session **payout budget**:
+    payout_budget = stake × (payout_target / 100)
+
+The budget is distributed across flips using exponential decay weights:
+    weight_i = e^(-k × (i - 1))
+
+When the remaining budget cannot cover the smallest denomination,
+the player hits the ZERO note and the session ends.
+
+Holiday Trigger: 1-in-N low-stake players get a boosted payout
+percentage for engagement.
 """
 
 import hashlib
-import hmac
 import math
 import random
 import secrets
 import logging
-from decimal import Decimal
+from decimal import Decimal, ROUND_DOWN
 
-from game.models import Currency, CurrencyDenomination, GameConfig, SimulatedGameConfig, GameSession, FlipResult, StakeTier
+from django.utils import timezone
+
+from game.models import (
+    Currency, CurrencyDenomination, GameConfig,
+    SimulatedGameConfig, GameSession, FlipResult, StakeTier,
+)
 
 logger = logging.getLogger(__name__)
 
+# ---------------------------------------------------------------------------
+# Provably fair primitives
+# ---------------------------------------------------------------------------
 
 def generate_result_hash(server_seed, client_seed, nonce):
     """Generate provably fair result hash."""
@@ -26,42 +45,17 @@ def generate_result_hash(server_seed, client_seed, nonce):
 
 def hash_to_float(result_hash):
     """Convert hash to float between 0 and 1."""
-    # Use first 8 hex chars (32 bits) for uniform distribution
     hex_value = result_hash[:8]
     int_value = int(hex_value, 16)
     return int_value / 0xFFFFFFFF
 
 
-def calculate_zero_probability(flip_number, config):
-    """
-    Calculate probability of zero (loss) for a given flip number.
-    
-    Formula: P(zero) = base_rate + (1 - base_rate) * (1 - e^(-k * (flip - min_flips)))
-    For flip <= min_flips: P(zero) = 0 (guaranteed safe)
-    
-    This sigmoid-like curve ensures:
-    - Early flips are safe (engagement hook)
-    - Probability increases with each flip
-    - Converges toward ~1.0 ensuring house edge over volume
-    """
-    min_flips = config.min_flips_before_zero
-    
-    if flip_number <= min_flips:
-        return 0.0
-    
-    base_rate = float(config.zero_base_rate)
-    k = float(config.zero_growth_rate)
-    adjusted_flip = flip_number - min_flips
-    
-    probability = base_rate + (1 - base_rate) * (1 - math.exp(-k * adjusted_flip))
-    return min(probability, 0.95)  # Cap at 95% to avoid guaranteed loss
-
+# ---------------------------------------------------------------------------
+# Stake tier helpers
+# ---------------------------------------------------------------------------
 
 def resolve_stake_tier(currency, stake_amount):
-    """
-    Find the StakeTier matching the given stake amount.
-    Returns the tier or None (fallback to all denominations).
-    """
+    """Find the StakeTier matching the given stake amount."""
     if not stake_amount:
         return None
     try:
@@ -75,199 +69,323 @@ def resolve_stake_tier(currency, stake_amount):
         return None
 
 
-def select_denomination(currency, result_hash, is_zero, stake_amount=None, config=None):
+def get_tier_denominations(currency, stake_amount):
     """
-    Select a denomination based on the result hash.
-    If is_zero, return the zero denomination.
-    Otherwise, weighted random selection from active denominations.
-    
-    Tier filtering: If a StakeTier matches the stake_amount, only denominations
-    assigned to that tier are eligible. Falls back to all denominations if no tier.
-    
-    Boost mode: If config.payout_mode == 'boost', uses boost_payout_multiplier
-    (or normal multiplier × boost_multiplier_factor).
+    Return the list of non-zero active denominations for the player's tier,
+    sorted by value ascending.
     """
-    if is_zero:
-        zero_denom = CurrencyDenomination.objects.filter(
-            currency=currency, is_zero=True, is_active=True
-        ).first()
-        return zero_denom, Decimal('0.00')
-    
-    # Resolve stake tier for denomination filtering
     tier = resolve_stake_tier(currency, stake_amount)
-    
     if tier:
-        # Only denominations assigned to this tier
         denoms = list(tier.denominations.filter(
             is_zero=False, is_active=True
         ).order_by('value'))
-    else:
-        # Fallback: all active non-zero denominations
-        denoms = list(CurrencyDenomination.objects.filter(
-            currency=currency, is_zero=False, is_active=True
-        ).order_by('value'))
-    
-    if not denoms:
-        # Ultimate fallback: all denominations regardless of tier
-        denoms = list(CurrencyDenomination.objects.filter(
-            currency=currency, is_zero=False, is_active=True
-        ).order_by('value'))
-    
-    if not denoms:
-        logger.error(f'No active denominations for {currency.code}')
-        return None, Decimal('0.00')
-    
-    # Weighted random selection using result hash
-    total_weight = sum(d.weight for d in denoms)
-    hash_float = hash_to_float(result_hash[8:16])  # Use different portion of hash
-    target = hash_float * total_weight
-    
-    selected = denoms[-1]  # fallback
-    cumulative = 0
-    for denom in denoms:
-        cumulative += denom.weight
-        if target <= cumulative:
-            selected = denom
-            break
-    
-    # Determine which multiplier to use (normal vs boost)
-    is_boost = config and config.payout_mode == 'boost'
-    
-    if is_boost:
-        # Use boost multiplier: explicit value or auto-calculated
-        if selected.boost_payout_multiplier and selected.boost_payout_multiplier > 0:
-            multiplier = selected.boost_payout_multiplier
-        else:
-            # Auto-calculate: normal × boost_multiplier_factor
-            factor = config.boost_multiplier_factor if config.boost_multiplier_factor else Decimal('1.33')
-            multiplier = selected.payout_multiplier * factor
-    else:
-        multiplier = selected.payout_multiplier
-    
-    # Calculate actual payout from multiplier
-    if stake_amount and multiplier:
-        payout = (stake_amount * multiplier / Decimal('100')).quantize(Decimal('0.01'))
-    else:
-        payout = selected.value
-    
-    return selected, payout
+        if denoms:
+            return denoms
+    # Fallback: all active non-zero denominations
+    return list(CurrencyDenomination.objects.filter(
+        currency=currency, is_zero=False, is_active=True
+    ).order_by('value'))
 
+
+# ---------------------------------------------------------------------------
+# Exponential decay weights
+# ---------------------------------------------------------------------------
+
+def compute_decay_weights(k, max_flips):
+    """
+    Compute normalised exponential decay weights for up to max_flips.
+
+        weight_i = e^(-k × (i - 1))   (i is 1-indexed)
+        normalised_weight_i = weight_i / sum(weights)
+
+    Returns list of floats that sum to 1.0.
+    """
+    raw = [math.exp(-k * (i - 1)) for i in range(1, max_flips + 1)]
+    total = sum(raw)
+    if total == 0:
+        return [1.0 / max_flips] * max_flips
+    return [w / total for w in raw]
+
+
+def compute_payout_schedule(k, max_flips, payout_budget):
+    """
+    Compute the ideal payout per flip position.
+    Returns list of Decimal amounts.
+    """
+    weights = compute_decay_weights(k, max_flips)
+    budget_float = float(payout_budget)
+    return [
+        Decimal(str(round(w * budget_float, 2)))
+        for w in weights
+    ]
+
+
+# ---------------------------------------------------------------------------
+# Holiday trigger
+# ---------------------------------------------------------------------------
+
+def check_holiday_boost(config, currency, stake_amount):
+    """
+    Determine if this session should receive the holiday boost.
+    Returns (is_boosted, effective_payout_pct).
+    """
+    if not config.holiday_mode_enabled:
+        pct = _effective_payout_pct(config)
+        return False, pct
+
+    # Only boost players in qualifying tiers
+    tier = resolve_stake_tier(currency, stake_amount)
+    if config.holiday_max_tier_name:
+        qualifying = StakeTier.objects.filter(
+            currency=currency, is_active=True,
+            name__iexact=config.holiday_max_tier_name,
+        ).first()
+        if qualifying and tier and tier.min_stake > qualifying.max_stake:
+            # Player is in a higher tier — no boost
+            pct = _effective_payout_pct(config)
+            return False, pct
+
+    # Roll dice: 1 in N chance
+    freq = max(config.holiday_frequency, 1)
+    if random.randint(1, freq) == 1:
+        logger.info(f'[HOLIDAY] Player boosted! payout={config.holiday_boost_pct}%')
+        return True, config.holiday_boost_pct
+
+    pct = _effective_payout_pct(config)
+    return False, pct
+
+
+def _effective_payout_pct(config):
+    """Return the effective payout percentage based on payout_mode."""
+    if config.payout_mode == 'boost':
+        return config.boost_payout_target
+    return config.normal_payout_target
+
+
+# ---------------------------------------------------------------------------
+# Session initialisation (called from views.start_game)
+# ---------------------------------------------------------------------------
+
+def initialise_session_budget(session, config):
+    """
+    Calculate and store the payout budget for a new session.
+    Must be called right after session creation.
+    """
+    is_boosted, payout_pct = check_holiday_boost(
+        config, session.currency, session.stake_amount
+    )
+    budget = (session.stake_amount * payout_pct / Decimal('100')).quantize(
+        Decimal('0.01'), rounding=ROUND_DOWN
+    )
+    session.payout_budget = budget
+    session.remaining_budget = budget
+    session.payout_pct_used = payout_pct
+    session.is_holiday_boosted = is_boosted
+    session.save(update_fields=[
+        'payout_budget', 'remaining_budget',
+        'payout_pct_used', 'is_holiday_boosted',
+    ])
+    return budget
+
+
+# ---------------------------------------------------------------------------
+# Denomination selection — WYSIWYG (face value = payout)
+# ---------------------------------------------------------------------------
+
+def select_denomination_wysiwyg(session, config, result_hash):
+    """
+    Select a denomination whose face value fits within the remaining budget,
+    guided by the exponential decay target for this flip position.
+
+    Logic:
+    1. Compute the target payout for this flip using decay weights.
+    2. Filter denominations whose face value ≤ remaining_budget.
+    3. Pick the denomination closest to the target.
+    4. If no denomination fits → return zero.
+
+    Returns (denomination, face_value_as_decimal, is_zero).
+    """
+    remaining = session.remaining_budget
+    flip_number = session.flip_count  # Already incremented before calling this
+
+    # Get available denominations for this tier
+    denoms = get_tier_denominations(session.currency, session.stake_amount)
+
+    # Filter to only those that fit in remaining budget
+    affordable = [d for d in denoms if d.value <= remaining]
+
+    if not affordable:
+        # ZERO — budget exhausted
+        zero_denom = CurrencyDenomination.objects.filter(
+            currency=session.currency, is_zero=True, is_active=True
+        ).first()
+        return zero_denom, Decimal('0.00'), True
+
+    # Compute target payout for this flip position
+    k = float(config.decay_factor)
+    max_flips = config.max_flips_per_session
+    target_payouts = compute_payout_schedule(k, max_flips, session.payout_budget)
+
+    # Get target for current flip (clamped to schedule length)
+    idx = min(flip_number - 1, len(target_payouts) - 1)
+    target = float(target_payouts[idx])
+
+    # Use provably fair hash to add controlled randomness to selection
+    roll = hash_to_float(result_hash[8:16])
+
+    # Sort affordable by closeness to target
+    affordable.sort(key=lambda d: abs(float(d.value) - target))
+
+    # Pick from top candidates using the roll for randomness
+    # Take the 3 closest denominations (or fewer if not available)
+    candidates = affordable[:min(3, len(affordable))]
+
+    # Weighted selection: closer to target = higher probability
+    if len(candidates) == 1:
+        selected = candidates[0]
+    else:
+        # Weight inversely proportional to distance from target (+1 to avoid /0)
+        distances = [abs(float(c.value) - target) + 0.01 for c in candidates]
+        inv_weights = [1.0 / d for d in distances]
+        total_w = sum(inv_weights)
+        normalised = [w / total_w for w in inv_weights]
+
+        # Use the roll to pick
+        cumulative = 0.0
+        selected = candidates[-1]
+        for i, cand in enumerate(candidates):
+            cumulative += normalised[i]
+            if roll <= cumulative:
+                selected = cand
+                break
+
+    return selected, selected.value, False
+
+
+# ---------------------------------------------------------------------------
+# Simulation override (for testing/demo)
+# ---------------------------------------------------------------------------
 
 def get_simulated_outcome(session, flip_number, roll):
     """
     Check if a SimulatedGameConfig overrides the normal flip outcome.
-    
-    Returns:
-        (is_zero, zero_prob, forced_denom_value) or None if no simulation active.
+    Returns (is_zero, forced_denom_value) or None if no simulation active.
     """
     sim = SimulatedGameConfig.get_active_config()
     if not sim or not sim.applies_to_player(session.player):
         return None
 
     mode = sim.outcome_mode
-    forced_denom_value = sim.force_denomination_value  # may be None
+    forced_denom_value = sim.force_denomination_value
 
     if mode == 'normal':
         return None
-
     elif mode == 'always_win':
-        return (False, 0.0, forced_denom_value)
-
+        return (False, forced_denom_value)
     elif mode == 'always_lose':
-        return (True, 1.0, None)
-
+        return (True, None)
     elif mode == 'force_zero_at':
         if flip_number == sim.force_zero_at_flip:
-            return (True, 1.0, None)
-        return (False, 0.0, forced_denom_value)
-
+            return (True, None)
+        return (False, forced_denom_value)
     elif mode == 'fixed_probability':
         prob = float(sim.fixed_zero_probability)
         is_zero = roll < prob
-        return (is_zero, prob, forced_denom_value if not is_zero else None)
-
+        return (is_zero, forced_denom_value if not is_zero else None)
     elif mode == 'streak_then_lose':
         if flip_number <= sim.win_streak_length:
-            return (False, 0.0, forced_denom_value)
-        return (True, 1.0, None)
-
+            return (False, forced_denom_value)
+        return (True, None)
     return None
 
 
+# ---------------------------------------------------------------------------
+# Core flip execution
+# ---------------------------------------------------------------------------
+
 def execute_flip(session):
     """
-    Execute a single flip for a game session.
-    
-    Returns:
-        dict: {
-            'success': bool,
-            'is_zero': bool,
-            'denomination': {...} or None,
-            'value': Decimal,
-            'cashout_balance': Decimal,
-            'flip_number': int,
-            'result_hash': str,
-            'ad_due': bool,  # Whether an ad should be shown
-        }
+    Execute a single WYSIWYG flip for a game session.
+
+    The denomination shown IS the amount added to cashout_balance.
+    House edge is enforced via the payout budget, not via multipliers.
+
+    Returns dict with flip result data for the API response.
     """
     try:
         config = GameConfig.objects.get(currency=session.currency, is_active=True)
     except GameConfig.DoesNotExist:
         return {'success': False, 'error': 'Game configuration not found'}
-    
+
+    # Check max flips
+    if session.flip_count >= config.max_flips_per_session:
+        return {'success': False, 'error': 'Maximum flips reached for this session'}
+
     # Increment nonce and flip count
     session.nonce += 1
     session.flip_count += 1
     flip_number = session.flip_count
-    
+
     # Generate provably fair result
-    result_hash = generate_result_hash(session.server_seed, session.client_seed, session.nonce)
+    result_hash = generate_result_hash(
+        session.server_seed, session.client_seed, session.nonce
+    )
     roll = hash_to_float(result_hash)
-    
+
     # Check simulation override first
     simulated = get_simulated_outcome(session, flip_number, roll)
+
     if simulated is not None:
-        is_zero, zero_prob, forced_denom_value = simulated
-        logger.info(f'[SIM] session={session.id} flip={flip_number} mode override -> is_zero={is_zero}')
-    else:
-        # Normal probability curve
-        zero_prob = calculate_zero_probability(flip_number, config)
-        is_zero = roll < zero_prob
-        forced_denom_value = None
-    
-    # Select denomination (with optional forced value from simulation)
-    if forced_denom_value is not None and not is_zero:
-        forced_denom = CurrencyDenomination.objects.filter(
-            currency=session.currency, value=forced_denom_value, is_active=True
-        ).first()
-        if forced_denom:
-            # Use multiplier-based payout for forced denomination too
-            if forced_denom.payout_multiplier:
-                payout = (session.stake_amount * forced_denom.payout_multiplier / Decimal('100')).quantize(Decimal('0.01'))
+        sim_is_zero, sim_forced_value = simulated
+        logger.info(
+            f'[SIM] session={session.id} flip={flip_number} '
+            f'override -> is_zero={sim_is_zero}'
+        )
+        if sim_is_zero:
+            denomination, value, is_zero = _get_zero_denom(session), Decimal('0.00'), True
+        elif sim_forced_value is not None:
+            # Force a specific denomination
+            forced = CurrencyDenomination.objects.filter(
+                currency=session.currency,
+                value=sim_forced_value,
+                is_active=True, is_zero=False,
+            ).first()
+            if forced and forced.value <= session.remaining_budget:
+                denomination, value, is_zero = forced, forced.value, False
             else:
-                payout = forced_denom.value
-            denomination, value = forced_denom, payout
+                denomination, value, is_zero = select_denomination_wysiwyg(
+                    session, config, result_hash
+                )
         else:
-            denomination, value = select_denomination(session.currency, result_hash, is_zero, session.stake_amount, config)
+            denomination, value, is_zero = select_denomination_wysiwyg(
+                session, config, result_hash
+            )
     else:
-        denomination, value = select_denomination(session.currency, result_hash, is_zero, session.stake_amount, config)
-    
+        # Normal WYSIWYG selection (budget-driven, no separate zero curve)
+        denomination, value, is_zero = select_denomination_wysiwyg(
+            session, config, result_hash
+        )
+
+    # Apply result
     if is_zero:
-        # Player loses
         session.cashout_balance = Decimal('0.00')
+        session.remaining_budget = Decimal('0.00')
         session.status = 'lost'
-        session.ended_at = __import__('django.utils', fromlist=['timezone']).timezone.now()
+        session.ended_at = timezone.now()
     else:
-        # Add denomination value to cashout balance
         session.cashout_balance += value
+        session.remaining_budget -= value
         # Enforce max_cashout cap
         if config.max_cashout and session.cashout_balance > config.max_cashout:
             session.cashout_balance = config.max_cashout
-    
-    session.save(update_fields=['nonce', 'flip_count', 'cashout_balance', 'status', 'ended_at'])
-    
+
+    session.save(update_fields=[
+        'nonce', 'flip_count', 'cashout_balance',
+        'remaining_budget', 'status', 'ended_at',
+    ])
+
     # Record flip result
-    flip = FlipResult.objects.create(
+    FlipResult.objects.create(
         session=session,
         flip_number=flip_number,
         denomination=denomination,
@@ -276,7 +394,7 @@ def execute_flip(session):
         cumulative_balance=session.cashout_balance,
         result_hash=result_hash,
     )
-    
+
     # Check if ad should be shown
     ad_due = False
     try:
@@ -286,18 +404,19 @@ def execute_flip(session):
             ad_due = True
     except Exception:
         pass
-    
+
     result = {
         'success': True,
         'is_zero': is_zero,
         'value': str(value),
         'cashout_balance': str(session.cashout_balance),
+        'remaining_budget': str(session.remaining_budget),
         'flip_number': flip_number,
         'result_hash': result_hash,
         'ad_due': ad_due,
-        'zero_probability': round(zero_prob * 100, 1),
+        'is_holiday_boosted': session.is_holiday_boosted,
     }
-    
+
     if denomination:
         result['denomination'] = {
             'value': str(denomination.value),
@@ -308,7 +427,14 @@ def execute_flip(session):
             'flip_sequence_prefix': denomination.flip_sequence_prefix or None,
             'flip_sequence_frames': denomination.flip_sequence_frames,
             'flip_gif_path': denomination.flip_gif_path or None,
-            'payout_multiplier': str(denomination.payout_multiplier),
+            'flip_video_path': denomination.flip_video_path or None,
         }
-    
+
     return result
+
+
+def _get_zero_denom(session):
+    """Helper to fetch the zero denomination."""
+    return CurrencyDenomination.objects.filter(
+        currency=session.currency, is_zero=True, is_active=True
+    ).first()

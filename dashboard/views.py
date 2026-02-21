@@ -1168,6 +1168,12 @@ def settings_view(request):
                 'normal_payout_target': str(game_config.normal_payout_target),
                 'boost_payout_target': str(game_config.boost_payout_target),
                 'boost_multiplier_factor': str(game_config.boost_multiplier_factor),
+                'decay_factor': str(game_config.decay_factor),
+                'max_flips_per_session': game_config.max_flips_per_session,
+                'holiday_mode_enabled': game_config.holiday_mode_enabled,
+                'holiday_boost_pct': str(game_config.holiday_boost_pct),
+                'holiday_frequency': game_config.holiday_frequency,
+                'holiday_max_tier_name': game_config.holiday_max_tier_name,
             }
         else:
             game_data = {
@@ -1197,6 +1203,12 @@ def settings_view(request):
                 'normal_payout_target': '30.00',
                 'boost_payout_target': '40.00',
                 'boost_multiplier_factor': '1.33',
+                'decay_factor': '0.0500',
+                'max_flips_per_session': 10,
+                'holiday_mode_enabled': False,
+                'holiday_boost_pct': '70.00',
+                'holiday_frequency': 1000,
+                'holiday_max_tier_name': 'Standard',
             }
 
         sim_list = []
@@ -1259,6 +1271,7 @@ def settings_view(request):
                     'flip_sequence_prefix': d.flip_sequence_prefix,
                     'flip_sequence_frames': d.flip_sequence_frames,
                     'flip_gif_path': d.flip_gif_path,
+                    'flip_video_path': d.flip_video_path,
                     'display_order': d.display_order,
                     'is_zero': d.is_zero,
                     'is_active': d.is_active,
@@ -1331,7 +1344,9 @@ def settings_view(request):
                        'max_session_duration_minutes',
                        'auto_flip_seconds', 'flip_animation_mode', 'flip_display_mode', 'flip_animation_speed_ms',
                        'flip_sound_enabled', 'simulated_feed_enabled', 'simulated_feed_data',
-                       'payout_mode', 'normal_payout_target', 'boost_payout_target', 'boost_multiplier_factor']
+                       'payout_mode', 'normal_payout_target', 'boost_payout_target', 'boost_multiplier_factor',
+                       'decay_factor', 'max_flips_per_session',
+                       'holiday_mode_enabled', 'holiday_boost_pct', 'holiday_frequency', 'holiday_max_tier_name']
         updated = []
         for field in game_fields:
             if field in game_data:
@@ -1393,6 +1408,7 @@ def settings_view(request):
             d.flip_sequence_prefix = dd.get('flip_sequence_prefix', '')
             d.flip_sequence_frames = dd.get('flip_sequence_frames', 31)
             d.flip_gif_path = dd.get('flip_gif_path', '')
+            d.flip_video_path = dd.get('flip_video_path', '')
             d.display_order = dd.get('display_order', 0)
             d.is_zero = dd.get('is_zero', False)
             d.is_active = dd.get('is_active', True)

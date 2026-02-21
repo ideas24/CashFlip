@@ -620,8 +620,17 @@
             // Non-zero: choose animation mode
             const gifPath = denomData?.flip_gif_path;
             const seqPrefix = denomData?.flip_sequence_prefix;
+            const videoPath = denomData?.flip_video_path;
 
-            if (animMode === 'gif' && gifPath) {
+            // Prefer video if configured
+            if (animMode === 'video' && videoPath) {
+                _flipWithVideo(card, videoPath, animSpeed, value, sym, resolve, denomData);
+                return;
+            } else if (videoPath && !gifPath && !seqPrefix) {
+                // Auto-fallback to video if it's the only asset
+                _flipWithVideo(card, videoPath, animSpeed, value, sym, resolve, denomData);
+                return;
+            } else if (animMode === 'gif' && gifPath) {
                 _flipWithGif(card, gifPath, animSpeed, value, sym, resolve, denomData);
                 return;
             } else if (animMode === 'png' && seqPrefix) {
@@ -695,6 +704,67 @@
             state.isFlipping = false;
             resolve();
         }, durationMs);
+    }
+
+    // ---- MP4/WebM VIDEO FLIP ANIMATION ----
+    function _flipWithVideo(card, videoPath, durationMs, value, sym, resolve, denomData) {
+        const videoUrl = _assetUrl(videoPath);
+
+        card.classList.remove('entering');
+
+        // Pre-place next card underneath (hidden)
+        _placeNextCardUnderneath();
+
+        // Replace card content with a <video> element
+        card.innerHTML = `<video muted playsinline
+            style="width:100%;height:100%;object-fit:cover;display:block;border-radius:inherit;"
+            src="${videoUrl}"></video>`;
+        const video = card.querySelector('video');
+
+        // Play video and resolve when done
+        const onVideoEnd = () => {
+            _noteFlipCount++;
+            updateRunningTotal();
+            const pile = document.getElementById('note-pile');
+            const pileCount = document.getElementById('pile-count');
+            if (pile) pile.classList.add('visible');
+            if (pileCount) pileCount.textContent = _noteFlipCount;
+
+            // Reveal the next card underneath
+            const nextCard = document.getElementById('next-note');
+            if (nextCard) nextCard.style.opacity = '1';
+
+            card.removeAttribute('id');
+            card.classList.add('to-pile');
+            card.addEventListener('animationend', () => card.remove(), { once: true });
+            setTimeout(() => { if (card.parentNode) card.remove(); }, 600);
+
+            // Promote next card
+            const next = document.getElementById('next-note');
+            if (next) {
+                next.id = 'active-note';
+                next.querySelector('img')?.removeAttribute('id');
+                const faceImg = next.querySelector('img');
+                if (faceImg) faceImg.id = 'card-face-img';
+            }
+            _startAutoFlipTimer();
+            state.isFlipping = false;
+            resolve();
+        };
+
+        if (video) {
+            video.addEventListener('ended', onVideoEnd, { once: true });
+            video.play().catch(() => {
+                // Video play failed — fall back to timeout
+                setTimeout(onVideoEnd, durationMs);
+            });
+            // Safety timeout in case video doesn't fire 'ended'
+            setTimeout(() => {
+                if (card.parentNode && card.id === 'active-note') onVideoEnd();
+            }, durationMs + 500);
+        } else {
+            setTimeout(onVideoEnd, durationMs);
+        }
     }
 
     // Place a new card underneath the current active card
@@ -1795,6 +1865,9 @@
                     server_seed_hash: data.server_seed_hash,
                     stake_amount: data.stake_amount,
                     cashout_balance: '0.00',
+                    payout_budget: data.payout_budget || '0.00',
+                    remaining_budget: data.payout_budget || '0.00',
+                    is_holiday_boosted: data.is_holiday_boosted || false,
                     flip_count: 0,
                     status: 'active',
                     currency: data.currency,
@@ -1928,6 +2001,7 @@
             // Update session state BEFORE animation so running total is correct
             state.session.flip_count = data.flip_number;
             state.session.cashout_balance = data.cashout_balance;
+            state.session.remaining_budget = data.remaining_budget || '0.00';
 
             // Sound + booklet page-turn animation
             sfxFlip();

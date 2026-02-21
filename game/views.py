@@ -175,6 +175,10 @@ def start_game(request):
             )
             session.generate_seeds()
 
+            # Initialise WYSIWYG payout budget (exponential decay engine)
+            from game.engine import initialise_session_budget
+            budget = initialise_session_budget(session, config)
+
             # Track simulation usage
             if sim_active:
                 sim.increment_usage()
@@ -187,6 +191,8 @@ def start_game(request):
         'session_id': str(session.id),
         'server_seed_hash': session.server_seed_hash,
         'stake_amount': str(stake_amount),
+        'payout_budget': str(session.payout_budget),
+        'is_holiday_boosted': session.is_holiday_boosted,
         'currency': CurrencySerializer(currency).data,
     }
     if sim_active:
