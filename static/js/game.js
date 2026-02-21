@@ -271,6 +271,8 @@
 
     function _cloudinaryFill(url) {
         if (!url) return url;
+        // Never transform animated GIFs — Cloudinary c_fill breaks animation
+        if (url.match(/\.(gif)(\?|$)/i)) return url;
         const marker = '/image/upload/';
         const idx = url.indexOf(marker);
         if (idx === -1) return url;
@@ -642,66 +644,57 @@
 
     // ---- GIF FLIP ANIMATION ----
     function _flipWithGif(card, gifPath, durationMs, value, sym, resolve, denomData) {
-        const gifUrl = _cloudinaryFill(_assetUrl(gifPath));
+        const gifUrl = _assetUrl(gifPath);
         const cacheBust = `?t=${Date.now()}`;
 
         card.classList.remove('entering');
 
-        // 1) Swap the face to the CORRECT denomination's face first (fixes mismatch)
-        const displayMode = state.gameConfig?.flip_display_mode || 'face_then_gif';
-        const correctFaceUrl = (displayMode === 'gif_only' && denomData?.flip_gif_path)
-            ? _gifStaticFrame(_assetUrl(denomData.flip_gif_path))
-            : (denomData?.face_image_path ? _cloudinaryFill(_assetUrl(denomData.face_image_path)) : null);
+        // Pre-place next card underneath (hidden) so it's ready when this card exits
+        _placeNextCardUnderneath();
 
-        const img = card.querySelector('img');
-        if (correctFaceUrl && img) {
-            img.src = correctFaceUrl;
+        // Immediately swap to the animated GIF (cache-busted to restart from frame 0)
+        const cardImg = card.querySelector('img');
+        if (cardImg) {
+            cardImg.style.objectFit = 'cover';
+            cardImg.style.width = '100%';
+            cardImg.style.height = '100%';
+            cardImg.src = gifUrl + cacheBust;
+        } else {
+            card.innerHTML = `<img src="${gifUrl}${cacheBust}" alt="flip"
+                 style="width:100%;height:100%;object-fit:cover;display:block;border-radius:inherit;" />`;
         }
 
-        // 2) After a brief flash of the correct face, start the GIF animation
-        const faceFlashMs = 120;
+        // After GIF plays, update counters and fade out current card
         setTimeout(() => {
-            // Place the NEXT card underneath before starting the flip
-            _placeNextCardUnderneath();
+            _noteFlipCount++;
+            updateRunningTotal();
+            const pile = document.getElementById('note-pile');
+            const pileCount = document.getElementById('pile-count');
+            if (pile) pile.classList.add('visible');
+            if (pileCount) pileCount.textContent = _noteFlipCount;
 
-            // Swap to the animated GIF (cache-busted to restart from frame 0)
-            const cardImg = card.querySelector('img');
-            if (cardImg) {
-                cardImg.src = gifUrl + cacheBust;
-            } else {
-                card.innerHTML = `<img src="${gifUrl}${cacheBust}" alt="flip"
-                     style="width:100%;height:100%;object-fit:cover;display:block;" />`;
+            // Reveal the next card underneath, then fade out current card
+            const nextCard = document.getElementById('next-note');
+            if (nextCard) nextCard.style.opacity = '1';
+
+            card.removeAttribute('id');
+            card.classList.add('to-pile');
+            card.addEventListener('animationend', () => card.remove(), { once: true });
+            // Fallback removal if animationend doesn't fire
+            setTimeout(() => { if (card.parentNode) card.remove(); }, 600);
+
+            // Promote the underneath card to active
+            const next = document.getElementById('next-note');
+            if (next) {
+                next.id = 'active-note';
+                next.querySelector('img')?.removeAttribute('id');
+                const faceImg = next.querySelector('img');
+                if (faceImg) faceImg.id = 'card-face-img';
             }
-
-            // 3) After GIF plays, update counters and fade out current card
-            setTimeout(() => {
-                _noteFlipCount++;
-                updateRunningTotal();
-                const pile = document.getElementById('note-pile');
-                const pileCount = document.getElementById('pile-count');
-                if (pile) pile.classList.add('visible');
-                if (pileCount) pileCount.textContent = _noteFlipCount;
-
-                // Fade out the current card to reveal next card underneath
-                card.removeAttribute('id');
-                card.classList.add('to-pile');
-                card.addEventListener('animationend', () => card.remove(), { once: true });
-                // Fallback removal if animationend doesn't fire
-                setTimeout(() => { if (card.parentNode) card.remove(); }, 600);
-
-                // Promote the underneath card to active
-                const next = document.getElementById('next-note');
-                if (next) {
-                    next.id = 'active-note';
-                    next.querySelector('img')?.removeAttribute('id');
-                    const faceImg = next.querySelector('img');
-                    if (faceImg) faceImg.id = 'card-face-img';
-                }
-                _startAutoFlipTimer();
-                state.isFlipping = false;
-                resolve();
-            }, durationMs);
-        }, faceFlashMs);
+            _startAutoFlipTimer();
+            state.isFlipping = false;
+            resolve();
+        }, durationMs);
     }
 
     // Place a new card underneath the current active card
@@ -715,6 +708,7 @@
         nextCard.className = 'banknote-card';
         nextCard.id = 'next-note';
         nextCard.style.zIndex = '0';
+        nextCard.style.opacity = '0'; // Hidden until current card exits
 
         const stakeAmt = state.session?.stake_amount || state.gameConfig?.min_stake;
         const tierDenoms = _getDenomsForStake(stakeAmt);
@@ -723,7 +717,7 @@
         const imgUrl = _getCardImageUrl(randomDenom);
         if (imgUrl) {
             nextCard.innerHTML = `<img src="${imgUrl}" alt="note"
-                 style="width:100%;height:100%;object-fit:cover;display:block;" />`;
+                 style="width:100%;height:100%;object-fit:cover;display:block;border-radius:inherit;" />`;
         }
 
         // Insert underneath (before active card)

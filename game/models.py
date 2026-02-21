@@ -24,9 +24,18 @@ class SiteBranding(models.Model):
     background_color = models.CharField(max_length=7, default='#0D1117', help_text='Midnight Obsidian')
     tagline = models.CharField(max_length=200, default='Flip Notes. Stack Cash. Win Big.',
                                help_text='Displayed on auth/loading screens')
+    # Cloudinary URL overrides (set by admin dashboard upload, take priority over FileField)
+    logo_cloud_url = models.URLField(max_length=500, blank=True, default='',
+        help_text='Cloudinary URL for main logo (overrides logo FileField)')
+    logo_icon_cloud_url = models.URLField(max_length=500, blank=True, default='',
+        help_text='Cloudinary URL for icon/favicon (overrides logo_icon FileField)')
+    loading_animation_cloud_url = models.URLField(max_length=500, blank=True, default='',
+        help_text='Cloudinary URL for loading animation (overrides loading_animation FileField)')
     # Regulatory footer
     regulatory_logo = models.FileField(upload_to='branding/', blank=True, default='',
         help_text='Gaming commission logo (SVG/PNG). Default: static/images/Ghana-Gaming-Commission-logo.png')
+    regulatory_logo_cloud_url = models.URLField(max_length=500, blank=True, default='',
+        help_text='Cloudinary URL for regulatory logo')
     regulatory_text = models.CharField(max_length=300, default='Regulated by the Gaming Commission of Ghana',
         help_text='Text displayed alongside the regulatory logo')
     age_restriction_text = models.CharField(max_length=10, default='18+',

@@ -1270,15 +1270,15 @@ def settings_view(request):
         from game.models import SiteBranding
         branding = SiteBranding.get_branding()
         branding_data = {
-            'logo_url': branding.logo.url if branding.logo else '',
-            'logo_icon_url': branding.logo_icon.url if branding.logo_icon else '',
-            'loading_animation_url': branding.loading_animation.url if branding.loading_animation else '',
+            'logo_url': branding.logo_cloud_url or (branding.logo.url if branding.logo else ''),
+            'logo_icon_url': branding.logo_icon_cloud_url or (branding.logo_icon.url if branding.logo_icon else ''),
+            'loading_animation_url': branding.loading_animation_cloud_url or (branding.loading_animation.url if branding.loading_animation else ''),
             'primary_color': branding.primary_color,
             'secondary_color': branding.secondary_color,
             'accent_color': branding.accent_color,
             'background_color': branding.background_color,
             'tagline': branding.tagline,
-            'regulatory_logo_url': branding.regulatory_logo.url if branding.regulatory_logo else '',
+            'regulatory_logo_url': branding.regulatory_logo_cloud_url or (branding.regulatory_logo.url if branding.regulatory_logo else ''),
             'regulatory_text': branding.regulatory_text,
             'age_restriction_text': branding.age_restriction_text,
             'responsible_gaming_text': branding.responsible_gaming_text,
@@ -1407,7 +1407,7 @@ def settings_view(request):
                 currency=game_config.currency
             ).exclude(id__in=existing_ids).delete()
 
-    # Save branding (text fields only — file uploads via separate endpoint)
+    # Save branding (text fields + Cloudinary URL overrides)
     from game.models import SiteBranding
     branding_data = request.data.get('branding', {})
     if branding_data:
@@ -1415,12 +1415,28 @@ def settings_view(request):
         branding_fields = ['primary_color', 'secondary_color', 'accent_color',
                            'background_color', 'tagline', 'regulatory_text',
                            'age_restriction_text', 'responsible_gaming_text',
-                           'show_regulatory_footer']
+                           'show_regulatory_footer',
+                           'logo_cloud_url', 'logo_icon_cloud_url',
+                           'loading_animation_cloud_url', 'regulatory_logo_cloud_url']
+        # Map frontend field names → model field names for Cloudinary URLs
+        url_field_map = {
+            'logo_url': 'logo_cloud_url',
+            'logo_icon_url': 'logo_icon_cloud_url',
+            'loading_animation_url': 'loading_animation_cloud_url',
+            'regulatory_logo_url': 'regulatory_logo_cloud_url',
+        }
         updated = []
         for field in branding_fields:
             if field in branding_data:
                 setattr(branding, field, branding_data[field])
                 updated.append(field)
+        # Also accept the frontend URL field names
+        for fe_key, model_field in url_field_map.items():
+            if fe_key in branding_data and model_field not in updated:
+                val = branding_data[fe_key]
+                if val:  # Only set if non-empty
+                    setattr(branding, model_field, val)
+                    updated.append(model_field)
         if updated:
             branding.save(update_fields=updated + ['updated_at'])
 

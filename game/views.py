@@ -201,7 +201,7 @@ class FlipThrottle(UserRateThrottle):
 
 
 class CashoutThrottle(UserRateThrottle):
-    rate = '5/minute'
+    rate = '20/minute'
 
 
 @api_view(['POST'])
