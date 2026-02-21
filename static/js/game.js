@@ -444,13 +444,21 @@
         return mode === 'gif';
     }
 
-    // Generic card back — shown before flip, denomination revealed by animation
+    // Card back — shown before flip, denomination revealed by animation.
+    // Uses configurable image from admin (card_back_image_url).
+    // MUST output an <img> element so _flipWithGif can seamlessly swap src.
     function _cardBackHTML() {
-        const sym = state.session?.currency?.symbol || 'GH₵';
-        return `<div class="note-face note-face-front" style="width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;border-radius:inherit;background:linear-gradient(135deg,#1a1a3e 0%,#0d0d2b 100%);">
-            <span class="nf-logo" style="font-size:2.2rem;font-weight:800;color:#ffd700;text-shadow:0 2px 8px rgba(255,215,0,0.3);">FLIP</span>
-            <span class="nf-sub" style="font-size:0.75rem;color:rgba(255,255,255,0.5);margin-top:4px;letter-spacing:2px;">TAP TO REVEAL</span>
-        </div>`;
+        const backUrl = state.gameConfig?.card_back_image_url;
+        if (backUrl) {
+            return `<img src="${backUrl}" alt="card" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:inherit;display:block;" />`;
+        }
+        // Fallback: inline SVG card back (renders as <img> for seamless GIF swap)
+        const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='400' height='225' viewBox='0 0 400 225'>`
+            + `<rect width='400' height='225' fill='%230d0d2b'/>`
+            + `<text x='200' y='105' text-anchor='middle' font-size='36' font-weight='800' fill='%23ffd700'>FLIP</text>`
+            + `<text x='200' y='135' text-anchor='middle' font-size='12' fill='rgba(255,255,255,0.5)' letter-spacing='2'>TAP TO REVEAL</text>`
+            + `</svg>`;
+        return `<img src="data:image/svg+xml,${svg}" alt="card" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:inherit;display:block;" />`;
     }
 
     function _getCardImageUrl(denom) {
