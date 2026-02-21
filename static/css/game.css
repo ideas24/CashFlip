@@ -564,7 +564,7 @@ html, body {
     position: absolute; inset: 0;
     overflow: hidden;
     border-radius: 12px;
-    background: transparent;
+    background: #0d0d1a;
     transition: opacity 0.35s ease;
     cursor: grab;
 }

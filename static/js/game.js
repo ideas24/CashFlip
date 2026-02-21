@@ -293,6 +293,19 @@
         return before + 'c_fill,ar_16:9,g_center,pg_1/' + after;
     }
 
+    // Cloudinary transform for animated GIFs:
+    // e_trim removes excess transparent borders, c_pad adds dark bg to reach 16:9
+    function _gifAnimatedFill(url) {
+        if (!url) return url;
+        const marker = '/image/upload/';
+        const idx = url.indexOf(marker);
+        if (idx === -1) return url;
+        const before = url.substring(0, idx + marker.length);
+        const after = url.substring(idx + marker.length);
+        if (after.startsWith('c_') || after.startsWith('e_')) return url;
+        return before + 'e_trim/c_pad,ar_16:9,g_center,b_rgb:0d0d1a/' + after;
+    }
+
     // ==================== STAKE TIER DENOMINATION FILTER ====================
     function _getDenomsForStake(stakeAmount) {
         const allDenoms = state.denominations || [];
@@ -324,19 +337,21 @@
                 }
             }
             if (d.flip_gif_path && !d.is_zero) {
-                const gifUrl = _cloudinaryFill(_assetUrl(d.flip_gif_path));
-                if (!_preloadedImages[gifUrl]) {
-                    const img = new Image();
-                    img.crossOrigin = 'anonymous';
-                    img.src = gifUrl;
-                    _preloadedImages[gifUrl] = img;
-                }
-                if (!_gifFrameCache[gifUrl]) {
-                    const staticUrl = _gifStaticFrame(_assetUrl(d.flip_gif_path));
-                    _gifFrameCache[gifUrl] = staticUrl;
+                // Preload static first frame (for card face display)
+                const staticUrl = _gifStaticFrame(_assetUrl(d.flip_gif_path));
+                if (!_preloadedImages[staticUrl]) {
                     const sImg = new Image();
+                    sImg.crossOrigin = 'anonymous';
                     sImg.src = staticUrl;
                     _preloadedImages[staticUrl] = sImg;
+                }
+                // Preload animated GIF with fill transform (for flip animation)
+                const animUrl = _gifAnimatedFill(_assetUrl(d.flip_gif_path));
+                if (!_preloadedImages[animUrl]) {
+                    const aImg = new Image();
+                    aImg.crossOrigin = 'anonymous';
+                    aImg.src = animUrl;
+                    _preloadedImages[animUrl] = aImg;
                 }
             }
         });
@@ -416,7 +431,17 @@
         stage.appendChild(stack);
     }
 
+    function _isGifMode() {
+        const mode = state.gameConfig?.flip_animation_mode || 'gif';
+        return mode === 'gif';
+    }
+
     function _getCardImageUrl(denom) {
+        // GIF mode: the GIF's first frame IS the card face (no separate face image)
+        if (_isGifMode() && denom?.flip_gif_path) {
+            return _gifStaticFrame(_assetUrl(denom.flip_gif_path));
+        }
+        // Legacy/other modes: use face image
         const displayMode = state.gameConfig?.flip_display_mode || 'face_then_gif';
         if (displayMode === 'gif_only' && denom?.flip_gif_path) {
             return _gifStaticFrame(_assetUrl(denom.flip_gif_path));
@@ -693,29 +718,39 @@
     }
 
     // ---- GIF FLIP ANIMATION ----
+    // The card already shows the GIF's first frame (static, via Cloudinary pg_1 + c_fill).
+    // On flip: swap src to the animated GIF — the animation IS the flip.
+    // Cache-bust forces GIF to restart from frame 0 every time.
     function _flipWithGif(card, gifPath, durationMs, value, sym, resolve, denomData) {
-        const gifUrl = _assetUrl(gifPath);
+        const gifUrl = _gifAnimatedFill(_assetUrl(gifPath));
         const cacheBust = `?t=${Date.now()}`;
+        let _gifFired = false; // Double-fire guard
 
         card.classList.remove('entering');
 
-        // Pre-place next card underneath (hidden) so it's ready when this card exits
+        // Pre-place next card underneath (hidden — shows static GIF first frame)
         _placeNextCardUnderneath();
 
-        // Immediately swap to the animated GIF (cache-busted to restart from frame 0)
+        // Swap the existing static-frame <img> to the animated GIF
+        const rawGifUrl = _assetUrl(gifPath);
+        const imgStyle = 'width:100%;height:100%;object-fit:cover;display:block;border-radius:inherit;';
         const cardImg = card.querySelector('img');
         if (cardImg) {
-            cardImg.style.objectFit = 'cover';
-            cardImg.style.width = '100%';
-            cardImg.style.height = '100%';
+            cardImg.style.cssText = imgStyle;
             cardImg.src = gifUrl + cacheBust;
+            // Fallback: if Cloudinary transform fails, use raw GIF
+            cardImg.onerror = () => { cardImg.onerror = null; cardImg.src = rawGifUrl + cacheBust; };
         } else {
-            card.innerHTML = `<img src="${gifUrl}${cacheBust}" alt="flip"
-                 style="width:100%;height:100%;object-fit:cover;display:block;border-radius:inherit;" />`;
+            card.innerHTML = `<img src="${gifUrl}${cacheBust}" alt="flip" style="${imgStyle}" />`;
+            const newImg = card.querySelector('img');
+            if (newImg) newImg.onerror = () => { newImg.onerror = null; newImg.src = rawGifUrl + cacheBust; };
         }
 
-        // After GIF plays, update counters and fade out current card
-        setTimeout(() => {
+        // Guarded completion handler — only fires once
+        const onGifEnd = () => {
+            if (_gifFired) return;
+            _gifFired = true;
+
             _noteFlipCount++;
             updateRunningTotal();
             const pile = document.getElementById('note-pile');
@@ -723,7 +758,7 @@
             if (pile) pile.classList.add('visible');
             if (pileCount) pileCount.textContent = _noteFlipCount;
 
-            // Reveal the next card underneath, then fade out current card
+            // Reveal the next card underneath (shows static GIF first frame)
             const nextCard = document.getElementById('next-note');
             if (nextCard) nextCard.style.opacity = '1';
 
@@ -733,7 +768,7 @@
             // Fallback removal if animationend doesn't fire
             setTimeout(() => { if (card.parentNode) card.remove(); }, 600);
 
-            // Promote the underneath card to active
+            // Promote the underneath card to active (shows static GIF first frame)
             const next = document.getElementById('next-note');
             if (next) {
                 next.id = 'active-note';
@@ -744,7 +779,10 @@
             _startAutoFlipTimer();
             state.isFlipping = false;
             resolve();
-        }, durationMs);
+        };
+
+        // GIF plays for the configured duration, then complete
+        setTimeout(onGifEnd, durationMs);
     }
 
     // ---- MP4/WebM VIDEO FLIP ANIMATION ----
