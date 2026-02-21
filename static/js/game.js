@@ -306,9 +306,10 @@
         return tierDenoms.length > 0 ? tierDenoms : nonZero;
     }
 
-    // ==================== GIF / FACE PRELOAD CACHE ====================
+    // ==================== GIF / FACE / VIDEO PRELOAD CACHE ====================
     const _gifFrameCache = {};
     const _preloadedImages = {};
+    const _preloadedVideos = {}; // { url: HTMLVideoElement } — pre-buffered videos
 
     function _preloadGifFirstFrames() {
         const denoms = state.denominations || [];
@@ -339,7 +340,35 @@
                 }
             }
         });
+        // Preload denomination flip videos (video mode)
+        _preloadDenomVideos();
     }
+
+    function _preloadDenomVideos() {
+        const denoms = state.denominations || [];
+        denoms.forEach(d => {
+            if (d.flip_video_path && !d.is_zero) {
+                const url = _assetUrl(d.flip_video_path);
+                if (!_preloadedVideos[url]) {
+                    const v = document.createElement('video');
+                    v.muted = true;
+                    v.playsInline = true;
+                    v.preload = 'auto';
+                    v.src = url;
+                    v.load(); // start buffering
+                    _preloadedVideos[url] = v;
+                }
+            }
+        });
+    }
+
+    function _isVideoMode() {
+        return (state.gameConfig?.flip_animation_mode || 'gif') === 'video';
+    }
+
+    // Shared style for video-as-card elements (looks identical to an image)
+    const _videoCardStyle = 'width:100%;height:100%;object-fit:cover;display:block;' +
+        'border-radius:inherit;pointer-events:none;background:#000;';
 
     // ==================== STACKED BUNDLE NOTE FLIPPER + SWIPE ====================
     let _noteFlipCount = 0;
@@ -418,15 +447,27 @@
         const tierDenoms = _getDenomsForStake(stakeAmt);
         const randomDenom = tierDenoms.length > 0 ? tierDenoms[Math.floor(Math.random() * tierDenoms.length)] : null;
 
-        const imgUrl = _getCardImageUrl(randomDenom);
-        if (imgUrl) {
-            card.innerHTML = `<img id="card-face-img" src="${imgUrl}" alt="note"
-                 style="width:100%;height:100%;object-fit:cover;display:block;" />`;
+        // VIDEO MODE: card IS a <video> paused at frame 0 — looks like static image
+        if (_isVideoMode() && randomDenom?.flip_video_path) {
+            const videoUrl = _assetUrl(randomDenom.flip_video_path);
+            card.innerHTML = `<video id="card-face-video" muted playsinline preload="auto"
+                 style="${_videoCardStyle}" src="${videoUrl}"></video>`;
+            const vid = card.querySelector('video');
+            if (vid) {
+                vid.pause();
+                vid.addEventListener('loadeddata', () => { vid.currentTime = 0; vid.pause(); }, { once: true });
+            }
         } else {
-            card.innerHTML = `<div class="note-face note-face-front">
-                <span class="nf-logo">CF</span>
-                <span class="nf-sub">CASHFLIP</span>
-            </div>`;
+            const imgUrl = _getCardImageUrl(randomDenom);
+            if (imgUrl) {
+                card.innerHTML = `<img id="card-face-img" src="${imgUrl}" alt="note"
+                     style="width:100%;height:100%;object-fit:cover;display:block;" />`;
+            } else {
+                card.innerHTML = `<div class="note-face note-face-front">
+                    <span class="nf-logo">CF</span>
+                    <span class="nf-sub">CASHFLIP</span>
+                </div>`;
+            }
         }
 
         stage.appendChild(card);
@@ -707,20 +748,34 @@
     }
 
     // ---- MP4/WebM VIDEO FLIP ANIMATION ----
+    // The card already contains a <video> paused at frame 0 (looks like a static image).
+    // On flip: swap src to the correct denomination video, play naturally.
+    // Pre-loaded videos ensure instant swap with no flash/loading.
     function _flipWithVideo(card, videoPath, durationMs, value, sym, resolve, denomData) {
         const videoUrl = _assetUrl(videoPath);
         let _videoFired = false; // Double-fire guard
 
         card.classList.remove('entering');
 
-        // Pre-place next card underneath (hidden)
+        // Pre-place next card underneath (hidden — also a paused video in video mode)
         _placeNextCardUnderneath();
 
-        // Replace card content with a <video> element (preload for instant playback)
-        card.innerHTML = `<video muted playsinline preload="auto"
-            style="width:100%;height:100%;object-fit:cover;display:block;border-radius:inherit;"
-            src="${videoUrl}"></video>`;
-        const video = card.querySelector('video');
+        // Get existing video element from card (created by _placeReadyCard or _placeNextCardUnderneath)
+        let video = card.querySelector('video');
+
+        // If card doesn't have a video element yet (e.g. CSS fallback card), create one
+        if (!video) {
+            card.innerHTML = `<video muted playsinline preload="auto"
+                style="${_videoCardStyle}" src="${videoUrl}"></video>`;
+            video = card.querySelector('video');
+        } else {
+            // Swap src to the correct denomination's flip video (if different)
+            const currentSrc = video.src || '';
+            if (!currentSrc.endsWith(videoPath) && !currentSrc.includes(videoPath)) {
+                video.src = videoUrl;
+                video.load();
+            }
+        }
 
         // Guarded completion handler — only fires once
         const onVideoEnd = () => {
@@ -734,7 +789,7 @@
             if (pile) pile.classList.add('visible');
             if (pileCount) pileCount.textContent = _noteFlipCount;
 
-            // Reveal the next card underneath
+            // Reveal the next card underneath (also a paused video — looks like a static card)
             const nextCard = document.getElementById('next-note');
             if (nextCard) nextCard.style.opacity = '1';
 
@@ -743,29 +798,27 @@
             card.addEventListener('animationend', () => card.remove(), { once: true });
             setTimeout(() => { if (card.parentNode) card.remove(); }, 600);
 
-            // Promote next card
+            // Promote next card to active
             const next = document.getElementById('next-note');
             if (next) {
                 next.id = 'active-note';
-                next.querySelector('img')?.removeAttribute('id');
-                const faceImg = next.querySelector('img');
-                if (faceImg) faceImg.id = 'card-face-img';
+                // Ensure the next card's video stays paused at frame 0
+                const nextVid = next.querySelector('video');
+                if (nextVid) { nextVid.pause(); nextVid.currentTime = 0; }
             }
             _startAutoFlipTimer();
             state.isFlipping = false;
             resolve();
         };
 
-        // Fallback: if video completely fails, fall back to GIF or CSS animation
+        // Fallback: if video completely fails, fall back to GIF or CSS
         const onVideoError = () => {
             if (_videoFired) return;
             _videoFired = true;
-            // Try GIF fallback
             const gifPath = denomData?.flip_gif_path;
             if (gifPath) {
                 _flipWithGif(card, gifPath, durationMs, value, sym, resolve, denomData);
             } else {
-                // Last resort: CSS animation
                 _flipWithCSS(card, false, value, sym, denomData, resolve);
             }
         };
@@ -774,28 +827,30 @@
             video.addEventListener('ended', onVideoEnd, { once: true });
             video.addEventListener('error', onVideoError, { once: true });
 
-            // Adjust playback rate to match admin-configured flip speed
-            video.addEventListener('loadedmetadata', () => {
-                if (video.duration && durationMs > 0) {
+            // Adjust playback rate so video duration matches admin-configured flip speed
+            const applyPlaybackRate = () => {
+                if (video.duration && video.duration > 0 && durationMs > 0) {
                     const desiredSec = durationMs / 1000;
                     const rate = video.duration / desiredSec;
-                    // Clamp playbackRate to browser-safe range (0.25x – 4x)
                     video.playbackRate = Math.max(0.25, Math.min(4.0, rate));
                 }
-            }, { once: true });
+            };
 
-            // Wait for enough data to play smoothly, then start
+            // Play from frame 0 once ready
             const tryPlay = () => {
+                video.currentTime = 0;
+                applyPlaybackRate();
                 video.play().catch(() => {
-                    // Autoplay blocked or decode error — fall back
+                    // Autoplay blocked or decode error — timeout fallback
                     setTimeout(onVideoEnd, durationMs);
                 });
             };
-            if (video.readyState >= 3) {
+
+            // If metadata already loaded (preloaded), apply rate and play immediately
+            if (video.readyState >= 2) {
                 tryPlay();
             } else {
-                video.addEventListener('canplay', tryPlay, { once: true });
-                // If canplay never fires (bad URL), the error handler above catches it
+                video.addEventListener('loadedmetadata', () => tryPlay(), { once: true });
             }
 
             // Safety timeout: absolute maximum wait to prevent hang
@@ -824,10 +879,22 @@
         const tierDenoms = _getDenomsForStake(stakeAmt);
         const randomDenom = tierDenoms.length > 0 ? tierDenoms[Math.floor(Math.random() * tierDenoms.length)] : null;
 
-        const imgUrl = _getCardImageUrl(randomDenom);
-        if (imgUrl) {
-            nextCard.innerHTML = `<img src="${imgUrl}" alt="note"
-                 style="width:100%;height:100%;object-fit:cover;display:block;border-radius:inherit;" />`;
+        // VIDEO MODE: next card is also a <video> paused at frame 0
+        if (_isVideoMode() && randomDenom?.flip_video_path) {
+            const videoUrl = _assetUrl(randomDenom.flip_video_path);
+            nextCard.innerHTML = `<video muted playsinline preload="auto"
+                 style="${_videoCardStyle}" src="${videoUrl}"></video>`;
+            const vid = nextCard.querySelector('video');
+            if (vid) {
+                vid.pause();
+                vid.addEventListener('loadeddata', () => { vid.currentTime = 0; vid.pause(); }, { once: true });
+            }
+        } else {
+            const imgUrl = _getCardImageUrl(randomDenom);
+            if (imgUrl) {
+                nextCard.innerHTML = `<img src="${imgUrl}" alt="note"
+                     style="width:100%;height:100%;object-fit:cover;display:block;border-radius:inherit;" />`;
+            }
         }
 
         // Insert underneath (before active card)
