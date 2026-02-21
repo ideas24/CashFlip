@@ -291,6 +291,19 @@
         return before + 'c_fill,ar_16:9,g_center,pg_1/' + after;
     }
 
+    // ==================== STAKE TIER DENOMINATION FILTER ====================
+    function _getDenomsForStake(stakeAmount) {
+        const allDenoms = state.denominations || [];
+        const nonZero = allDenoms.filter(d => !d.is_zero);
+        const tiers = state.gameConfig?.stake_tiers || [];
+        if (tiers.length === 0 || !stakeAmount) return nonZero;
+        const stake = parseFloat(stakeAmount);
+        const tier = tiers.find(t => t.is_active && stake >= parseFloat(t.min_stake) && stake <= parseFloat(t.max_stake));
+        if (!tier || !tier.denomination_ids || tier.denomination_ids.length === 0) return nonZero;
+        const tierDenoms = nonZero.filter(d => tier.denomination_ids.includes(d.id));
+        return tierDenoms.length > 0 ? tierDenoms : nonZero;
+    }
+
     // ==================== GIF / FACE PRELOAD CACHE ====================
     const _gifFrameCache = {};
     const _preloadedImages = {};
@@ -398,10 +411,10 @@
         card.id = 'active-note';
         card.style.zIndex = '1';
 
-        // Pick a random non-zero denomination for visual placeholder
-        const denominations = state.denominations || [];
-        const nonZero = denominations.filter(d => !d.is_zero);
-        const randomDenom = nonZero.length > 0 ? nonZero[Math.floor(Math.random() * nonZero.length)] : null;
+        // Pick a random denomination from the tier matching current stake
+        const stakeAmt = state.session?.stake_amount || state.gameConfig?.min_stake;
+        const tierDenoms = _getDenomsForStake(stakeAmt);
+        const randomDenom = tierDenoms.length > 0 ? tierDenoms[Math.floor(Math.random() * tierDenoms.length)] : null;
 
         const imgUrl = _getCardImageUrl(randomDenom);
         if (imgUrl) {
@@ -703,9 +716,9 @@
         nextCard.id = 'next-note';
         nextCard.style.zIndex = '0';
 
-        const denominations = state.denominations || [];
-        const nonZero = denominations.filter(d => !d.is_zero);
-        const randomDenom = nonZero.length > 0 ? nonZero[Math.floor(Math.random() * nonZero.length)] : null;
+        const stakeAmt = state.session?.stake_amount || state.gameConfig?.min_stake;
+        const tierDenoms = _getDenomsForStake(stakeAmt);
+        const randomDenom = tierDenoms.length > 0 ? tierDenoms[Math.floor(Math.random() * tierDenoms.length)] : null;
 
         const imgUrl = _getCardImageUrl(randomDenom);
         if (imgUrl) {

@@ -13,7 +13,7 @@ import secrets
 import logging
 from decimal import Decimal
 
-from game.models import Currency, CurrencyDenomination, GameConfig, SimulatedGameConfig, GameSession, FlipResult
+from game.models import Currency, CurrencyDenomination, GameConfig, SimulatedGameConfig, GameSession, FlipResult, StakeTier
 
 logger = logging.getLogger(__name__)
 
@@ -57,16 +57,35 @@ def calculate_zero_probability(flip_number, config):
     return min(probability, 0.95)  # Cap at 95% to avoid guaranteed loss
 
 
-def select_denomination(currency, result_hash, is_zero, stake_amount=None):
+def resolve_stake_tier(currency, stake_amount):
+    """
+    Find the StakeTier matching the given stake amount.
+    Returns the tier or None (fallback to all denominations).
+    """
+    if not stake_amount:
+        return None
+    try:
+        return StakeTier.objects.filter(
+            currency=currency,
+            is_active=True,
+            min_stake__lte=stake_amount,
+            max_stake__gte=stake_amount,
+        ).first()
+    except Exception:
+        return None
+
+
+def select_denomination(currency, result_hash, is_zero, stake_amount=None, config=None):
     """
     Select a denomination based on the result hash.
     If is_zero, return the zero denomination.
     Otherwise, weighted random selection from active denominations.
     
-    The actual payout value is calculated as:
-        stake_amount * (denom.payout_multiplier / 100)
-    This ensures house edge is consistent regardless of stake level.
-    The denom.value is the visual face value of the note only.
+    Tier filtering: If a StakeTier matches the stake_amount, only denominations
+    assigned to that tier are eligible. Falls back to all denominations if no tier.
+    
+    Boost mode: If config.payout_mode == 'boost', uses boost_payout_multiplier
+    (or normal multiplier × boost_multiplier_factor).
     """
     if is_zero:
         zero_denom = CurrencyDenomination.objects.filter(
@@ -74,10 +93,25 @@ def select_denomination(currency, result_hash, is_zero, stake_amount=None):
         ).first()
         return zero_denom, Decimal('0.00')
     
-    # Get non-zero active denominations
-    denoms = list(CurrencyDenomination.objects.filter(
-        currency=currency, is_zero=False, is_active=True
-    ).order_by('value'))
+    # Resolve stake tier for denomination filtering
+    tier = resolve_stake_tier(currency, stake_amount)
+    
+    if tier:
+        # Only denominations assigned to this tier
+        denoms = list(tier.denominations.filter(
+            is_zero=False, is_active=True
+        ).order_by('value'))
+    else:
+        # Fallback: all active non-zero denominations
+        denoms = list(CurrencyDenomination.objects.filter(
+            currency=currency, is_zero=False, is_active=True
+        ).order_by('value'))
+    
+    if not denoms:
+        # Ultimate fallback: all denominations regardless of tier
+        denoms = list(CurrencyDenomination.objects.filter(
+            currency=currency, is_zero=False, is_active=True
+        ).order_by('value'))
     
     if not denoms:
         logger.error(f'No active denominations for {currency.code}')
@@ -96,9 +130,23 @@ def select_denomination(currency, result_hash, is_zero, stake_amount=None):
             selected = denom
             break
     
+    # Determine which multiplier to use (normal vs boost)
+    is_boost = config and config.payout_mode == 'boost'
+    
+    if is_boost:
+        # Use boost multiplier: explicit value or auto-calculated
+        if selected.boost_payout_multiplier and selected.boost_payout_multiplier > 0:
+            multiplier = selected.boost_payout_multiplier
+        else:
+            # Auto-calculate: normal × boost_multiplier_factor
+            factor = config.boost_multiplier_factor if config.boost_multiplier_factor else Decimal('1.33')
+            multiplier = selected.payout_multiplier * factor
+    else:
+        multiplier = selected.payout_multiplier
+    
     # Calculate actual payout from multiplier
-    if stake_amount and selected.payout_multiplier:
-        payout = (stake_amount * selected.payout_multiplier / Decimal('100')).quantize(Decimal('0.01'))
+    if stake_amount and multiplier:
+        payout = (stake_amount * multiplier / Decimal('100')).quantize(Decimal('0.01'))
     else:
         payout = selected.value
     
@@ -200,9 +248,9 @@ def execute_flip(session):
                 payout = forced_denom.value
             denomination, value = forced_denom, payout
         else:
-            denomination, value = select_denomination(session.currency, result_hash, is_zero, session.stake_amount)
+            denomination, value = select_denomination(session.currency, result_hash, is_zero, session.stake_amount, config)
     else:
-        denomination, value = select_denomination(session.currency, result_hash, is_zero, session.stake_amount)
+        denomination, value = select_denomination(session.currency, result_hash, is_zero, session.stake_amount, config)
     
     if is_zero:
         # Player loses

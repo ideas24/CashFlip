@@ -47,6 +47,10 @@ interface GameSettings {
   simulated_feed_enabled: boolean
   simulated_feed_data: SimFeedEntry[]
   is_active: boolean
+  payout_mode: string
+  normal_payout_target: string
+  boost_payout_target: string
+  boost_multiplier_factor: string
 }
 
 interface SimConfig {
@@ -100,6 +104,7 @@ interface Denomination {
   id: number | null
   value: string
   payout_multiplier: string
+  boost_payout_multiplier: string
   face_image_path: string
   flip_sequence_prefix: string
   flip_sequence_frames: number
@@ -108,6 +113,16 @@ interface Denomination {
   is_zero: boolean
   is_active: boolean
   weight: number
+}
+
+interface StakeTier {
+  id: number | null
+  name: string
+  min_stake: string
+  max_stake: string
+  denomination_ids: number[]
+  display_order: number
+  is_active: boolean
 }
 
 interface BrandingSettings {
@@ -134,6 +149,7 @@ interface AllSettings {
   features: FeatureSettings
   wheel: WheelSettings
   denominations: Denomination[]
+  stake_tiers: StakeTier[]
   branding: BrandingSettings
   simulated_configs: SimConfig[]
   outcome_mode_choices: OutcomeChoice[]
@@ -145,7 +161,7 @@ export default function SettingsPage() {
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
-  const [tab, setTab] = useState<'auth' | 'game' | 'denominations' | 'features' | 'wheel' | 'branding' | 'simulated'>('auth')
+  const [tab, setTab] = useState<'auth' | 'game' | 'denominations' | 'tiers' | 'features' | 'wheel' | 'branding' | 'simulated'>('auth')
   const [uploading, setUploading] = useState(false)
 
   const refresh = () => {
@@ -162,7 +178,7 @@ export default function SettingsPage() {
     setSaving(true)
     setSaved(false)
     try {
-      await api.post('/settings/', { auth: settings.auth, game: settings.game, features: settings.features, wheel: settings.wheel, denominations: settings.denominations, branding: settings.branding })
+      await api.post('/settings/', { auth: settings.auth, game: settings.game, features: settings.features, wheel: settings.wheel, denominations: settings.denominations, stake_tiers: settings.stake_tiers, branding: settings.branding })
       setSaved(true)
       setTimeout(() => setSaved(false), 2000)
     } catch {}
@@ -189,7 +205,7 @@ export default function SettingsPage() {
     setSettings({ ...settings, wheel: { ...settings.wheel, [key]: value } })
   }
 
-  const updateBranding = (key: keyof BrandingSettings, value: string) => {
+  const updateBranding = (key: keyof BrandingSettings, value: string | boolean) => {
     if (!settings) return
     setSettings({ ...settings, branding: { ...settings.branding, [key]: value } })
   }
@@ -281,6 +297,7 @@ export default function SettingsPage() {
             { key: 'auth' as const, label: 'Auth', icon: Shield },
             { key: 'game' as const, label: 'Game', icon: Gamepad2 },
             { key: 'denominations' as const, label: 'Denominations', icon: Gamepad2 },
+            { key: 'tiers' as const, label: 'Stake Tiers', icon: Gamepad2 },
             { key: 'features' as const, label: 'Features', icon: Gamepad2 },
             { key: 'wheel' as const, label: 'Daily Wheel', icon: Gamepad2 },
             { key: 'branding' as const, label: 'Branding', icon: Gamepad2 },
@@ -369,6 +386,74 @@ export default function SettingsPage() {
                   </div>
                 ) : (
                   <div className="space-y-6">
+                    {/* Payout Mode */}
+                    <div className="p-4 rounded-xl border-2 border-primary/30 bg-primary/5">
+                      <div className="flex items-center justify-between mb-3">
+                        <div>
+                          <h3 className="text-sm font-semibold text-white">Payout Mode</h3>
+                          <p className="text-xs text-muted">Toggle between Normal (70/30) and Boost (60/40) when participation is down</p>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span className={`text-xs font-bold ${s.game.payout_mode === 'normal' ? 'text-primary' : 'text-muted'}`}>Normal</span>
+                          <button
+                            onClick={() => updateGame('payout_mode', s.game.payout_mode === 'normal' ? 'boost' : 'normal')}
+                            className={`relative w-14 h-7 rounded-full transition-colors cursor-pointer ${
+                              s.game.payout_mode === 'boost' ? 'bg-warning' : 'bg-primary'
+                            }`}
+                          >
+                            <span className={`absolute top-0.5 left-0.5 w-6 h-6 rounded-full bg-white transition-transform ${
+                              s.game.payout_mode === 'boost' ? 'translate-x-7' : ''
+                            }`} />
+                          </button>
+                          <span className={`text-xs font-bold ${s.game.payout_mode === 'boost' ? 'text-warning' : 'text-muted'}`}>Boost</span>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div>
+                          <label className="block text-xs font-medium text-slate-400 mb-1.5">Normal Payout Target (%)</label>
+                          <Input type="text" value={s.game.normal_payout_target}
+                            onChange={e => updateGame('normal_payout_target', e.target.value)} />
+                          <p className="text-xs text-muted mt-1">Players get back this % of stakes (30 = 70% house edge)</p>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-slate-400 mb-1.5">Boost Payout Target (%)</label>
+                          <Input type="text" value={s.game.boost_payout_target}
+                            onChange={e => updateGame('boost_payout_target', e.target.value)} />
+                          <p className="text-xs text-muted mt-1">Higher payout when participation is low (40 = 60% house edge)</p>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-slate-400 mb-1.5">Boost Multiplier Factor</label>
+                          <Input type="text" value={s.game.boost_multiplier_factor}
+                            onChange={e => updateGame('boost_multiplier_factor', e.target.value)} />
+                          <p className="text-xs text-muted mt-1">Auto-scales normal multipliers (1.33 = +33%)</p>
+                        </div>
+                      </div>
+                      {/* Theoretical Edge Display */}
+                      {(() => {
+                        const denoms = (s.denominations || []).filter(d => !d.is_zero && d.is_active)
+                        const totalWt = denoms.reduce((s, d) => s + d.weight, 0)
+                        const isBoost = s.game.payout_mode === 'boost'
+                        const factor = parseFloat(s.game.boost_multiplier_factor) || 1.33
+                        const avgMult = totalWt > 0
+                          ? denoms.reduce((s, d) => {
+                              const m = isBoost
+                                ? (parseFloat(d.boost_payout_multiplier) > 0 ? parseFloat(d.boost_payout_multiplier) : parseFloat(d.payout_multiplier) * factor)
+                                : parseFloat(d.payout_multiplier)
+                              return s + m * d.weight
+                            }, 0) / totalWt
+                          : 0
+                        const expectedPayout = (5 * avgMult).toFixed(1)
+                        const houseEdge = (100 - 5 * avgMult).toFixed(1)
+                        return (
+                          <div className={`mt-3 p-3 rounded-lg text-sm font-medium ${
+                            isBoost ? 'bg-warning/10 border border-warning/30 text-warning' : 'bg-primary/10 border border-primary/30 text-primary'
+                          }`}>
+                            <strong>Theoretical Edge ({isBoost ? 'BOOST' : 'Normal'}):</strong> Avg multiplier {avgMult.toFixed(2)}% × ~5 flips = <strong>{expectedPayout}% payout</strong> → <strong>{houseEdge}% house edge</strong>
+                          </div>
+                        )
+                      })()}
+                    </div>
+
                     {/* House Edge & Stakes */}
                     <div>
                       <h3 className="text-sm font-semibold text-white mb-3">House Edge & Stakes</h3>
@@ -377,7 +462,7 @@ export default function SettingsPage() {
                           <label className="block text-xs font-medium text-slate-400 mb-1.5">House Edge (%)</label>
                           <Input type="text" value={s.game.house_edge_percent}
                             onChange={e => updateGame('house_edge_percent', e.target.value)} />
-                          <p className="text-xs text-muted mt-1">House retention rate (60 = house keeps 60%)</p>
+                          <p className="text-xs text-muted mt-1">House retention rate (70 = house keeps 70%)</p>
                         </div>
                         <div>
                           <label className="block text-xs font-medium text-slate-400 mb-1.5">Min Stake ({s.game.currency})</label>
@@ -610,8 +695,8 @@ export default function SettingsPage() {
                   <CardDescription>Configure banknote denominations, payout multipliers, and flip animation assets ({s.game.currency})</CardDescription>
                 </div>
                 <Button size="sm" onClick={() => {
-                  const denoms = [...(s.denominations || []), {
-                    id: null, value: '1.00', payout_multiplier: '8.00',
+                  const denoms: Denomination[] = [...(s.denominations || []), {
+                    id: null, value: '1.00', payout_multiplier: '6.00', boost_payout_multiplier: '0',
                     face_image_path: '', flip_sequence_prefix: '', flip_sequence_frames: 31, flip_gif_path: '',
                     display_order: (s.denominations?.length || 0), is_zero: false, is_active: true, weight: 10
                   }]
@@ -630,7 +715,7 @@ export default function SettingsPage() {
                 <div className="space-y-3">
                   <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-sm text-amber-300">
                     <strong>House Edge Math:</strong> Avg payout multiplier × expected flips (~5) should be &lt; 100% for house profit.
-                    E.g., avg multiplier 8% × 5 flips = 40% payout → 60% house edge.
+                    Target: avg multiplier ~6% × 5 flips = 30% payout → <strong>70% house edge</strong>. Boost: ~8% × 5 = 40% payout → 60% house edge.
                   </div>
                   {s.denominations.map((denom, i) => (
                     <div key={i} className={`p-4 rounded-lg border ${
@@ -664,7 +749,7 @@ export default function SettingsPage() {
                           }} className="text-red-400 hover:text-red-300 cursor-pointer"><Trash2 size={14} /></button>
                         </div>
                       </div>
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
                         <div>
                           <label className="block text-xs text-slate-400 mb-1">Face Value</label>
                           <Input type="text" value={denom.value} onChange={e => {
@@ -674,13 +759,22 @@ export default function SettingsPage() {
                           }} />
                         </div>
                         <div>
-                          <label className="block text-xs text-slate-400 mb-1">Payout Multiplier (%)</label>
+                          <label className="block text-xs text-slate-400 mb-1">Normal Multiplier (%)</label>
                           <Input type="text" value={denom.payout_multiplier} onChange={e => {
                             const denoms = [...s.denominations]
                             denoms[i] = { ...denom, payout_multiplier: e.target.value }
                             setSettings({ ...s, denominations: denoms })
                           }} />
-                          <p className="text-[10px] text-muted mt-0.5">% of stake per flip</p>
+                          <p className="text-[10px] text-muted mt-0.5">% of stake per flip (normal mode)</p>
+                        </div>
+                        <div>
+                          <label className="block text-xs text-slate-400 mb-1">Boost Multiplier (%)</label>
+                          <Input type="text" value={denom.boost_payout_multiplier} onChange={e => {
+                            const denoms = [...s.denominations]
+                            denoms[i] = { ...denom, boost_payout_multiplier: e.target.value }
+                            setSettings({ ...s, denominations: denoms })
+                          }} />
+                          <p className="text-[10px] text-muted mt-0.5">0 = auto from factor</p>
                         </div>
                         <div>
                           <label className="block text-xs text-slate-400 mb-1">Weight</label>
@@ -771,6 +865,133 @@ export default function SettingsPage() {
                           }} className="accent-red-500" />
                           Zero (Loss) denomination
                         </label>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* ===== STAKE TIERS TAB ===== */}
+        {tab === 'tiers' && (
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Stake Tiers</CardTitle>
+                  <CardDescription>Map stake ranges to denomination pools. Higher stakes see bigger banknotes for a premium feel.</CardDescription>
+                </div>
+                <Button size="sm" onClick={() => {
+                  const tiers: StakeTier[] = [...(s.stake_tiers || []), {
+                    id: null, name: 'New Tier', min_stake: '50.00', max_stake: '200.00',
+                    denomination_ids: [], display_order: (s.stake_tiers?.length || 0), is_active: true
+                  }]
+                  setSettings({ ...s, stake_tiers: tiers })
+                }}><Plus size={14} className="mr-1" /> Add Tier</Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {(!s.stake_tiers || s.stake_tiers.length === 0) ? (
+                <div className="text-center py-8 text-muted">
+                  <Gamepad2 size={40} className="mx-auto mb-3 opacity-40" />
+                  <div className="text-lg mb-1">No stake tiers configured</div>
+                  <div className="text-sm">Add tiers to show different denominations at different stake levels</div>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="p-3 rounded-lg bg-primary/10 border border-primary/30 text-sm text-primary">
+                    <strong>Tier System:</strong> 100 GHS stake → small notes (1,2,5) &bull; 1,000 GHS → mid notes (10,20,50) &bull; 10,000 GHS → large notes (50,100,200).
+                    If no tier matches a stake, all denominations are used.
+                  </div>
+                  {s.stake_tiers.map((tier, i) => (
+                    <div key={i} className={`p-4 rounded-lg border ${tier.is_active ? 'bg-card border-border' : 'bg-zinc-900/50 border-zinc-700/50 opacity-60'}`}>
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <span className="text-white font-bold text-sm">{tier.name}</span>
+                          <span className="text-xs text-muted">({tier.min_stake} - {tier.max_stake} {s.game.currency})</span>
+                          {tier.is_active
+                            ? <Badge variant="success">Active</Badge>
+                            : <Badge variant="danger">Inactive</Badge>
+                          }
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button onClick={() => {
+                            const tiers = [...s.stake_tiers]
+                            tiers[i] = { ...tier, is_active: !tier.is_active }
+                            setSettings({ ...s, stake_tiers: tiers })
+                          }} className={`w-10 h-5 rounded-full transition-colors cursor-pointer ${
+                            tier.is_active ? 'bg-emerald-500' : 'bg-zinc-600'
+                          }`}>
+                            <div className={`w-4 h-4 bg-white rounded-full transition-transform ${
+                              tier.is_active ? 'translate-x-5' : 'translate-x-0.5'
+                            }`} />
+                          </button>
+                          <button onClick={() => {
+                            const tiers = s.stake_tiers.filter((_, j) => j !== i)
+                            setSettings({ ...s, stake_tiers: tiers })
+                          }} className="text-red-400 hover:text-red-300 cursor-pointer"><Trash2 size={14} /></button>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
+                        <div>
+                          <label className="block text-xs text-slate-400 mb-1">Tier Name</label>
+                          <Input value={tier.name} onChange={e => {
+                            const tiers = [...s.stake_tiers]
+                            tiers[i] = { ...tier, name: e.target.value }
+                            setSettings({ ...s, stake_tiers: tiers })
+                          }} />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-slate-400 mb-1">Min Stake ({s.game.currency})</label>
+                          <Input type="text" value={tier.min_stake} onChange={e => {
+                            const tiers = [...s.stake_tiers]
+                            tiers[i] = { ...tier, min_stake: e.target.value }
+                            setSettings({ ...s, stake_tiers: tiers })
+                          }} />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-slate-400 mb-1">Max Stake ({s.game.currency})</label>
+                          <Input type="text" value={tier.max_stake} onChange={e => {
+                            const tiers = [...s.stake_tiers]
+                            tiers[i] = { ...tier, max_stake: e.target.value }
+                            setSettings({ ...s, stake_tiers: tiers })
+                          }} />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-slate-400 mb-1">Display Order</label>
+                          <Input type="number" value={tier.display_order} onChange={e => {
+                            const tiers = [...s.stake_tiers]
+                            tiers[i] = { ...tier, display_order: parseInt(e.target.value) || 0 }
+                            setSettings({ ...s, stake_tiers: tiers })
+                          }} />
+                        </div>
+                      </div>
+                      {/* Denomination picker */}
+                      <div>
+                        <label className="block text-xs text-slate-400 mb-2">Denominations in this tier:</label>
+                        <div className="flex flex-wrap gap-2">
+                          {(s.denominations || []).filter(d => !d.is_zero && d.is_active && d.id).map(d => {
+                            const selected = tier.denomination_ids.includes(d.id!)
+                            return (
+                              <button key={d.id} onClick={() => {
+                                const tiers = [...s.stake_tiers]
+                                const ids = selected
+                                  ? tier.denomination_ids.filter(id => id !== d.id)
+                                  : [...tier.denomination_ids, d.id!]
+                                tiers[i] = { ...tier, denomination_ids: ids }
+                                setSettings({ ...s, stake_tiers: tiers })
+                              }} className={`px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer border transition-colors ${
+                                selected
+                                  ? 'bg-primary/20 border-primary/50 text-primary'
+                                  : 'bg-zinc-800 border-zinc-700 text-zinc-400 hover:border-zinc-500'
+                              }`}>
+                                GH₵{d.value}
+                              </button>
+                            )
+                          })}
+                        </div>
                       </div>
                     </div>
                   ))}

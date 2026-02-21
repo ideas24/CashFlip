@@ -3,7 +3,7 @@ Game Serializers
 """
 
 from rest_framework import serializers
-from game.models import Currency, CurrencyDenomination, GameSession, FlipResult, GameConfig
+from game.models import Currency, CurrencyDenomination, GameSession, FlipResult, GameConfig, StakeTier
 
 
 class CurrencySerializer(serializers.ModelSerializer):
@@ -53,6 +53,17 @@ class DenominationSerializer(serializers.ModelSerializer):
         return obj.flip_gif_path or ''
 
 
+class StakeTierSerializer(serializers.ModelSerializer):
+    denomination_ids = serializers.SerializerMethodField()
+
+    class Meta:
+        model = StakeTier
+        fields = ['id', 'name', 'min_stake', 'max_stake', 'denomination_ids', 'display_order', 'is_active']
+
+    def get_denomination_ids(self, obj):
+        return list(obj.denominations.values_list('id', flat=True))
+
+
 class GameConfigPublicSerializer(serializers.ModelSerializer):
     currency = CurrencySerializer(read_only=True)
 
@@ -61,7 +72,8 @@ class GameConfigPublicSerializer(serializers.ModelSerializer):
         fields = ['currency', 'min_deposit', 'max_cashout', 'min_stake', 'pause_cost_percent',
                   'min_flips_before_cashout', 'instant_cashout_enabled', 'instant_cashout_min_amount',
                   'auto_flip_seconds', 'flip_animation_mode', 'flip_display_mode',
-                  'flip_animation_speed_ms', 'flip_sound_enabled', 'simulated_feed_enabled']
+                  'flip_animation_speed_ms', 'flip_sound_enabled', 'simulated_feed_enabled',
+                  'payout_mode']
 
 
 class StartGameSerializer(serializers.Serializer):

@@ -112,6 +112,8 @@ class CurrencyDenomination(models.Model):
     weight = models.PositiveIntegerField(
         default=10, help_text='Relative weight for random selection (higher = more frequent)'
     )
+    boost_payout_multiplier = models.DecimalField(max_digits=6, decimal_places=2, default=0,
+        help_text='Payout multiplier used in boost mode (0 = auto-calculated from normal × boost_multiplier_factor)')
 
     class Meta:
         ordering = ['currency', 'display_order', 'value']
@@ -125,11 +127,20 @@ class CurrencyDenomination(models.Model):
 
 class GameConfig(models.Model):
     currency = models.OneToOneField(Currency, on_delete=models.CASCADE, related_name='game_config')
-    house_edge_percent = models.DecimalField(max_digits=5, decimal_places=2, default=60.00,
-                                              help_text='House retention percentage (e.g. 60 = house keeps 60%)')
-    min_deposit = models.DecimalField(max_digits=10, decimal_places=2, default=1.00)
+    house_edge_percent = models.DecimalField(max_digits=5, decimal_places=2, default=70.00,
+                                              help_text='House retention percentage (e.g. 70 = house keeps 70%)')
+    min_deposit = models.DecimalField(max_digits=10, decimal_places=2, default=50.00)
     max_cashout = models.DecimalField(max_digits=12, decimal_places=2, default=10000.00)
-    min_stake = models.DecimalField(max_digits=10, decimal_places=2, default=1.00)
+    min_stake = models.DecimalField(max_digits=10, decimal_places=2, default=50.00)
+    payout_mode = models.CharField(max_length=10, default='normal',
+        choices=[('normal', 'Normal'), ('boost', 'Boost')],
+        help_text='Normal = 70/30 house/player split. Boost = 60/40 (use when participation is down)')
+    normal_payout_target = models.DecimalField(max_digits=5, decimal_places=2, default=30.00,
+        help_text='Target player payout % in normal mode (30 = players get back 30% of stakes)')
+    boost_payout_target = models.DecimalField(max_digits=5, decimal_places=2, default=40.00,
+        help_text='Target player payout % in boost mode (40 = players get back 40% of stakes)')
+    boost_multiplier_factor = models.DecimalField(max_digits=4, decimal_places=2, default=1.33,
+        help_text='Factor to multiply normal multipliers by in boost mode (1.33 = 33% increase)')
     pause_cost_percent = models.DecimalField(max_digits=5, decimal_places=2, default=10.00,
                                               help_text='Percentage of cashout balance charged to pause')
     zero_base_rate = models.DecimalField(max_digits=5, decimal_places=4, default=0.0500,
@@ -261,6 +272,31 @@ class SimulatedGameConfig(models.Model):
         if self.auto_disable_after > 0 and self.sessions_used >= self.auto_disable_after:
             self.is_enabled = False
         self.save(update_fields=['sessions_used', 'is_enabled'])
+
+
+class StakeTier(models.Model):
+    """Maps stake ranges to denomination subsets for tiered gameplay."""
+    currency = models.ForeignKey(Currency, on_delete=models.CASCADE, related_name='stake_tiers')
+    name = models.CharField(max_length=50, help_text='Tier display name (e.g. Standard, Premium, VIP)')
+    min_stake = models.DecimalField(max_digits=12, decimal_places=2,
+        help_text='Minimum stake for this tier (inclusive)')
+    max_stake = models.DecimalField(max_digits=12, decimal_places=2,
+        help_text='Maximum stake for this tier (inclusive)')
+    denominations = models.ManyToManyField(CurrencyDenomination, blank=True,
+        related_name='stake_tiers',
+        help_text='Which denominations appear when playing at this stake level')
+    display_order = models.PositiveIntegerField(default=0)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['currency', 'display_order', 'min_stake']
+        verbose_name = 'Stake Tier'
+        verbose_name_plural = 'Stake Tiers'
+
+    def __str__(self):
+        return f'{self.currency.code} {self.name} ({self.min_stake}-{self.max_stake})'
 
 
 class GameSession(models.Model):

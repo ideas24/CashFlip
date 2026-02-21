@@ -49,12 +49,17 @@ def game_config(request):
     except GameConfig.DoesNotExist:
         return Response({'error': 'Game config not found'}, status=status.HTTP_404_NOT_FOUND)
 
-    from game.serializers import DenominationSerializer
+    from game.serializers import DenominationSerializer, StakeTierSerializer
+    from game.models import StakeTier
     denoms = CurrencyDenomination.objects.filter(
         currency=config.currency, is_active=True
     ).order_by('display_order', 'value')
+    tiers = StakeTier.objects.filter(
+        currency=config.currency, is_active=True
+    ).order_by('display_order', 'min_stake')
     data = GameConfigPublicSerializer(config).data
     data['denominations'] = DenominationSerializer(denoms, many=True).data
+    data['stake_tiers'] = StakeTierSerializer(tiers, many=True).data
     return Response(data)
 
 

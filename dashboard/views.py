@@ -14,7 +14,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
 from accounts.models import Player, AdminRole, StaffMember, AuthConfig, PlayerProfile, SMSProvider
-from game.models import GameSession, FlipResult, Currency, GameConfig, SimulatedGameConfig
+from game.models import GameSession, FlipResult, Currency, GameConfig, SimulatedGameConfig, StakeTier
 from wallet.models import Wallet, WalletTransaction
 from payments.models import Deposit, Withdrawal
 
@@ -1164,6 +1164,10 @@ def settings_view(request):
                 'simulated_feed_enabled': game_config.simulated_feed_enabled,
                 'simulated_feed_data': game_config.simulated_feed_data or [],
                 'is_active': game_config.is_active,
+                'payout_mode': game_config.payout_mode,
+                'normal_payout_target': str(game_config.normal_payout_target),
+                'boost_payout_target': str(game_config.boost_payout_target),
+                'boost_multiplier_factor': str(game_config.boost_multiplier_factor),
             }
         else:
             game_data = {
@@ -1189,6 +1193,10 @@ def settings_view(request):
                 'simulated_feed_enabled': False,
                 'simulated_feed_data': [],
                 'is_active': True,
+                'payout_mode': 'normal',
+                'normal_payout_target': '30.00',
+                'boost_payout_target': '40.00',
+                'boost_multiplier_factor': '1.33',
             }
 
         sim_list = []
@@ -1255,6 +1263,7 @@ def settings_view(request):
                     'is_zero': d.is_zero,
                     'is_active': d.is_active,
                     'weight': d.weight,
+                    'boost_payout_multiplier': str(d.boost_payout_multiplier),
                 })
 
         # Branding
@@ -1276,12 +1285,27 @@ def settings_view(request):
             'show_regulatory_footer': branding.show_regulatory_footer,
         }
 
+        # Stake tiers
+        tiers_data = []
+        if game_config and game_config.currency:
+            for t in StakeTier.objects.filter(currency=game_config.currency).order_by('display_order', 'min_stake'):
+                tiers_data.append({
+                    'id': t.id,
+                    'name': t.name,
+                    'min_stake': str(t.min_stake),
+                    'max_stake': str(t.max_stake),
+                    'denomination_ids': list(t.denominations.values_list('id', flat=True)),
+                    'display_order': t.display_order,
+                    'is_active': t.is_active,
+                })
+
         return Response({
             'auth': AuthSettingsSerializer(auth_config).data,
             'game': game_data,
             'features': feature_data,
             'wheel': wheel_data,
             'denominations': denoms,
+            'stake_tiers': tiers_data,
             'branding': branding_data,
             'simulated_configs': sim_list,
             'outcome_mode_choices': [
@@ -1306,7 +1330,8 @@ def settings_view(request):
                        'instant_cashout_enabled', 'instant_cashout_min_amount',
                        'max_session_duration_minutes',
                        'auto_flip_seconds', 'flip_animation_mode', 'flip_display_mode', 'flip_animation_speed_ms',
-                       'flip_sound_enabled', 'simulated_feed_enabled', 'simulated_feed_data']
+                       'flip_sound_enabled', 'simulated_feed_enabled', 'simulated_feed_data',
+                       'payout_mode', 'normal_payout_target', 'boost_payout_target', 'boost_multiplier_factor']
         updated = []
         for field in game_fields:
             if field in game_data:
@@ -1372,6 +1397,7 @@ def settings_view(request):
             d.is_zero = dd.get('is_zero', False)
             d.is_active = dd.get('is_active', True)
             d.weight = dd.get('weight', 10)
+            d.boost_payout_multiplier = Decimal(str(dd.get('boost_payout_multiplier', 0)))
             d.save()
             existing_ids.add(d.id)
 
@@ -1397,6 +1423,42 @@ def settings_view(request):
                 updated.append(field)
         if updated:
             branding.save(update_fields=updated + ['updated_at'])
+
+    # Save stake tiers
+    tiers_data = request.data.get('stake_tiers', [])
+    if tiers_data and game_config and game_config.currency:
+        existing_tier_ids = set()
+        for td in tiers_data:
+            tier_id = td.get('id')
+            if tier_id:
+                try:
+                    t = StakeTier.objects.get(id=tier_id, currency=game_config.currency)
+                except StakeTier.DoesNotExist:
+                    continue
+            else:
+                t = StakeTier(currency=game_config.currency)
+
+            t.name = td.get('name', 'Tier')
+            t.min_stake = Decimal(str(td.get('min_stake', 0)))
+            t.max_stake = Decimal(str(td.get('max_stake', 0)))
+            t.display_order = td.get('display_order', 0)
+            t.is_active = td.get('is_active', True)
+            t.save()
+
+            # Update M2M denominations
+            denom_ids = td.get('denomination_ids', [])
+            if denom_ids is not None:
+                t.denominations.set(
+                    CurrencyDenomination.objects.filter(id__in=denom_ids, currency=game_config.currency)
+                )
+
+            existing_tier_ids.add(t.id)
+
+        # Delete tiers removed from list
+        if existing_tier_ids:
+            StakeTier.objects.filter(
+                currency=game_config.currency
+            ).exclude(id__in=existing_tier_ids).delete()
 
     return Response({'status': 'saved'})
 
