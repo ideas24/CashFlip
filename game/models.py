@@ -24,6 +24,17 @@ class SiteBranding(models.Model):
     background_color = models.CharField(max_length=7, default='#0D1117', help_text='Midnight Obsidian')
     tagline = models.CharField(max_length=200, default='Flip Notes. Stack Cash. Win Big.',
                                help_text='Displayed on auth/loading screens')
+    # Regulatory footer
+    regulatory_logo = models.FileField(upload_to='branding/', blank=True, default='',
+        help_text='Gaming commission logo (SVG/PNG). Default: static/images/Ghana-Gaming-Commission-logo.png')
+    regulatory_text = models.CharField(max_length=300, default='Regulated by the Gaming Commission of Ghana',
+        help_text='Text displayed alongside the regulatory logo')
+    age_restriction_text = models.CharField(max_length=10, default='18+',
+        help_text='Age restriction badge text')
+    responsible_gaming_text = models.CharField(max_length=200, default='Bet Responsibly',
+        help_text='Responsible gaming message')
+    show_regulatory_footer = models.BooleanField(default=True,
+        help_text='Show regulatory footer on auth/landing screens')
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
@@ -127,6 +138,12 @@ class GameConfig(models.Model):
                                             help_text='Growth factor k for zero probability curve')
     min_flips_before_zero = models.PositiveIntegerField(default=2,
                                                          help_text='Guaranteed safe flips before zero can appear')
+    min_flips_before_cashout = models.PositiveIntegerField(default=3,
+        help_text='Minimum flips required before player can cash out (prevents risk-free profit)')
+    instant_cashout_enabled = models.BooleanField(default=True,
+        help_text='Allow players to send winnings directly to MoMo on cashout')
+    instant_cashout_min_amount = models.DecimalField(max_digits=10, decimal_places=2, default=5.00,
+        help_text='Minimum cashout amount eligible for instant MoMo payout')
     max_session_duration_minutes = models.PositiveIntegerField(default=120)
     auto_flip_seconds = models.PositiveIntegerField(default=8,
         help_text='Seconds before auto-flip triggers if player idles (0 = disabled)')

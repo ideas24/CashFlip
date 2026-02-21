@@ -3,16 +3,16 @@ Description=Cashflip Celery Worker
 After=network.target redis.service
 
 [Service]
-User=terminal_ideas
-Group=terminal_ideas
-WorkingDirectory=/home/terminal_ideas/cashflip
-Environment="PATH=/home/terminal_ideas/cashflip/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-EnvironmentFile=/home/terminal_ideas/cashflip/.env
-ExecStart=/home/terminal_ideas/cashflip/venv/bin/celery -A config worker -l info -c 4 -Q default,game --without-heartbeat
+User=cashflip
+Group=cashflip
+WorkingDirectory=/opt/cashflip/app
+Environment="PATH=/opt/cashflip/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+EnvironmentFile=/opt/cashflip/.env
+ExecStart=/opt/cashflip/venv/bin/celery -A config worker -l info -c 4 -Q default,game --without-heartbeat
 Restart=always
 RestartSec=10
-StandardOutput=append:/home/terminal_ideas/cashflip/logs/celery_worker.log
-StandardError=append:/home/terminal_ideas/cashflip/logs/celery_worker.log
+StandardOutput=append:/opt/cashflip/logs/celery_worker.log
+StandardError=append:/opt/cashflip/logs/celery_worker.log
 
 [Install]
 WantedBy=multi-user.target

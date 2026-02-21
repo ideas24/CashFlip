@@ -270,6 +270,51 @@ html, body {
 .btn-social.facebook { background: #1877F2; border-color: #1877F2; }
 .btn-social:hover { opacity: 0.9; }
 
+/* Alt-auth buttons (full-width stacked) */
+.alt-auth-buttons { display: flex; flex-direction: column; gap: 0.6rem; }
+.btn-alt-auth {
+    width: 100%; padding: 0.75rem 1rem; border: 1px solid var(--casino-border);
+    border-radius: 10px; color: var(--text-primary); cursor: pointer; display: flex;
+    align-items: center; justify-content: center; gap: 0.6rem; font-size: 0.9rem;
+    font-weight: 500; transition: all 0.2s; background: var(--casino-surface);
+}
+.btn-alt-auth:hover { border-color: rgba(255,255,255,0.2); background: rgba(255,255,255,0.05); }
+.btn-alt-auth.google { border-color: rgba(66,133,244,0.4); }
+.btn-alt-auth.google:hover { background: rgba(66,133,244,0.1); border-color: #4285F4; }
+.btn-alt-auth.facebook { border-color: rgba(24,119,242,0.4); }
+.btn-alt-auth.facebook:hover { background: rgba(24,119,242,0.1); border-color: #1877F2; }
+.btn-alt-auth.email { border-color: rgba(0,191,166,0.3); }
+.btn-alt-auth.email:hover { background: rgba(0,191,166,0.08); border-color: var(--teal); }
+.btn-alt-auth svg { flex-shrink: 0; }
+
+/* Regulatory footer */
+.regulatory-footer {
+    margin-top: 1.5rem; padding-top: 1rem;
+    border-top: 1px solid rgba(255,255,255,0.06);
+    text-align: center; opacity: 0.7;
+}
+.reg-row {
+    display: flex; align-items: center; justify-content: center;
+    gap: 0.5rem; margin-bottom: 0.4rem;
+}
+.reg-logo {
+    height: 28px; width: auto; border-radius: 4px;
+    filter: brightness(1.1);
+}
+.reg-text {
+    font-size: 0.7rem; color: var(--text-secondary);
+    line-height: 1.3;
+}
+.age-badge {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 28px; height: 28px; border-radius: 50%;
+    border: 2px solid var(--danger); color: var(--danger);
+    font-size: 0.65rem; font-weight: 900; line-height: 1;
+}
+.reg-responsible {
+    font-size: 0.7rem; color: var(--text-secondary); font-style: italic;
+}
+
 .otp-inputs { display: flex; gap: 0.5rem; justify-content: center; margin: 1.5rem 0; }
 .otp-digit {
     width: 48px; height: 56px; text-align: center; font-size: 1.5rem; font-weight: 700;
@@ -1006,6 +1051,49 @@ html, body {
 .cashout-content h2 { font-family: 'Orbitron', sans-serif; font-size: 2rem; color: var(--success); margin: 0.5rem 0; }
 .cashout-total { font-family: 'Orbitron', sans-serif; font-size: 2.5rem; font-weight: 900; color: var(--gold); }
 .cashout-content p { color: var(--text-secondary); }
+
+/* Instant MoMo Cashout */
+.instant-momo-section {
+    margin-top: 1rem; padding: 0.8rem; border-radius: 12px;
+    background: rgba(0,191,166,0.08); border: 1px solid rgba(0,191,166,0.2);
+}
+.momo-send-label { font-size: 0.85rem; color: var(--text-secondary); margin: 0 0 0.5rem; }
+.momo-account-preview {
+    display: flex; flex-direction: column; align-items: center; gap: 0.15rem;
+    margin-bottom: 0.6rem;
+}
+.momo-name { font-weight: 700; color: var(--text-primary); font-size: 0.95rem; }
+.momo-number { font-size: 0.8rem; color: var(--text-secondary); }
+.btn-momo-send {
+    width: 100%; padding: 0.7rem; background: linear-gradient(135deg, #00BFA6, #00896e);
+    border: none; border-radius: 10px; color: #fff; font-weight: 700; font-size: 0.95rem;
+    cursor: pointer; transition: transform 0.15s;
+}
+.btn-momo-send:hover { transform: translateY(-1px); }
+.btn-momo-send:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+.momo-add-inline {
+    display: flex; gap: 0.5rem; margin-bottom: 0.5rem;
+}
+.momo-phone-input {
+    flex: 1; padding: 0.6rem 0.8rem; background: var(--casino-surface);
+    border: 1px solid var(--casino-border); border-radius: 8px;
+    color: var(--text-primary); font-size: 0.9rem; outline: none;
+}
+.momo-phone-input:focus { border-color: var(--teal); }
+.btn-momo-add {
+    padding: 0.6rem 1rem; background: var(--casino-surface);
+    border: 1px solid var(--teal); border-radius: 8px;
+    color: var(--teal); font-size: 0.8rem; font-weight: 600; cursor: pointer;
+    white-space: nowrap;
+}
+.btn-momo-add:disabled { opacity: 0.5; cursor: not-allowed; }
+.momo-status {
+    font-size: 0.8rem; margin-top: 0.4rem; text-align: center;
+    min-height: 1rem;
+}
+.momo-status.success { color: var(--success); }
+.momo-status.error { color: var(--danger); }
+.momo-status.pending { color: var(--gold); }
 
 /* Ad Overlay */
 .ad-overlay {

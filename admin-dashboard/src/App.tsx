@@ -11,6 +11,7 @@ import PartnersPage from '@/pages/partners'
 import AnalyticsPage from '@/pages/analytics'
 import RolesPage from '@/pages/roles'
 import SettingsPage from '@/pages/settings'
+import LiveActivityPage from '@/pages/live'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth()
@@ -44,6 +45,7 @@ export default function App() {
             }
           >
             <Route index element={<DashboardPage />} />
+            <Route path="live" element={<LiveActivityPage />} />
             <Route path="players" element={<PlayersPage />} />
             <Route path="sessions" element={<SessionsPage />} />
             <Route path="transactions" element={<TransactionsPage />} />

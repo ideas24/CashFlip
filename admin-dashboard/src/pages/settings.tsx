@@ -35,6 +35,9 @@ interface GameSettings {
   zero_base_rate: string
   zero_growth_rate: string
   min_flips_before_zero: number
+  min_flips_before_cashout: number
+  instant_cashout_enabled: boolean
+  instant_cashout_min_amount: string
   max_session_duration_minutes: number
   auto_flip_seconds: number
   flip_animation_mode: string
@@ -116,6 +119,11 @@ interface BrandingSettings {
   accent_color: string
   background_color: string
   tagline: string
+  regulatory_logo_url: string
+  regulatory_text: string
+  age_restriction_text: string
+  responsible_gaming_text: string
+  show_regulatory_footer: boolean
 }
 
 interface OutcomeChoice { value: string; label: string }
@@ -423,6 +431,31 @@ export default function SettingsPage() {
                           <Input type="number" value={s.game.min_flips_before_zero}
                             onChange={e => updateGame('min_flips_before_zero', parseInt(e.target.value) || 0)} />
                           <p className="text-xs text-muted mt-1">Guaranteed safe flips</p>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-slate-400 mb-1.5">Min Flips Before Cashout</label>
+                          <Input type="number" value={s.game.min_flips_before_cashout}
+                            onChange={e => updateGame('min_flips_before_cashout', parseInt(e.target.value) || 0)} />
+                          <p className="text-xs text-muted mt-1">Prevents risk-free profit exploit</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Instant Cashout */}
+                    <div>
+                      <h3 className="text-sm font-semibold text-white mb-3">Instant MoMo Cashout</h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="flex items-center gap-3">
+                          <input type="checkbox" checked={s.game.instant_cashout_enabled}
+                            onChange={e => updateGame('instant_cashout_enabled', e.target.checked)}
+                            className="w-4 h-4 rounded border-border" />
+                          <label className="text-xs font-medium text-slate-400">Enable instant MoMo cashout on win screen</label>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-slate-400 mb-1.5">Min Amount for Instant Cashout</label>
+                          <Input type="text" value={s.game.instant_cashout_min_amount}
+                            onChange={e => updateGame('instant_cashout_min_amount', e.target.value)} />
+                          <p className="text-xs text-muted mt-1">Below this amount, only wallet credit</p>
                         </div>
                       </div>
                     </div>
@@ -930,6 +963,51 @@ export default function SettingsPage() {
                 <Input value={s.branding?.tagline || ''} onChange={e => updateBranding('tagline', e.target.value)}
                   placeholder="Flip Notes. Stack Cash. Win Big." />
                 <p className="text-[10px] text-muted mt-1">Displayed on auth/loading screens</p>
+              </div>
+
+              {/* Regulatory Footer */}
+              <div className="border-t border-border pt-4 mt-4">
+                <h3 className="text-sm font-semibold text-white mb-3">Regulatory Footer</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="flex items-center gap-3">
+                    <input type="checkbox" checked={s.branding?.show_regulatory_footer ?? true}
+                      onChange={e => updateBranding('show_regulatory_footer', e.target.checked)}
+                      className="w-4 h-4 rounded border-border" />
+                    <label className="text-xs font-medium text-slate-400">Show regulatory footer on auth screen</label>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-400 mb-1">Regulatory Logo</label>
+                    {s.branding?.regulatory_logo_url && (
+                      <img src={s.branding.regulatory_logo_url} alt="Regulatory" className="h-8 mb-2 rounded" />
+                    )}
+                    <input type="file" accept="image/*"
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0]; if (!file) return;
+                        setUploading(true);
+                        const fd = new FormData(); fd.append('regulatory_logo', file);
+                        try {
+                          const res = await api.upload('/settings/branding/upload/', fd);
+                          if (res.regulatory_logo_url) updateBranding('regulatory_logo_url', res.regulatory_logo_url);
+                        } catch {} finally { setUploading(false); }
+                      }}
+                      className="text-xs text-slate-400" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-400 mb-1">Regulatory Text</label>
+                    <Input value={s.branding?.regulatory_text || ''} onChange={e => updateBranding('regulatory_text', e.target.value)}
+                      placeholder="Regulated by the Gaming Commission of Ghana" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-400 mb-1">Age Restriction</label>
+                    <Input value={s.branding?.age_restriction_text || ''} onChange={e => updateBranding('age_restriction_text', e.target.value)}
+                      placeholder="18+" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-400 mb-1">Responsible Gaming Text</label>
+                    <Input value={s.branding?.responsible_gaming_text || ''} onChange={e => updateBranding('responsible_gaming_text', e.target.value)}
+                      placeholder="Bet Responsibly" />
+                  </div>
+                </div>
               </div>
             </CardContent>
           </Card>

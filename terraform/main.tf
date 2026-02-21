@@ -37,19 +37,23 @@ variable "db_admin_password" {
 }
 
 variable "app_vm_count" {
-  default = 2
+  default = 6
+  description = "App VMSS instance count — 6-8 for production gaming load"
 }
 
 variable "celery_vm_count" {
-  default = 1
+  default = 3
+  description = "Celery worker VMSS instance count — 3 for parallel task processing"
 }
 
 variable "vm_size_app" {
-  default = "Standard_D2s_v3"
+  default = "Standard_D4s_v3"
+  description = "4 vCPU, 16GB RAM — fast for concurrent game sessions"
 }
 
 variable "vm_size_celery" {
-  default = "Standard_D2s_v3"
+  default = "Standard_D4s_v3"
+  description = "4 vCPU, 16GB RAM — handles auto-flip, webhooks, settlements"
 }
 
 # ==================== Resource Group ====================

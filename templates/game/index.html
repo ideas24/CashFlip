@@ -11,7 +11,7 @@
     {% load static %}
     <link rel="icon" type="image/svg+xml" href="{% static 'images/cashflip-favicon.svg' %}">
     <meta name="theme-color" content="#0D1117">
-    <link rel="stylesheet" href="{% static 'css/game.css' %}?v=20260221a">
+    <link rel="stylesheet" href="{% static 'css/game.css' %}?v=20260221b">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
 <body>
@@ -33,19 +33,19 @@
             <h1 class="logo-title">CASH<span class="accent">FLIP</span></h1>
             <p class="tagline">Flip Notes. Stack Cash. Win Big.</p>
 
-            <!-- Auth Method Tabs -->
-            <div class="auth-tabs" id="auth-tabs">
-                <button class="auth-tab-btn active" data-target="otp-step-1" id="auth-tab-phone">📱 Phone</button>
-                <button class="auth-tab-btn" data-target="email-auth-step" id="auth-tab-email" style="display:none">✉️ Email</button>
+            <!-- Hidden tabs container (kept for JS compat but never shown) -->
+            <div class="auth-tabs" id="auth-tabs" style="display:none">
+                <button class="auth-tab-btn active" data-target="otp-step-1" id="auth-tab-phone">Phone</button>
+                <button class="auth-tab-btn" data-target="email-auth-step" id="auth-tab-email">Email</button>
             </div>
 
-            <!-- Phone OTP Login -->
+            <!-- Phone OTP Login (always primary) -->
             <div id="otp-step-1" class="auth-step active">
                 <div class="input-group">
                     <div class="phone-row">
                         <div class="country-picker" id="country-picker">
                             <button type="button" class="country-toggle" id="country-toggle">
-                                <span id="selected-flag">🇭</span>
+                                <span id="selected-flag">��</span>
                                 <span id="selected-code">+233</span>
                                 <span class="picker-arrow">▾</span>
                             </button>
@@ -57,20 +57,26 @@
                         <input type="tel" id="phone-input" placeholder="24 123 4567" maxlength="15">
                     </div>
                 </div>
-                <div class="otp-channels">
-                    <button class="channel-btn active" data-channel="sms">📱 SMS</button>
-                    <button class="channel-btn" data-channel="whatsapp">💬 WhatsApp</button>
+                <div class="otp-channels" id="otp-channels">
+                    <button class="channel-btn" data-channel="whatsapp">� WhatsApp</button>
+                    <button class="channel-btn active" data-channel="sms">� SMS</button>
                 </div>
                 <button id="send-otp-btn" class="btn-primary">Send Code</button>
-                <div id="social-divider" class="divider" style="display:none"><span>or</span></div>
-                <div id="social-buttons" class="social-buttons" style="display:none">
-                    <button id="btn-google" class="btn-social google" onclick="window.location.href='/auth/login/google-oauth2/'" style="display:none">
-                        <svg width="18" height="18" viewBox="0 0 24 24"><path fill="#fff" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"/><path fill="#fff" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#fff" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#fff" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
-                        Google
+
+                <!-- Alternative login methods -->
+                <div id="alt-auth-divider" class="divider" style="display:none"><span>or</span></div>
+                <div id="alt-auth-buttons" class="alt-auth-buttons" style="display:none">
+                    <button id="btn-google" class="btn-alt-auth google" onclick="window.location.href='/auth/login/google-oauth2/'" style="display:none">
+                        <svg width="18" height="18" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+                        Continue with Google
                     </button>
-                    <button id="btn-facebook" class="btn-social facebook" onclick="window.location.href='/auth/login/facebook/'" style="display:none">
+                    <button id="btn-facebook" class="btn-alt-auth facebook" onclick="window.location.href='/auth/login/facebook/'" style="display:none">
                         <svg width="18" height="18" viewBox="0 0 24 24"><path fill="#fff" d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
-                        Facebook
+                        Continue with Facebook
+                    </button>
+                    <button id="btn-email-auth" class="btn-alt-auth email" style="display:none">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
+                        Continue with Email
                     </button>
                 </div>
             </div>
@@ -99,11 +105,7 @@
                     <input type="password" id="password-input" placeholder="Password" class="auth-input" autocomplete="current-password">
                 </div>
                 <button id="email-login-btn" class="btn-primary">Log In</button>
-                
-                <!-- WhatsApp option when enabled -->
-                <div id="email-step-whatsapp-divider" class="divider" style="display:none;margin:16px 0"><span>or</span></div>
-                <button id="email-step-whatsapp-btn" class="btn-secondary" style="display:none;width:100%;margin-bottom:8px;">💬 Continue with WhatsApp</button>
-                
+                <button id="back-to-phone-from-email" class="btn-link">← Back to phone login</button>
                 <p style="text-align:center;margin:8px 0 0;font-size:0.8rem;color:rgba(255,255,255,0.5);">
                     Don't have an account? <a href="#" id="switch-to-signup" style="color:#00e5a0;">Sign Up</a>
                 </p>
@@ -127,6 +129,18 @@
             </div>
 
             <div id="auth-error" class="error-msg"></div>
+
+            <!-- Regulatory Footer -->
+            <div class="regulatory-footer" id="regulatory-footer">
+                <div class="reg-row">
+                    <img src="/static/images/Ghana-Gaming-Commission-logo.png" alt="Gaming Commission of Ghana" class="reg-logo" id="reg-logo-img">
+                    <span class="reg-text" id="reg-text">Regulated by the Gaming Commission of Ghana</span>
+                </div>
+                <div class="reg-row">
+                    <span class="age-badge" id="reg-age">18+</span>
+                    <span class="reg-responsible" id="reg-responsible">Bet Responsibly</span>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -393,6 +407,28 @@
                 <h2>CASHED OUT!</h2>
                 <p class="cashout-total" id="cashout-total"></p>
                 <p>Added to your wallet</p>
+
+                <!-- Instant MoMo Cashout -->
+                <div id="instant-momo-section" class="instant-momo-section" style="display:none;">
+                    <div id="momo-has-account" style="display:none;">
+                        <p class="momo-send-label">Send to your MoMo?</p>
+                        <div class="momo-account-preview" id="momo-account-preview">
+                            <span class="momo-name" id="instant-momo-name"></span>
+                            <span class="momo-number" id="instant-momo-number"></span>
+                        </div>
+                        <button id="instant-momo-send-btn" class="btn-momo-send">💸 Send to MoMo</button>
+                        <p id="instant-momo-status" class="momo-status"></p>
+                    </div>
+                    <div id="momo-no-account" style="display:none;">
+                        <p class="momo-send-label">Want instant payout? Add a MoMo account:</p>
+                        <div class="momo-add-inline">
+                            <input type="tel" id="instant-momo-phone" placeholder="024 XXX XXXX" maxlength="10" class="momo-phone-input">
+                            <button id="instant-momo-add-btn" class="btn-momo-add">Verify & Add</button>
+                        </div>
+                        <p id="instant-momo-add-status" class="momo-status"></p>
+                    </div>
+                </div>
+
                 <div style="display:flex;flex-direction:column;gap:10px;margin-top:12px;">
                     <button id="cashout-play-again-btn" class="btn-primary">Play Again</button>
                     <button id="cashout-lobby-btn" class="btn-secondary">Back to Lobby</button>
@@ -803,6 +839,6 @@
         <span id="toast-message"></span>
     </div>
 
-    <script src="{% static 'js/game.js' %}?v=20260221a"></script>
+    <script src="{% static 'js/game.js' %}?v=20260221b"></script>
 </body>
 </html>

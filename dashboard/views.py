@@ -13,7 +13,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
-from accounts.models import Player, AdminRole, StaffMember, AuthConfig, PlayerProfile
+from accounts.models import Player, AdminRole, StaffMember, AuthConfig, PlayerProfile, SMSProvider
 from game.models import GameSession, FlipResult, Currency, GameConfig, SimulatedGameConfig
 from wallet.models import Wallet, WalletTransaction
 from payments.models import Deposit, Withdrawal
@@ -1152,6 +1152,9 @@ def settings_view(request):
                 'zero_base_rate': str(game_config.zero_base_rate),
                 'zero_growth_rate': str(game_config.zero_growth_rate),
                 'min_flips_before_zero': game_config.min_flips_before_zero,
+                'min_flips_before_cashout': game_config.min_flips_before_cashout,
+                'instant_cashout_enabled': game_config.instant_cashout_enabled,
+                'instant_cashout_min_amount': str(game_config.instant_cashout_min_amount),
                 'max_session_duration_minutes': game_config.max_session_duration_minutes,
                 'auto_flip_seconds': game_config.auto_flip_seconds,
                 'flip_animation_mode': game_config.flip_animation_mode,
@@ -1174,6 +1177,9 @@ def settings_view(request):
                 'zero_base_rate': '0.0500',
                 'zero_growth_rate': '0.0800',
                 'min_flips_before_zero': 2,
+                'min_flips_before_cashout': 3,
+                'instant_cashout_enabled': True,
+                'instant_cashout_min_amount': '5.00',
                 'max_session_duration_minutes': 120,
                 'auto_flip_seconds': 8,
                 'flip_animation_mode': 'gif',
@@ -1263,6 +1269,11 @@ def settings_view(request):
             'accent_color': branding.accent_color,
             'background_color': branding.background_color,
             'tagline': branding.tagline,
+            'regulatory_logo_url': branding.regulatory_logo.url if branding.regulatory_logo else '',
+            'regulatory_text': branding.regulatory_text,
+            'age_restriction_text': branding.age_restriction_text,
+            'responsible_gaming_text': branding.responsible_gaming_text,
+            'show_regulatory_footer': branding.show_regulatory_footer,
         }
 
         return Response({
@@ -1291,7 +1302,9 @@ def settings_view(request):
     if game_data and game_config:
         game_fields = ['house_edge_percent', 'min_deposit', 'max_cashout', 'min_stake',
                        'pause_cost_percent', 'zero_base_rate', 'zero_growth_rate',
-                       'min_flips_before_zero', 'max_session_duration_minutes',
+                       'min_flips_before_zero', 'min_flips_before_cashout',
+                       'instant_cashout_enabled', 'instant_cashout_min_amount',
+                       'max_session_duration_minutes',
                        'auto_flip_seconds', 'flip_animation_mode', 'flip_display_mode', 'flip_animation_speed_ms',
                        'flip_sound_enabled', 'simulated_feed_enabled', 'simulated_feed_data']
         updated = []
@@ -1374,7 +1387,9 @@ def settings_view(request):
     if branding_data:
         branding = SiteBranding.get_branding()
         branding_fields = ['primary_color', 'secondary_color', 'accent_color',
-                           'background_color', 'tagline']
+                           'background_color', 'tagline', 'regulatory_text',
+                           'age_restriction_text', 'responsible_gaming_text',
+                           'show_regulatory_footer']
         updated = []
         for field in branding_fields:
             if field in branding_data:
@@ -1397,6 +1412,7 @@ def branding_upload(request):
         'logo': 'logo',
         'logo_icon': 'logo_icon',
         'loading_animation': 'loading_animation',
+        'regulatory_logo': 'regulatory_logo',
     }
 
     updated = []
@@ -1414,6 +1430,7 @@ def branding_upload(request):
         'logo_url': branding.logo.url if branding.logo else '',
         'logo_icon_url': branding.logo_icon.url if branding.logo_icon else '',
         'loading_animation_url': branding.loading_animation.url if branding.loading_animation else '',
+        'regulatory_logo_url': branding.regulatory_logo.url if branding.regulatory_logo else '',
     })
 
 
@@ -1779,4 +1796,278 @@ def notifications_list(request):
     return Response({
         'notifications': notifications[:20],
         'unread_count': len([n for n in notifications if not n['read']]),
+    })
+
+
+# ==================== Live Activity (Polling) ====================
+
+@api_view(['GET'])
+@permission_classes([IsStaffAdmin])
+def live_activity(request):
+    """
+    Real-time activity feed for admin dashboard.
+    Returns live players, active sessions, recent flips, recent deposits/withdrawals.
+    Designed for 3-5s polling interval.
+    """
+    now = timezone.now()
+    five_min_ago = now - timedelta(minutes=5)
+    one_min_ago = now - timedelta(minutes=1)
+    today = now.date()
+
+    # Active sessions right now
+    active_sessions = GameSession.objects.filter(status='active').select_related('player', 'currency')
+    active_count = active_sessions.count()
+
+    # Live players (sessions active in last 5 min)
+    live_players_qs = active_sessions.filter(
+        updated_at__gte=five_min_ago
+    ).order_by('-updated_at')[:20]
+
+    live_players = []
+    for s in live_players_qs:
+        last_flip = FlipResult.objects.filter(session=s).order_by('-created_at').first()
+        live_players.append({
+            'session_id': str(s.id),
+            'player_id': str(s.player_id),
+            'player_name': s.player.display_name or s.player.phone[:8] + '***',
+            'stake': str(s.stake_amount),
+            'balance': str(s.cashout_balance),
+            'flips': s.flip_count,
+            'currency': s.currency.symbol if s.currency else 'GH₵',
+            'last_flip_at': last_flip.created_at.isoformat() if last_flip else s.created_at.isoformat(),
+            'started_at': s.created_at.isoformat(),
+        })
+
+    # Recent flips (last 60 seconds)
+    recent_flips = FlipResult.objects.filter(
+        created_at__gte=one_min_ago
+    ).select_related('session__player', 'session__currency').order_by('-created_at')[:30]
+
+    flip_feed = []
+    for f in recent_flips:
+        flip_feed.append({
+            'id': str(f.id) if hasattr(f, 'id') else f.flip_number,
+            'player_name': f.session.player.display_name or f.session.player.phone[:8] + '***',
+            'value': str(f.value),
+            'is_zero': f.is_zero,
+            'flip_number': f.flip_number,
+            'session_id': str(f.session_id),
+            'currency': f.session.currency.symbol if f.session.currency else 'GH₵',
+            'timestamp': f.created_at.isoformat(),
+        })
+
+    # Recent deposits & withdrawals (last 5 min)
+    recent_deps = Deposit.objects.filter(
+        created_at__gte=five_min_ago
+    ).select_related('player').order_by('-created_at')[:10]
+
+    recent_wdrs = Withdrawal.objects.filter(
+        created_at__gte=five_min_ago
+    ).select_related('player').order_by('-created_at')[:10]
+
+    money_feed = []
+    for d in recent_deps:
+        money_feed.append({
+            'type': 'deposit',
+            'player_name': d.player.display_name or d.player.phone[:8] + '***',
+            'amount': str(d.amount),
+            'status': d.status,
+            'timestamp': d.created_at.isoformat(),
+        })
+    for w in recent_wdrs:
+        money_feed.append({
+            'type': 'withdrawal',
+            'player_name': w.player.display_name or w.player.phone[:8] + '***',
+            'amount': str(w.amount),
+            'status': w.status,
+            'timestamp': w.created_at.isoformat(),
+        })
+    money_feed.sort(key=lambda x: x['timestamp'], reverse=True)
+
+    # Quick stats (today)
+    sessions_today = GameSession.objects.filter(created_at__date=today).count()
+    flips_today = FlipResult.objects.filter(created_at__date=today).count()
+    stakes_today = GameSession.objects.filter(
+        created_at__date=today
+    ).aggregate(s=Sum('stake_amount'))['s'] or Decimal('0')
+    payouts_today = GameSession.objects.filter(
+        created_at__date=today, status__in=['cashed_out', 'completed']
+    ).aggregate(s=Sum('cashout_balance'))['s'] or Decimal('0')
+
+    return Response({
+        'timestamp': now.isoformat(),
+        'active_sessions': active_count,
+        'live_players': live_players,
+        'flip_feed': flip_feed,
+        'money_feed': money_feed[:15],
+        'today': {
+            'sessions': sessions_today,
+            'flips': flips_today,
+            'total_staked': str(stakes_today),
+            'total_paid_out': str(payouts_today),
+            'ggr': str(stakes_today - payouts_today),
+        },
+    })
+
+
+# ==================== SMS Providers CRUD ====================
+
+def _serialize_sms_provider(p):
+    return {
+        'id': p.id,
+        'name': p.name,
+        'provider_type': p.provider_type,
+        'provider_type_display': p.get_provider_type_display(),
+        'api_key': p.api_key[:8] + '***' if p.api_key else '',
+        'api_secret_set': bool(p.api_secret),
+        'sender_id': p.sender_id,
+        'base_url': p.base_url,
+        'is_active': p.is_active,
+        'priority': p.priority,
+        'extra_config': p.extra_config,
+        'created_at': p.created_at.isoformat() if p.created_at else None,
+        'updated_at': p.updated_at.isoformat() if p.updated_at else None,
+    }
+
+
+@api_view(['GET', 'POST'])
+@permission_classes([IsStaffAdmin])
+def sms_providers(request):
+    """List all SMS providers or create a new one."""
+    if request.method == 'GET':
+        providers = SMSProvider.objects.all().order_by('-priority', 'name')
+        return Response({'providers': [_serialize_sms_provider(p) for p in providers]})
+
+    # POST — create
+    data = request.data
+    required = ['name', 'provider_type', 'api_key']
+    missing = [f for f in required if not data.get(f)]
+    if missing:
+        return Response({'error': f'Missing fields: {", ".join(missing)}'}, status=status.HTTP_400_BAD_REQUEST)
+
+    provider = SMSProvider.objects.create(
+        name=data['name'],
+        provider_type=data['provider_type'],
+        api_key=data['api_key'],
+        api_secret=data.get('api_secret', ''),
+        sender_id=data.get('sender_id', 'CASHFLIP'),
+        base_url=data.get('base_url', ''),
+        is_active=data.get('is_active', True),
+        priority=data.get('priority', 0),
+        extra_config=data.get('extra_config', {}),
+    )
+    return Response({'provider': _serialize_sms_provider(provider)}, status=status.HTTP_201_CREATED)
+
+
+@api_view(['GET', 'PUT', 'DELETE'])
+@permission_classes([IsStaffAdmin])
+def sms_provider_detail(request, pk):
+    """Get, update, or delete a single SMS provider."""
+    try:
+        provider = SMSProvider.objects.get(pk=pk)
+    except SMSProvider.DoesNotExist:
+        return Response({'error': 'Provider not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    if request.method == 'GET':
+        return Response({'provider': _serialize_sms_provider(provider)})
+
+    if request.method == 'DELETE':
+        provider.delete()
+        return Response({'success': True})
+
+    # PUT — update
+    data = request.data
+    updatable = ['name', 'provider_type', 'api_key', 'api_secret', 'sender_id',
+                 'base_url', 'is_active', 'priority', 'extra_config']
+    changed = []
+    for field in updatable:
+        if field in data:
+            setattr(provider, field, data[field])
+            changed.append(field)
+    if changed:
+        provider.save()
+    return Response({'provider': _serialize_sms_provider(provider)})
+
+
+# ==================== Math Validation ====================
+
+@api_view(['GET'])
+@permission_classes([IsStaffAdmin])
+def validate_house_edge(request):
+    """
+    Compute theoretical house edge from current zero curve params + denomination multiplier weights.
+    Returns deviation from configured target.
+    """
+    import math
+
+    game_config = GameConfig.objects.filter(is_active=True).first()
+    if not game_config:
+        return Response({'error': 'No active game config'}, status=status.HTTP_404_NOT_FOUND)
+
+    from game.models import CurrencyDenomination
+    denoms = CurrencyDenomination.objects.filter(
+        currency=game_config.currency, is_active=True, is_zero=False
+    )
+
+    # Weighted average multiplier
+    total_weight = sum(d.weight for d in denoms)
+    if total_weight == 0:
+        return Response({'error': 'No active denominations'}, status=status.HTTP_400_BAD_REQUEST)
+
+    weighted_mult = sum(float(d.payout_multiplier) * d.weight for d in denoms) / total_weight
+
+    # Estimate expected surviving flips using the zero sigmoid curve
+    # P(zero at flip n) = base_rate / (1 + e^(-growth_rate * (n - mid)))
+    # For simplicity, simulate expected flips
+    base_rate = float(game_config.zero_base_rate)
+    growth_rate = float(game_config.zero_growth_rate)
+    min_flips_zero = game_config.min_flips_before_zero
+
+    # Monte Carlo-ish: compute expected flips analytically
+    # P(survive flip n) = product of (1 - P_zero(i)) for i=1..n
+    # P_zero(i) = 0 if i < min_flips_zero, else base_rate / (1 + e^(-growth_rate * (i - 10)))
+    expected_flips = 0.0
+    survive_prob = 1.0
+    max_flips = 200
+
+    for n in range(1, max_flips + 1):
+        if n <= min_flips_zero:
+            p_zero = 0.0
+        else:
+            p_zero = base_rate / (1 + math.exp(-growth_rate * (n - 10)))
+        p_zero = min(p_zero, 1.0)
+        survive_prob *= (1 - p_zero)
+        expected_flips += survive_prob
+        if survive_prob < 0.001:
+            break
+
+    expected_payout_pct = expected_flips * weighted_mult  # in percentage points
+    theoretical_house_edge = 100.0 - expected_payout_pct
+    configured_target = float(game_config.house_edge_percent)
+    deviation = theoretical_house_edge - configured_target
+
+    if abs(deviation) < 5:
+        edge_status = 'OK'
+    elif abs(deviation) < 10:
+        edge_status = 'WARNING'
+    else:
+        edge_status = 'CRITICAL'
+
+    return Response({
+        'weighted_avg_multiplier': round(weighted_mult, 2),
+        'expected_surviving_flips': round(expected_flips, 2),
+        'expected_payout_pct': round(expected_payout_pct, 1),
+        'theoretical_house_edge': round(theoretical_house_edge, 1),
+        'configured_target': configured_target,
+        'deviation': round(deviation, 1),
+        'status': edge_status,
+        'denominations': [
+            {'value': str(d.value), 'multiplier': str(d.payout_multiplier), 'weight': d.weight}
+            for d in denoms.order_by('value')
+        ],
+        'zero_curve': {
+            'base_rate': str(game_config.zero_base_rate),
+            'growth_rate': str(game_config.zero_growth_rate),
+            'min_flips_before_zero': min_flips_zero,
+        },
     })

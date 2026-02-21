@@ -15,6 +15,11 @@ SECRET_KEY = os.getenv('SECRET_KEY', 'cf-insecure-dev-key-change-in-production')
 DEBUG = os.getenv('DEBUG', 'True').lower() == 'true'
 ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
 
+# Safety: force DEBUG=False on production domains (LB VMs)
+_PROD_DOMAINS = {'cashflip.cash', 'cashflip.amoano.com', 'manage.cashflip.cash', 'console.cashflip.cash'}
+if any(h.strip() in _PROD_DOMAINS for h in ALLOWED_HOSTS):
+    DEBUG = False
+
 # Admin subdomain - only this host can access /admin/
 ADMIN_DOMAIN = os.getenv('ADMIN_DOMAIN', 'manage.cashflip.amoano.com')
 
@@ -89,6 +94,27 @@ DATABASES = {
         default='postgres://cashflip_user:cashflip_pass_2026@localhost:5432/cashflip_db'
     )
 }
+DATABASES['default']['CONN_MAX_AGE'] = int(os.getenv('CONN_MAX_AGE', '600'))
+
+# Cache (Redis) — separate DB from Celery broker/results
+# Production Azure Redis layout: DB 0=app, DB 1=broker, DB 2=results → DB 9=cache
+# Dev layout: DB 3=broker, DB 8=results → DB 9=cache
+import re as _re
+_CACHE_REDIS_URL = os.getenv('CACHE_REDIS_URL', '')  # explicit override if needed
+if not _CACHE_REDIS_URL:
+    _base = os.getenv('REDIS_URL', 'redis://localhost:6379/0')
+    _CACHE_REDIS_URL = _re.sub(r'/\d+$', '/9', _base) if _re.search(r'/\d+$', _base) else _base + '/9'
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.redis.RedisCache',
+        'LOCATION': _CACHE_REDIS_URL,
+    }
+}
+# Azure Redis requires SSL — if rediss:// detected, configure SSL for cache
+if _CACHE_REDIS_URL.startswith('rediss://'):
+    CACHES['default']['OPTIONS'] = {
+        'ssl_cert_reqs': 'none',  # Azure Redis uses managed certs
+    }
 
 # Password validation
 AUTH_PASSWORD_VALIDATORS = [
@@ -142,9 +168,11 @@ REST_FRAMEWORK = {
     ],
     'DEFAULT_THROTTLE_RATES': {
         'anon': '30/minute',
-        'user': '120/minute',
+        'user': '60/minute',
         'otp': '3/minute',
-        'flip': '100/minute',
+        'flip': '30/minute',
+        'cashout': '5/minute',
+        'withdraw': '3/minute',
     },
     'DEFAULT_FILTER_BACKENDS': [
         'django_filters.rest_framework.DjangoFilterBackend',
@@ -261,8 +289,8 @@ CELERY_TIMEZONE = TIME_ZONE
 # Azure Redis requires SSL cert config when using rediss://
 if CELERY_BROKER_URL.startswith('rediss://'):
     import ssl
-    CELERY_BROKER_USE_SSL = {'ssl_cert_reqs': ssl.CERT_REQUIRED}
-    CELERY_REDIS_BACKEND_USE_SSL = {'ssl_cert_reqs': ssl.CERT_REQUIRED}
+    CELERY_BROKER_USE_SSL = {'ssl_cert_reqs': ssl.CERT_NONE}
+    CELERY_REDIS_BACKEND_USE_SSL = {'ssl_cert_reqs': ssl.CERT_NONE}
 
 # ============ CORS ============
 CORS_ALLOWED_ORIGINS = os.getenv('CORS_ALLOWED_ORIGINS', 'https://demo.cashflip.amoano.com').split(',')
@@ -273,6 +301,13 @@ CSRF_TRUSTED_ORIGINS = os.getenv('CSRF_TRUSTED_ORIGINS', '').split(',') if os.ge
 SECURE_BROWSER_XSS_FILTER = True
 SECURE_CONTENT_TYPE_NOSNIFF = True
 X_FRAME_OPTIONS = 'DENY'
+if not DEBUG:
+    SECURE_SSL_REDIRECT = True
+    SECURE_HSTS_SECONDS = 31536000
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
 
 # ============ Domain ============
 BACKEND_DOMAIN = os.getenv('BACKEND_DOMAIN', 'https://demo.cashflip.amoano.com')

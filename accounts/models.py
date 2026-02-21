@@ -210,6 +210,41 @@ class AuthConfig(models.Model):
         return obj
 
 
+class SMSProvider(models.Model):
+    """Configurable SMS provider for OTP delivery. Supports multiple providers with priority-based fallback."""
+    PROVIDER_CHOICES = [
+        ('twilio', 'Twilio'),
+        ('arkesel', 'Arkesel'),
+        ('hubtel', 'Hubtel'),
+        ('mnotify', 'mNotify'),
+        ('wigal', 'Wigal'),
+    ]
+    name = models.CharField(max_length=50, help_text='Display name (e.g. "Twilio Primary")')
+    provider_type = models.CharField(max_length=20, choices=PROVIDER_CHOICES)
+    api_key = models.CharField(max_length=500, help_text='API key / Account SID')
+    api_secret = models.CharField(max_length=500, blank=True, default='',
+        help_text='API secret / Auth token (blank if not needed)')
+    sender_id = models.CharField(max_length=20, default='CASHFLIP',
+        help_text='Alphanumeric sender ID or phone number')
+    base_url = models.URLField(blank=True, default='',
+        help_text='API base URL (blank = use provider default)')
+    is_active = models.BooleanField(default=True)
+    priority = models.IntegerField(default=0,
+        help_text='Higher priority = tried first. Providers are tried in descending priority order.')
+    extra_config = models.JSONField(default=dict, blank=True,
+        help_text='Provider-specific config JSON (e.g. {"fallback_number": "+1234567890"})')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-priority', 'name']
+        verbose_name = 'SMS Provider'
+        verbose_name_plural = 'SMS Providers'
+
+    def __str__(self):
+        return f'{self.name} ({self.get_provider_type_display()}) - {"Active" if self.is_active else "Inactive"}'
+
+
 class StaffMember(models.Model):
     player = models.OneToOneField(Player, on_delete=models.CASCADE, related_name='staff_profile')
     role = models.ForeignKey(AdminRole, on_delete=models.PROTECT, related_name='members')

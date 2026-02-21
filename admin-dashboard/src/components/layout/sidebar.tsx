@@ -3,13 +3,14 @@ import { useAuth } from '@/lib/auth'
 import {
   LayoutDashboard, Users, Gamepad2, ArrowLeftRight,
   Wallet, Building2, Settings, Shield, LogOut,
-  ChevronLeft, ChevronRight, TrendingUp,
+  ChevronLeft, ChevronRight, TrendingUp, Activity,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useState } from 'react'
 
 const navItems = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard, perm: null },
+  { to: '/live', label: 'Live Activity', icon: Activity, perm: null },
   { to: '/players', label: 'Players', icon: Users, perm: 'view_players' },
   { to: '/sessions', label: 'Game Sessions', icon: Gamepad2, perm: 'view_sessions' },
   { to: '/transactions', label: 'Transactions', icon: ArrowLeftRight, perm: 'view_transactions' },

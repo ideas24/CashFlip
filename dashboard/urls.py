@@ -49,10 +49,20 @@ urlpatterns = [
     path('search/', views.global_search, name='global_search'),
     path('notifications/', views.notifications_list, name='notifications_list'),
 
+    # Live Activity
+    path('live/', views.live_activity, name='live_activity'),
+
     # Settings
     path('settings/', views.settings_view, name='settings_view'),
     path('settings/branding/upload/', views.branding_upload, name='branding_upload'),
     path('settings/cloudinary-upload/', views.cloudinary_upload, name='cloudinary_upload'),
     path('settings/simulated/', views.simulated_config_manage, name='simulated_config_create'),
     path('settings/simulated/<int:config_id>/', views.simulated_config_manage, name='simulated_config_manage'),
+
+    # SMS Providers
+    path('sms-providers/', views.sms_providers, name='sms_providers'),
+    path('sms-providers/<int:pk>/', views.sms_provider_detail, name='sms_provider_detail'),
+
+    # Math Validation
+    path('game/validate-edge/', views.validate_house_edge, name='validate_house_edge'),
 ]

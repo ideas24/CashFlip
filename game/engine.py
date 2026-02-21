@@ -212,6 +212,9 @@ def execute_flip(session):
     else:
         # Add denomination value to cashout balance
         session.cashout_balance += value
+        # Enforce max_cashout cap
+        if config.max_cashout and session.cashout_balance > config.max_cashout:
+            session.cashout_balance = config.max_cashout
     
     session.save(update_fields=['nonce', 'flip_count', 'cashout_balance', 'status', 'ended_at'])
     

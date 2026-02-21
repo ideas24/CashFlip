@@ -238,35 +238,169 @@ def _send_whatsapp_otp(phone, code):
 
 def _send_sms_otp(phone, code):
     """
-    Send OTP via Twilio SMS.
+    Send OTP via SMS using multi-provider fallback chain.
     
-    Uses alphanumeric sender ID first (e.g. CASHFLIP). If that fails or
-    if TWILIO_FALLBACK_NUMBER is set, retries with a real phone number.
-    Ghana carriers (especially MTN) intermittently reject alphanumeric senders.
+    1. Query SMSProvider model for active providers (ordered by priority desc)
+    2. Try each provider until one succeeds
+    3. Fall back to Twilio env vars if no DB providers configured
     """
-    account_sid = settings.TWILIO_ACCOUNT_SID
-    auth_token = settings.TWILIO_AUTH_TOKEN
-    from_number = settings.TWILIO_PHONE_NUMBER
-    fallback_number = getattr(settings, 'TWILIO_FALLBACK_NUMBER', '')
-    
-    if not account_sid or not auth_token or not from_number:
-        logger.error('Twilio credentials not configured: sid=%s, token=%s, from=%s', bool(account_sid), bool(auth_token), bool(from_number))
-        return False
-    
     # Normalize phone to E.164 format
     normalized = phone.replace(' ', '')
     if normalized.startswith('0'):
         normalized = '+233' + normalized[1:]
     elif not normalized.startswith('+'):
         normalized = '+' + normalized
-    
+
     otp_expiry, _ = _get_auth_config()
     body = f'Cashflip - Your verification code is: {code}. Expires in {otp_expiry} minutes.'
-    
-    # For Ghana numbers: use real phone number FIRST (carriers reject alphanumeric),
-    # then try alphanumeric as fallback.
-    # For other countries: alphanumeric first, real number fallback.
-    is_ghana = normalized.startswith('+233')
+
+    # Try DB-configured providers first
+    try:
+        from accounts.models import SMSProvider
+        providers = list(SMSProvider.objects.filter(is_active=True).order_by('-priority'))
+    except Exception:
+        providers = []
+
+    if providers:
+        for provider in providers:
+            logger.info(f'SMS OTP: trying {provider.name} ({provider.provider_type}) to {normalized[:6]}***')
+            try:
+                success = _send_via_provider(provider, normalized, body)
+                if success:
+                    logger.info(f'SMS OTP sent via {provider.name} to {normalized[:6]}***')
+                    return True
+                logger.warning(f'SMS OTP failed via {provider.name}, trying next...')
+            except Exception as e:
+                logger.warning(f'SMS OTP error via {provider.name}: {e}')
+        logger.error(f'All DB SMS providers exhausted for {normalized[:6]}***')
+        return False
+
+    # Fallback: use Twilio from env vars (legacy path)
+    return _send_via_twilio_env(normalized, body)
+
+
+def _send_via_provider(provider, phone, body):
+    """Dispatch to the correct provider-specific sender."""
+    dispatch = {
+        'twilio': _send_via_twilio,
+        'arkesel': _send_via_arkesel,
+        'hubtel': _send_via_hubtel,
+        'mnotify': _send_via_mnotify,
+    }
+    handler = dispatch.get(provider.provider_type)
+    if not handler:
+        logger.warning(f'Unknown SMS provider type: {provider.provider_type}')
+        return False
+    return handler(provider, phone, body)
+
+
+def _send_via_twilio(provider, phone, body):
+    """Send SMS via Twilio using DB-configured provider."""
+    try:
+        from twilio.rest import Client
+        client = Client(provider.api_key, provider.api_secret)
+    except Exception as e:
+        logger.error(f'Twilio client init error: {e}')
+        return False
+
+    # Build sender list: fallback number first for Ghana
+    is_ghana = phone.startswith('+233')
+    fallback = provider.extra_config.get('fallback_number', '')
+    sender_id = provider.sender_id
+
+    if is_ghana and fallback:
+        senders = [fallback]
+        if sender_id != fallback:
+            senders.append(sender_id)
+    else:
+        senders = [sender_id]
+        if fallback and fallback != sender_id:
+            senders.append(fallback)
+
+    for sender in senders:
+        try:
+            msg = client.messages.create(body=body, from_=sender, to=phone)
+            logger.info(f'Twilio SMS sent: SID={msg.sid}, status={msg.status}, from={sender}')
+            return True
+        except Exception as e:
+            logger.warning(f'Twilio sender {sender} failed: {e}')
+    return False
+
+
+def _send_via_arkesel(provider, phone, body):
+    """Send SMS via Arkesel API."""
+    api_key = provider.api_key
+    sender_id = provider.sender_id or 'CASHFLIP'
+    url = provider.base_url or 'https://sms.arkesel.com/api/v2/sms/send'
+
+    try:
+        resp = requests.post(url, json={
+            'sender': sender_id,
+            'message': body,
+            'recipients': [phone],
+        }, headers={'api-key': api_key}, timeout=30)
+        logger.info(f'Arkesel response: {resp.status_code} {resp.text[:300]}')
+        return resp.status_code in [200, 201]
+    except Exception as e:
+        logger.warning(f'Arkesel error: {e}')
+        return False
+
+
+def _send_via_hubtel(provider, phone, body):
+    """Send SMS via Hubtel API."""
+    client_id = provider.api_key
+    client_secret = provider.api_secret
+    sender_id = provider.sender_id or 'CASHFLIP'
+    url = provider.base_url or 'https://smsc.hubtel.com/v1/messages/send'
+
+    try:
+        resp = requests.get(url, params={
+            'clientid': client_id,
+            'clientsecret': client_secret,
+            'from': sender_id,
+            'to': phone,
+            'content': body,
+        }, timeout=30)
+        logger.info(f'Hubtel response: {resp.status_code} {resp.text[:300]}')
+        return resp.status_code in [200, 201]
+    except Exception as e:
+        logger.warning(f'Hubtel error: {e}')
+        return False
+
+
+def _send_via_mnotify(provider, phone, body):
+    """Send SMS via mNotify API."""
+    api_key = provider.api_key
+    sender_id = provider.sender_id or 'CASHFLIP'
+    url = provider.base_url or 'https://apps.mnotify.net/smsapi'
+
+    try:
+        resp = requests.get(url, params={
+            'key': api_key,
+            'to': phone,
+            'msg': body,
+            'sender_id': sender_id,
+        }, timeout=30)
+        logger.info(f'mNotify response: {resp.status_code} {resp.text[:300]}')
+        data = resp.json() if resp.headers.get('content-type', '').startswith('application/json') else {}
+        return resp.status_code == 200 and data.get('status') != 'error'
+    except Exception as e:
+        logger.warning(f'mNotify error: {e}')
+        return False
+
+
+def _send_via_twilio_env(phone, body):
+    """Legacy: Send SMS via Twilio using env vars (fallback when no DB providers)."""
+    account_sid = settings.TWILIO_ACCOUNT_SID
+    auth_token = settings.TWILIO_AUTH_TOKEN
+    from_number = settings.TWILIO_PHONE_NUMBER
+    fallback_number = getattr(settings, 'TWILIO_FALLBACK_NUMBER', '')
+
+    if not account_sid or not auth_token or not from_number:
+        logger.error('Twilio credentials not configured: sid=%s, token=%s, from=%s', bool(account_sid), bool(auth_token), bool(from_number))
+        return False
+
+    is_ghana = phone.startswith('+233')
     if is_ghana and fallback_number:
         senders = [fallback_number]
         if from_number != fallback_number:
@@ -275,29 +409,25 @@ def _send_sms_otp(phone, code):
         senders = [from_number]
         if fallback_number and fallback_number != from_number:
             senders.append(fallback_number)
-    
+
     try:
         from twilio.rest import Client
         client = Client(account_sid, auth_token)
     except Exception as e:
         logger.error(f'Twilio client init error: {e}', exc_info=True)
         return False
-    
+
     for sender in senders:
         try:
-            logger.info(f'Twilio SMS: sending to {normalized}, from={sender}')
-            message = client.messages.create(
-                body=body,
-                from_=sender,
-                to=normalized
-            )
-            logger.info(f'SMS OTP sent to {normalized}, SID: {message.sid}, status: {message.status}, from={sender}')
+            logger.info(f'Twilio SMS (env): sending to {phone}, from={sender}')
+            message = client.messages.create(body=body, from_=sender, to=phone)
+            logger.info(f'SMS OTP sent to {phone}, SID: {message.sid}, status: {message.status}, from={sender}')
             return True
         except Exception as e:
-            logger.warning(f'Twilio SMS failed with sender {sender} to {normalized}: {e}')
+            logger.warning(f'Twilio SMS failed with sender {sender} to {phone}: {e}')
             if sender == senders[-1]:
-                logger.error(f'All Twilio senders exhausted for {normalized}', exc_info=True)
+                logger.error(f'All Twilio senders exhausted for {phone}', exc_info=True)
                 return False
             logger.info(f'Retrying with fallback sender...')
-    
+
     return False

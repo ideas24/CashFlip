@@ -10,9 +10,10 @@ from django.db import transaction
 from django.utils import timezone
 from drf_spectacular.utils import extend_schema
 from rest_framework import status
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, permission_classes, throttle_classes
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
+from rest_framework.throttling import UserRateThrottle
 
 from game.engine import execute_flip
 from game.models import (
@@ -190,8 +191,17 @@ def start_game(request):
     return Response(response_data, status=status.HTTP_201_CREATED)
 
 
+class FlipThrottle(UserRateThrottle):
+    rate = '30/minute'
+
+
+class CashoutThrottle(UserRateThrottle):
+    rate = '5/minute'
+
+
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
+@throttle_classes([FlipThrottle])
 def flip(request):
     """Execute a flip in the active game session."""
     player = request.user
@@ -200,10 +210,17 @@ def flip(request):
     if not session:
         return Response({'error': 'No active game session'}, status=status.HTTP_400_BAD_REQUEST)
 
+    # Redis distributed lock — prevent double-flip race condition
+    from django.core.cache import cache
+    lock_key = f'flip_lock:{session.id}'
+    if not cache.add(lock_key, 1, timeout=5):
+        return Response({'error': 'Flip in progress, please wait'}, status=status.HTTP_429_TOO_MANY_REQUESTS)
+
     try:
         result = execute_flip(session)
     except Exception as e:
         logger.error(f'execute_flip crashed for session {session.id}: {e}', exc_info=True)
+        cache.delete(lock_key)
         # Session may have been saved as 'lost' before the crash — release locked funds
         session.refresh_from_db()
         if session.status == 'lost':
@@ -217,6 +234,8 @@ def flip(request):
                 pass
         return Response({'error': 'Flip failed. Please try again.', 'success': False},
                         status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    cache.delete(lock_key)
 
     if not result.get('success'):
         return Response({'error': result.get('error', 'Flip failed')}, status=status.HTTP_400_BAD_REQUEST)
@@ -245,6 +264,7 @@ def flip(request):
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
+@throttle_classes([CashoutThrottle])
 def cashout(request):
     """Cash out the current game session."""
     player = request.user
@@ -256,11 +276,25 @@ def cashout(request):
     if session.cashout_balance <= 0:
         return Response({'error': 'Nothing to cash out'}, status=status.HTTP_400_BAD_REQUEST)
 
+    # Enforce min flips before cashout
+    try:
+        config = GameConfig.objects.get(currency=session.currency, is_active=True)
+    except GameConfig.DoesNotExist:
+        config = None
+
+    if config and session.flip_count < config.min_flips_before_cashout:
+        remaining = config.min_flips_before_cashout - session.flip_count
+        return Response({
+            'error': f'Flip at least {remaining} more time{"s" if remaining > 1 else ""} before cashing out',
+            'min_flips': config.min_flips_before_cashout,
+            'current_flips': session.flip_count,
+        }, status=status.HTTP_400_BAD_REQUEST)
+
     from wallet.models import Wallet, WalletTransaction
 
     with transaction.atomic():
         wallet = Wallet.objects.select_for_update().get(player=player)
-        cashout_amount = session.cashout_balance
+        cashout_amount = min(session.cashout_balance, config.max_cashout) if config else session.cashout_balance
 
         # Credit wallet
         balance_before = wallet.balance
@@ -308,6 +342,26 @@ def cashout(request):
             resp_data['new_badges'] = new_badges
     except Exception:
         pass
+
+    # Instant cashout: include MoMo account data if eligible
+    if config and config.instant_cashout_enabled and cashout_amount >= config.instant_cashout_min_amount:
+        from payments.models import MobileMoneyAccount
+        primary_account = MobileMoneyAccount.objects.filter(
+            player=player, is_primary=True, is_active=True
+        ).first()
+        resp_data['instant_cashout_available'] = True
+        resp_data['instant_cashout_min'] = str(config.instant_cashout_min_amount)
+        if primary_account:
+            resp_data['primary_momo_account'] = {
+                'id': str(primary_account.id),
+                'mobile_number': primary_account.mobile_number,
+                'network': primary_account.network,
+                'verified_name': primary_account.verified_name,
+            }
+        else:
+            resp_data['primary_momo_account'] = None
+    else:
+        resp_data['instant_cashout_available'] = False
 
     return Response(resp_data)
 

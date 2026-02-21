@@ -46,6 +46,11 @@ app.conf.beat_schedule = {
         'task': 'partner.tasks.task_generate_settlements',
         'schedule': crontab(hour=3, minute=0),
     },
+    # Auto-flip stale sessions every 10 seconds
+    'auto-flip-stale-sessions': {
+        'task': 'game.tasks.auto_flip_stale_sessions',
+        'schedule': 10.0,
+    },
 }
 
 

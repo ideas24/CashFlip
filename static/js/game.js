@@ -1369,111 +1369,66 @@
         fetch(API.base + '/accounts/auth/methods/')
             .then(r => r.json())
             .then(methods => {
-                // OTP channels
+                // OTP channels — WhatsApp first, SMS second
                 const smsBtn = document.querySelector('.channel-btn[data-channel="sms"]');
                 const waBtn = document.querySelector('.channel-btn[data-channel="whatsapp"]');
+                const channelsEl = document.getElementById('otp-channels');
                 if (smsBtn && !methods.sms_otp) smsBtn.style.display = 'none';
                 if (waBtn && !methods.whatsapp_otp) waBtn.style.display = 'none';
-                // If only one channel available, auto-select it
-                if (methods.sms_otp && !methods.whatsapp_otp && smsBtn) {
-                    smsBtn.classList.add('active');
-                    state.otpChannel = 'sms';
-                } else if (!methods.sms_otp && methods.whatsapp_otp && waBtn) {
-                    waBtn.classList.add('active');
-                    state.otpChannel = 'whatsapp';
+                // Hide entire phone section if neither SMS nor WhatsApp enabled
+                if (!methods.sms_otp && !methods.whatsapp_otp) {
+                    document.getElementById('otp-step-1')?.querySelector('.input-group')?.style.setProperty('display', 'none');
+                    if (channelsEl) channelsEl.style.display = 'none';
+                    document.getElementById('send-otp-btn')?.style.setProperty('display', 'none');
                 }
-                // Social login buttons
-                let anySocial = false;
+                // Default channel: WhatsApp preferred, SMS fallback
+                if (methods.whatsapp_otp) {
+                    state.otpChannel = 'whatsapp';
+                    document.querySelectorAll('.channel-btn').forEach(b => b.classList.remove('active'));
+                    if (waBtn) waBtn.classList.add('active');
+                } else if (methods.sms_otp) {
+                    state.otpChannel = 'sms';
+                    document.querySelectorAll('.channel-btn').forEach(b => b.classList.remove('active'));
+                    if (smsBtn) smsBtn.classList.add('active');
+                }
+                // Alt-auth buttons (Google, Facebook, Email) — shown below divider
+                let anyAlt = false;
                 if (methods.google) {
                     const g = document.getElementById('btn-google');
                     if (g) g.style.display = '';
-                    anySocial = true;
+                    anyAlt = true;
                 }
                 if (methods.facebook) {
                     const f = document.getElementById('btn-facebook');
                     if (f) f.style.display = '';
-                    anySocial = true;
+                    anyAlt = true;
                 }
-                if (anySocial) {
-                    const div = document.getElementById('social-divider');
-                    const btns = document.getElementById('social-buttons');
+                if (methods.email_password) {
+                    const e = document.getElementById('btn-email-auth');
+                    if (e) e.style.display = '';
+                    anyAlt = true;
+                }
+                if (anyAlt) {
+                    const div = document.getElementById('alt-auth-divider');
+                    const btns = document.getElementById('alt-auth-buttons');
                     if (div) div.style.display = '';
                     if (btns) btns.style.display = '';
-                }
-                // Email/password login
-                const emailStep = document.getElementById('email-auth-step');
-                const signupStep = document.getElementById('email-signup-step');
-                if (methods.email_password) {
-                    // Show email/password as a tab option
-                    const emailTab = document.getElementById('auth-tab-email');
-                    if (emailTab) emailTab.style.display = '';
-                } else {
-                    if (emailStep) emailStep.style.display = 'none';
-                    if (signupStep) signupStep.style.display = 'none';
-                }
-
-                // Hide Phone tab if SMS is not enabled (WhatsApp doesn't need a tab)
-                const phoneTab = document.getElementById('auth-tab-phone');
-                const authTabsContainer = document.getElementById('auth-tabs');
-                
-                if (!methods.sms_otp) {
-                    // Hide Phone tab when SMS is disabled
-                    if (phoneTab) phoneTab.style.display = 'none';
-                    
-                    // If only WhatsApp is enabled (no SMS, no Email), hide tabs entirely
-                    if (!methods.email_password && methods.whatsapp_otp) {
-                        if (authTabsContainer) authTabsContainer.style.display = 'none';
-                        // Show OTP step by default since no tabs
-                        document.getElementById('otp-step-1')?.classList.add('active');
-                    }
-                    // If only Email is enabled, show it by default
-                    else if (methods.email_password && !methods.whatsapp_otp) {
-                        if (authTabsContainer) authTabsContainer.style.display = '';
-                        document.getElementById('otp-step-1')?.classList.remove('active');
-                        if (emailStep) emailStep.classList.add('active');
-                        // Make email tab active since phone tab is hidden
-                        const emailTab = document.getElementById('auth-tab-email');
-                        if (emailTab) emailTab.classList.add('active');
-                        // Hide WhatsApp option in Email step
-                        const waDivider = document.getElementById('email-step-whatsapp-divider');
-                        const waBtn = document.getElementById('email-step-whatsapp-btn');
-                        if (waDivider) waDivider.style.display = 'none';
-                        if (waBtn) waBtn.style.display = 'none';
-                    }
-                    // If both Email and WhatsApp are enabled, show tabs with Email active
-                    else if (methods.email_password && methods.whatsapp_otp) {
-                        if (authTabsContainer) authTabsContainer.style.display = '';
-                        document.getElementById('otp-step-1')?.classList.remove('active');
-                        if (emailStep) emailStep.classList.add('active');
-                        // Make email tab active since phone tab is hidden
-                        const emailTab = document.getElementById('auth-tab-email');
-                        if (emailTab) emailTab.classList.add('active');
-                        // Show WhatsApp option in Email step
-                        const waDivider = document.getElementById('email-step-whatsapp-divider');
-                        const waBtn = document.getElementById('email-step-whatsapp-btn');
-                        if (waDivider) waDivider.style.display = '';
-                        if (waBtn) waBtn.style.display = '';
-                    }
-                } else {
-                    // Show Phone tab when SMS is enabled
-                    if (phoneTab) phoneTab.style.display = '';
-                    if (authTabsContainer) authTabsContainer.style.display = '';
                 }
             })
             .catch(() => {}); // Fail silently — buttons stay hidden
 
-        // Auth tab switching (Phone vs Email)
-        document.querySelectorAll('.auth-tab-btn').forEach(tab => {
-            tab.addEventListener('click', () => {
-                document.querySelectorAll('.auth-tab-btn').forEach(t => t.classList.remove('active'));
-                tab.classList.add('active');
-                // Hide all auth steps
-                document.querySelectorAll('.auth-step').forEach(s => s.classList.remove('active'));
-                // Show the chosen step
-                const target = tab.dataset.target;
-                document.getElementById(target)?.classList.add('active');
-                showError('');
-            });
+        // "Continue with Email" button — switch to email auth step
+        document.getElementById('btn-email-auth')?.addEventListener('click', () => {
+            document.querySelectorAll('.auth-step').forEach(s => s.classList.remove('active'));
+            document.getElementById('email-auth-step')?.classList.add('active');
+            showError('');
+        });
+
+        // Back to phone from email step
+        document.getElementById('back-to-phone-from-email')?.addEventListener('click', () => {
+            document.querySelectorAll('.auth-step').forEach(s => s.classList.remove('active'));
+            document.getElementById('otp-step-1')?.classList.add('active');
+            showError('');
         });
 
         // Email login
@@ -1533,21 +1488,6 @@
                 }
             } catch (e) { showError('Network error'); }
             btn.disabled = false; btn.textContent = 'Create Account';
-        });
-
-        // WhatsApp button in Email step
-        document.getElementById('email-step-whatsapp-btn')?.addEventListener('click', () => {
-            // Switch to OTP step and set WhatsApp as active channel
-            document.getElementById('email-auth-step')?.classList.remove('active');
-            document.getElementById('otp-step-1')?.classList.add('active');
-            // Hide tabs when in WhatsApp flow (no tabs needed for OTP)
-            const authTabsContainer = document.getElementById('auth-tabs');
-            if (authTabsContainer) authTabsContainer.style.display = 'none';
-            // Set WhatsApp as active channel
-            state.otpChannel = 'whatsapp';
-            document.querySelectorAll('.channel-btn').forEach(btn => btn.classList.remove('active'));
-            document.querySelector('.channel-btn[data-channel="whatsapp"]')?.classList.add('active');
-            showError('');
         });
 
         // Switch between login/signup
@@ -1658,17 +1598,6 @@
             document.getElementById('otp-step-1').classList.add('active');
             document.querySelectorAll('.otp-digit').forEach(d => d.value = '');
             showError('');
-            
-            // If we came from Email step (tabs are hidden), show tabs with Email active
-            const authTabsContainer = document.getElementById('auth-tabs');
-            if (authTabsContainer && authTabsContainer.style.display === 'none') {
-                authTabsContainer.style.display = '';
-                document.getElementById('otp-step-1')?.classList.remove('active');
-                document.getElementById('email-auth-step')?.classList.add('active');
-                // Make Email tab active
-                document.querySelectorAll('.auth-tab-btn').forEach(t => t.classList.remove('active'));
-                document.getElementById('auth-tab-email')?.classList.add('active');
-            }
         });
     }
 
@@ -2078,6 +2007,8 @@
                 if (data.new_badges) {
                     data.new_badges.forEach((b, i) => setTimeout(() => showBadgeNotification(b), 2000 + i * 1500));
                 }
+                // Instant MoMo cashout
+                _setupInstantMomo(data);
             } else {
                 showToast(data.error || 'Cashout failed');
                 btn.disabled = false;
@@ -2085,6 +2016,111 @@
         } catch (e) {
             showToast('Network error');
             btn.disabled = false;
+        }
+    }
+
+    function _setupInstantMomo(cashoutData) {
+        const section = document.getElementById('instant-momo-section');
+        const hasAccEl = document.getElementById('momo-has-account');
+        const noAccEl = document.getElementById('momo-no-account');
+        if (!section) return;
+
+        // Reset
+        section.style.display = 'none';
+        if (hasAccEl) hasAccEl.style.display = 'none';
+        if (noAccEl) noAccEl.style.display = 'none';
+
+        if (!cashoutData.instant_cashout_available) return;
+
+        section.style.display = '';
+        const cashoutAmount = cashoutData.cashout_amount;
+
+        if (cashoutData.primary_momo_account) {
+            const acc = cashoutData.primary_momo_account;
+            hasAccEl.style.display = '';
+            document.getElementById('instant-momo-name').textContent = acc.verified_name;
+            document.getElementById('instant-momo-number').textContent = `${acc.mobile_number} (${acc.network})`;
+            const statusEl = document.getElementById('instant-momo-status');
+            statusEl.textContent = '';
+            statusEl.className = 'momo-status';
+
+            const sendBtn = document.getElementById('instant-momo-send-btn');
+            sendBtn.disabled = false;
+            sendBtn.textContent = `💸 Send GH₵${parseFloat(cashoutAmount).toFixed(2)} to MoMo`;
+            sendBtn.onclick = async () => {
+                sendBtn.disabled = true;
+                sendBtn.textContent = 'Sending...';
+                statusEl.textContent = 'Processing withdrawal...';
+                statusEl.className = 'momo-status pending';
+                try {
+                    const resp = await API.post('/payments/withdraw/', {
+                        amount: cashoutAmount,
+                        account_id: acc.id,
+                    });
+                    const d = await resp.json();
+                    if (d.success) {
+                        statusEl.textContent = `Sent! Funds will arrive in 1-5 minutes.`;
+                        statusEl.className = 'momo-status success';
+                        sendBtn.textContent = '✅ Sent';
+                        loadWalletBalance();
+                    } else {
+                        statusEl.textContent = d.error || 'Withdrawal failed';
+                        statusEl.className = 'momo-status error';
+                        sendBtn.disabled = false;
+                        sendBtn.textContent = `💸 Retry`;
+                    }
+                } catch (e) {
+                    statusEl.textContent = 'Network error';
+                    statusEl.className = 'momo-status error';
+                    sendBtn.disabled = false;
+                    sendBtn.textContent = `💸 Retry`;
+                }
+            };
+        } else {
+            noAccEl.style.display = '';
+            const addStatus = document.getElementById('instant-momo-add-status');
+            addStatus.textContent = '';
+            addStatus.className = 'momo-status';
+            const phoneInput = document.getElementById('instant-momo-phone');
+            const addBtn = document.getElementById('instant-momo-add-btn');
+            if (phoneInput) phoneInput.value = '';
+            addBtn.disabled = false;
+            addBtn.onclick = async () => {
+                const phone = phoneInput?.value?.trim();
+                if (!phone || phone.length < 9) {
+                    addStatus.textContent = 'Enter a valid phone number';
+                    addStatus.className = 'momo-status error';
+                    return;
+                }
+                addBtn.disabled = true;
+                addBtn.textContent = 'Verifying...';
+                addStatus.textContent = 'Verifying account...';
+                addStatus.className = 'momo-status pending';
+                try {
+                    const resp = await API.post('/payments/momo-accounts/add/', { mobile_number: phone });
+                    const d = await resp.json();
+                    if (d.success || d.account) {
+                        addStatus.textContent = `Verified: ${d.verified_name || d.account?.verified_name || phone}`;
+                        addStatus.className = 'momo-status success';
+                        // Reload — now show the send button
+                        setTimeout(() => {
+                            const newAcc = d.account || { id: d.account_id, mobile_number: phone, network: d.network || '', verified_name: d.verified_name || '' };
+                            cashoutData.primary_momo_account = newAcc;
+                            _setupInstantMomo(cashoutData);
+                        }, 1500);
+                    } else {
+                        addStatus.textContent = d.error || 'Verification failed';
+                        addStatus.className = 'momo-status error';
+                        addBtn.disabled = false;
+                        addBtn.textContent = 'Verify & Add';
+                    }
+                } catch (e) {
+                    addStatus.textContent = 'Network error';
+                    addStatus.className = 'momo-status error';
+                    addBtn.disabled = false;
+                    addBtn.textContent = 'Verify & Add';
+                }
+            };
         }
     }
 
