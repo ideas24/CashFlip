@@ -444,10 +444,21 @@
         return mode === 'gif';
     }
 
+    const _imgStyle = 'position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:inherit;display:block;';
+
+    // Start flip image — shown only on the first card when a new session starts.
+    // Uses configurable start_flip_image_url from admin. Falls back to random denom.
+    function _startFlipCardHTML() {
+        const startUrl = state.gameConfig?.start_flip_image_url;
+        if (startUrl) {
+            return `<img src="${startUrl}" alt="card" style="${_imgStyle}" />`;
+        }
+        // No start image configured — show a random denomination glimpse
+        return _randomDenomCardHTML();
+    }
+
     // Random denomination glimpse — shows a denomination's static first frame.
-    // The GIF flip animation shows the note back as it leaves, so no separate
-    // card back is needed. This is purely decorative while waiting for the next flip.
-    // Falls back to card_back_image_url or SVG if no denominations available.
+    // Used for all cards AFTER the first flip (next-card-underneath).
     function _randomDenomCardHTML() {
         const denoms = state.session?.currency?.denominations || state.denominations || [];
         const nonZero = denoms.filter(d => !d.is_zero && d.is_active);
@@ -455,20 +466,16 @@
             const denom = nonZero[Math.floor(Math.random() * nonZero.length)];
             const imgUrl = _getCardImageUrl(denom);
             if (imgUrl) {
-                return `<img src="${imgUrl}" alt="card" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:inherit;display:block;" />`;
+                return `<img src="${imgUrl}" alt="card" style="${_imgStyle}" />`;
             }
         }
-        // Fallback: configurable card back image or SVG
-        const backUrl = state.gameConfig?.card_back_image_url;
-        if (backUrl) {
-            return `<img src="${backUrl}" alt="card" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:inherit;display:block;" />`;
-        }
+        // Fallback SVG
         const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='400' height='225' viewBox='0 0 400 225'>`
             + `<rect width='400' height='225' fill='%230d0d2b'/>`
             + `<text x='200' y='105' text-anchor='middle' font-size='36' font-weight='800' fill='%23ffd700'>FLIP</text>`
             + `<text x='200' y='135' text-anchor='middle' font-size='12' fill='rgba(255,255,255,0.5)' letter-spacing='2'>TAP TO REVEAL</text>`
             + `</svg>`;
-        return `<img src="data:image/svg+xml,${svg}" alt="card" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:inherit;display:block;" />`;
+        return `<img src="data:image/svg+xml,${svg}" alt="card" style="${_imgStyle}" />`;
     }
 
     function _getCardImageUrl(denom) {
@@ -502,9 +509,9 @@
         card.id = 'active-note';
         card.style.zIndex = '1';
 
-        // Show a random denomination glimpse — the GIF animation reveals the actual
-        // payout denomination. This is purely decorative while waiting for the flip.
-        card.innerHTML = _randomDenomCardHTML();
+        // Session start: show configurable start flip image (or random denom fallback).
+        // Subsequent cards use _randomDenomCardHTML() via _placeNextCardUnderneath.
+        card.innerHTML = _startFlipCardHTML();
 
         stage.appendChild(card);
         _startAutoFlipTimer();

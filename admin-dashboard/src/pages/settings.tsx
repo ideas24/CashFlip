@@ -45,7 +45,7 @@ interface GameSettings {
   flip_animation_speed_ms: number
   flip_sound_enabled: boolean
   flip_sound_url: string
-  card_back_image_url: string
+  start_flip_image_url: string
   simulated_feed_enabled: boolean
   simulated_feed_data: SimFeedEntry[]
   is_active: boolean
@@ -690,24 +690,24 @@ export default function SettingsPage() {
                           )}
                         </div>
                       )}
-                      {/* Card Back Image */}
+                      {/* Start Flip Image */}
                       <div className="mt-4 p-3 rounded-lg border border-border/50 bg-zinc-900/50">
-                        <label className="block text-xs text-slate-400 mb-2 font-medium">Card Back Image</label>
-                        <p className="text-xs text-muted mb-2">Shown on the card before each flip. The flip animation replaces it with the actual denomination. Upload a card back design (PNG/JPG).</p>
-                        {s.game.card_back_image_url && (
+                        <label className="block text-xs text-slate-400 mb-2 font-medium">Start Flip Image</label>
+                        <p className="text-xs text-muted mb-2">Shown only on the first card when a new session starts. After the first flip, cards show denomination glimpses. Upload a branded start image (PNG/JPG).</p>
+                        {s.game.start_flip_image_url && (
                           <div className="mb-2 flex items-center gap-2">
                             <div className="rounded overflow-hidden border border-border bg-black" style={{maxHeight: 80, maxWidth: 140}}>
-                              <img src={s.game.card_back_image_url} alt="card back" className="h-20 object-cover" />
+                              <img src={s.game.start_flip_image_url} alt="start flip" className="h-20 object-cover" />
                             </div>
-                            <button onClick={() => updateGame('card_back_image_url', '')}
+                            <button onClick={() => updateGame('start_flip_image_url', '')}
                               className="text-xs text-red-400 hover:text-red-300 cursor-pointer px-2 py-1 rounded border border-red-500/30 bg-red-500/10">
                               Remove
                             </button>
                           </div>
                         )}
                         <div className="flex items-center gap-2">
-                          <Input type="text" placeholder="Cloudinary URL (leave empty for default gradient)" value={s.game.card_back_image_url || ''}
-                            className="text-xs flex-1" onChange={e => updateGame('card_back_image_url', e.target.value)} />
+                          <Input type="text" placeholder="Cloudinary URL (leave empty for random denomination)" value={s.game.start_flip_image_url || ''}
+                            className="text-xs flex-1" onChange={e => updateGame('start_flip_image_url', e.target.value)} />
                           <label className="shrink-0">
                             <span className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-violet-500/20 text-violet-400 text-xs rounded cursor-pointer hover:bg-violet-500/30 transition">
                               <Upload size={12} /> {uploading ? '...' : 'Upload'}
@@ -720,17 +720,17 @@ export default function SettingsPage() {
                                 try {
                                   const formData = new FormData()
                                   formData.append('file', file)
-                                  formData.append('folder', 'cashflip/card-backs')
+                                  formData.append('folder', 'cashflip/start-images')
                                   const resp = await api.upload<{ url: string }>('/settings/cloudinary-upload/', formData)
-                                  if (resp.url) updateGame('card_back_image_url', resp.url)
+                                  if (resp.url) updateGame('start_flip_image_url', resp.url)
                                 } catch {}
                                 setUploading(false)
                                 e.target.value = ''
                               }} />
                           </label>
                         </div>
-                        {!s.game.card_back_image_url && (
-                          <p className="text-xs text-violet-400/60 mt-1.5">Using default: gradient with "FLIP / TAP TO REVEAL" text</p>
+                        {!s.game.start_flip_image_url && (
+                          <p className="text-xs text-violet-400/60 mt-1.5">No start image — first card shows a random denomination glimpse</p>
                         )}
                       </div>
                     </div>

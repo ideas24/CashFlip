@@ -73,7 +73,7 @@ class GameConfigPublicSerializer(serializers.ModelSerializer):
                   'min_flips_before_cashout', 'instant_cashout_enabled', 'instant_cashout_min_amount',
                   'auto_flip_seconds', 'flip_animation_mode', 'flip_display_mode',
                   'flip_animation_speed_ms', 'flip_sound_enabled', 'flip_sound_url',
-                  'card_back_image_url', 'simulated_feed_enabled',
+                  'start_flip_image_url', 'simulated_feed_enabled',
                   'payout_mode', 'decay_factor', 'max_flips_per_session',
                   'holiday_mode_enabled']
 

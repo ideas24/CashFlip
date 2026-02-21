@@ -197,8 +197,8 @@ class GameConfig(models.Model):
         help_text='Play money-flipping sound during flip animation')
     flip_sound_url = models.URLField(max_length=500, blank=True, default='',
         help_text='Custom flip sound URL (Cloudinary). Empty = use default /static/sounds/money-flip.mp3')
-    card_back_image_url = models.URLField(max_length=500, blank=True, default='',
-        help_text='Card back image URL (Cloudinary). Shown before flip — denomination revealed by animation. Empty = gradient fallback.')
+    start_flip_image_url = models.URLField(max_length=500, blank=True, default='',
+        help_text='Image shown on the first card when a new session starts (Cloudinary). Subsequent cards show denomination glimpses.')
     simulated_feed_enabled = models.BooleanField(default=False,
         help_text='Enable simulated live feed for demo/pitching (fake leaderboard entries)')
     simulated_feed_data = models.JSONField(default=list, blank=True,
