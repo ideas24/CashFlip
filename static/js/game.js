@@ -448,15 +448,13 @@
 
     const _imgStyle = 'position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:inherit;display:block;';
 
-    // Start flip image — shown only on the first card when a new session starts.
-    // Uses configurable start_flip_image_url from admin. Falls back to random denom.
+    // Start flip image — shown only on the very first card of a new session.
     function _startFlipCardHTML() {
         const startUrl = state.gameConfig?.start_flip_image_url;
         if (startUrl) {
             return `<img src="${startUrl}" alt="card" style="${_imgStyle}" />`;
         }
-        // No start image configured — show a random denomination glimpse
-        return _randomDenomCardHTML();
+        return ''; // Empty — dark card background shows through
     }
 
     // Random denomination glimpse — shows a denomination's static first frame.
@@ -511,10 +509,13 @@
         card.id = 'active-note';
         card.style.zIndex = '1';
 
-        // Show configurable start flip image (or random denom fallback).
-        // Using start image for ALL cards prevents denomination mismatch —
-        // the GIF animation itself reveals the actual denomination.
-        card.innerHTML = _startFlipCardHTML();
+        // First card of session: configurable start flip image.
+        // All subsequent cards: empty dark card — denomination appears on flip.
+        if (_isFirstCard) {
+            card.innerHTML = _startFlipCardHTML();
+            _isFirstCard = false;
+        }
+        // else: empty — .banknote-card CSS gives dark background
 
         stage.appendChild(card);
         _startAutoFlipTimer();
@@ -753,40 +754,38 @@
     }
 
     // ---- GIF FLIP ANIMATION ----
-    // The card shows a generic card back. On flip: replace with the actual denomination's
-    // animated GIF — the animation reveals the denomination (WYSIWYG).
-    // Cloudinary dl_X controls frame timing to match flip_animation_speed_ms.
+    // Card starts empty (dark). On flip: load the denomination's animated GIF
+    // directly — the GIF IS the flip animation revealing the denomination (WYSIWYG).
+    // Uses raw GIF URL (no Cloudinary speed transforms — they break animation).
     // Cache-bust forces GIF to restart from frame 0 every time.
     function _flipWithGif(card, gifPath, durationMs, value, sym, resolve, denomData) {
-        const frames = denomData?.flip_sequence_frames || 31;
-        const gifUrl = _gifAnimatedFill(_assetUrl(gifPath), durationMs, frames);
-        const cacheBust = `?t=${Date.now()}`;
+        const gifUrl = _assetUrl(gifPath);
+        const cacheBust = `?cb=${Date.now()}`;
         let _gifFired = false; // Double-fire guard
 
-        card.classList.remove('entering');
+        card.classList.remove('entering', 'dragging', 'spring-back');
+        card.style.transform = '';
+        card.style.opacity = '1';
 
-        // Pre-place next card underneath (hidden — shows generic card back)
+        // Pre-place next card underneath (hidden, empty dark card)
         _placeNextCardUnderneath();
 
-        // Replace card back with the animated GIF (reveals the denomination)
-        const rawGifUrl = _assetUrl(gifPath);
-        const imgStyle = 'width:100%;height:100%;object-fit:cover;display:block;border-radius:inherit;';
-        const cardImg = card.querySelector('img');
-        if (cardImg) {
-            cardImg.style.cssText = imgStyle;
-            cardImg.src = gifUrl + cacheBust;
-            // Fallback: if Cloudinary transform fails, use raw GIF
-            cardImg.onerror = () => { cardImg.onerror = null; cardImg.src = rawGifUrl + cacheBust; };
-        } else {
-            card.innerHTML = `<img src="${gifUrl}${cacheBust}" alt="flip" style="${imgStyle}" />`;
-            const newImg = card.querySelector('img');
-            if (newImg) newImg.onerror = () => { newImg.onerror = null; newImg.src = rawGifUrl + cacheBust; };
-        }
+        // Load the denomination's flip GIF directly onto the card.
+        // The GIF animation reveals the denomination — WYSIWYG.
+        card.innerHTML = `<img src="${gifUrl}${cacheBust}" alt="flip" style="${_imgStyle}" />`;
 
         // Guarded completion handler — only fires once
         const onGifEnd = () => {
             if (_gifFired) return;
             _gifFired = true;
+
+            // Swap to denomination face image as final resting state (clear WYSIWYG visual)
+            const faceUrl = denomData?.face_image_path
+                ? _cloudinaryFill(_assetUrl(denomData.face_image_path)) : null;
+            if (faceUrl) {
+                const img = card.querySelector('img');
+                if (img) { img.src = faceUrl; img.style.cssText = _imgStyle; }
+            }
 
             _noteFlipCount++;
             updateRunningTotal();
@@ -795,30 +794,27 @@
             if (pile) pile.classList.add('visible');
             if (pileCount) pileCount.textContent = _noteFlipCount;
 
-            // Reveal the next card underneath (shows static GIF first frame)
-            const nextCard = document.getElementById('next-note');
-            if (nextCard) nextCard.style.opacity = '1';
+            // Brief pause to show the denomination face, then move to pile
+            setTimeout(() => {
+                // Reveal the next card underneath (empty dark card)
+                const nextCard = document.getElementById('next-note');
+                if (nextCard) nextCard.style.opacity = '1';
 
-            card.removeAttribute('id');
-            card.classList.add('to-pile');
-            card.addEventListener('animationend', () => card.remove(), { once: true });
-            // Fallback removal if animationend doesn't fire
-            setTimeout(() => { if (card.parentNode) card.remove(); }, 600);
+                card.removeAttribute('id');
+                card.classList.add('to-pile');
+                card.addEventListener('animationend', () => card.remove(), { once: true });
+                setTimeout(() => { if (card.parentNode) card.remove(); }, 600);
 
-            // Promote the underneath card to active (shows static GIF first frame)
-            const next = document.getElementById('next-note');
-            if (next) {
-                next.id = 'active-note';
-                next.querySelector('img')?.removeAttribute('id');
-                const faceImg = next.querySelector('img');
-                if (faceImg) faceImg.id = 'card-face-img';
-            }
-            _startAutoFlipTimer();
-            state.isFlipping = false;
-            resolve();
+                // Promote the underneath card to active
+                const next = document.getElementById('next-note');
+                if (next) { next.id = 'active-note'; }
+                _startAutoFlipTimer();
+                state.isFlipping = false;
+                resolve();
+            }, 400); // 400ms pause to see the denomination face
         };
 
-        // GIF plays for the configured duration, then complete
+        // GIF plays for the configured duration, then show face + move to pile
         setTimeout(onGifEnd, durationMs);
     }
 
@@ -949,10 +945,8 @@
         nextCard.id = 'next-note';
         nextCard.style.zIndex = '0';
         nextCard.style.opacity = '0'; // Hidden until current card exits
-
-        // Show start flip image (or random denom fallback) — neutral waiting state.
-        // The GIF animation itself reveals the actual denomination.
-        nextCard.innerHTML = _startFlipCardHTML();
+        // Empty card — dark background from .banknote-card CSS.
+        // Denomination appears on flip via API result.
 
         // Insert underneath (before active card)
         const active = document.getElementById('active-note');
@@ -1025,83 +1019,36 @@
     }
 
     // ---- CSS FALLBACK FLIP ANIMATION ----
+    // Used when no GIF/video/PNG assets are available.
+    // Shows the denomination face image directly on the card with a reveal animation.
     function _flipWithCSS(card, isZero, value, sym, denomData, resolve) {
-        const backFace = document.getElementById('active-note-back');
-        if (backFace) {
-            const serial = 'CF-' + Math.random().toString(36).substring(2, 10).toUpperCase();
-            if (isZero) {
-                // Use zero face image if available
-                const zeroFace = denomData?.face_image_path
-                    ? _cloudinaryFill(_assetUrl(denomData.face_image_path)) : null;
-                if (zeroFace) {
-                    backFace.classList.add('zero-note', 'has-image');
-                    backFace.innerHTML = `
-                        <img src="${zeroFace}" alt="ZERO" />
-                        <div class="nf-denom-overlay">
-                            <span class="nf-denom-value">ZERO</span>
-                            <span class="nf-denom-label">GAME OVER</span>
-                        </div>
-                    `;
-                } else {
-                    backFace.classList.add('zero-note');
-                    backFace.innerHTML = `
-                        <div class="nf-guilloche-back"></div>
-                        <div class="nf-watermark"></div>
-                        <div class="nf-security-strip"></div>
-                        <div class="nf-inner-frame-back">
-                            <div class="nf-bank-name">CASHFLIP</div>
-                            <span class="nf-corner-val nf-cv-tl">0</span>
-                            <span class="nf-corner-val nf-cv-tr">0</span>
-                            <span class="nf-corner-val nf-cv-bl">0</span>
-                            <span class="nf-corner-val nf-cv-br">0</span>
-                            <div class="nf-serial">${serial}</div>
-                        </div>
-                        <div class="nf-denom-overlay">
-                            <span class="nf-denom-value">ZERO</span>
-                            <span class="nf-denom-label">GAME OVER</span>
-                        </div>
-                    `;
-                }
-            } else {
-                const faceImgPath = denomData?.face_image_path
-                    ? _cloudinaryFill(_assetUrl(denomData.face_image_path))
-                    : (denomData?.front_image_url || denomData?.image_url);
-                if (faceImgPath) {
-                    backFace.classList.add('has-image');
-                    backFace.innerHTML = `
-                        <img src="${faceImgPath}" alt="${sym}${value}" />
-                        <div class="nf-denom-overlay">
-                            <span class="nf-denom-value">+${sym}${parseFloat(value).toFixed(2)}</span>
-                        </div>
-                    `;
-                } else {
-                    const shortVal = parseFloat(denomData?.value || value).toFixed(0);
-                    backFace.innerHTML = `
-                        <div class="nf-guilloche-back"></div>
-                        <div class="nf-watermark"></div>
-                        <div class="nf-security-strip"></div>
-                        <div class="nf-inner-frame-back">
-                            <div class="nf-bank-name">BANK OF GHANA</div>
-                            <span class="nf-corner-val nf-cv-tl">${shortVal}</span>
-                            <span class="nf-corner-val nf-cv-tr">${shortVal}</span>
-                            <span class="nf-corner-val nf-cv-bl">${shortVal}</span>
-                            <span class="nf-corner-val nf-cv-br">${shortVal}</span>
-                            <div class="nf-serial">${serial}</div>
-                        </div>
-                        <div class="nf-denom-overlay">
-                            <span class="nf-denom-value">+${sym}${parseFloat(value).toFixed(2)}</span>
-                            <span class="nf-denom-label">GHANA CEDI</span>
-                        </div>
-                    `;
-                }
-            }
-        }
-
         card.classList.remove('entering', 'dragging', 'spring-back');
         card.style.transform = '';
         card.style.opacity = '1';
 
-        // Simple fade-based reveal (no 3D rotateY)
+        // Pre-place next card underneath
+        if (!isZero) _placeNextCardUnderneath();
+
+        // Build the denomination face content
+        const faceUrl = denomData?.face_image_path
+            ? _cloudinaryFill(_assetUrl(denomData.face_image_path))
+            : (denomData?.front_image_url || null);
+
+        if (faceUrl) {
+            card.innerHTML = `<img src="${faceUrl}" alt="${isZero ? 'ZERO' : sym + value}" style="${_imgStyle}opacity:0;" />`;
+            // Trigger reveal animation
+            requestAnimationFrame(() => {
+                const img = card.querySelector('img');
+                if (img) { img.style.transition = 'opacity 0.4s ease, transform 0.4s ease'; img.style.opacity = '1'; }
+            });
+        } else {
+            // Minimal text fallback
+            const label = isZero ? 'ZERO' : `+${sym}${parseFloat(value).toFixed(2)}`;
+            card.innerHTML = `<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:2rem;font-weight:800;color:${isZero ? '#ff4444' : '#ffd700'};text-shadow:0 2px 8px rgba(0,0,0,0.6);">${label}</div>`;
+        }
+
+        // Complete after a brief display period
+        const displayMs = isZero ? 800 : 600;
         setTimeout(() => {
             _noteFlipCount++;
             if (!isZero) {
@@ -1113,21 +1060,28 @@
             }
 
             setTimeout(() => {
+                if (!isZero) {
+                    const nextCard = document.getElementById('next-note');
+                    if (nextCard) nextCard.style.opacity = '1';
+                }
+
                 card.removeAttribute('id');
-                document.getElementById('active-note-back')?.removeAttribute('id');
                 card.classList.add('to-pile');
                 card.addEventListener('animationend', () => card.remove(), { once: true });
+                setTimeout(() => { if (card.parentNode) card.remove(); }, 600);
 
                 if (!isZero) {
-                    _placeReadyCard();
+                    const next = document.getElementById('next-note');
+                    if (next) { next.id = 'active-note'; }
+                    _startAutoFlipTimer();
                 } else {
                     _stopAutoFlipTimer();
                 }
 
                 state.isFlipping = false;
                 resolve();
-            }, isZero ? 600 : 500);
-        }, 500);
+            }, isZero ? 600 : 400);
+        }, displayMs);
     }
 
     function updateRunningTotal() {
