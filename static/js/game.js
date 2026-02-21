@@ -666,33 +666,36 @@
         }, 5000);
     }
 
-    // ---- FLIP SOUND ----
+    // ---- FLIP SOUND (money paper + coins) ----
     let _flipSound = null;
-    let _flipSoundUrl = null; // tracks which URL is loaded
+    let _flipSoundUrl = null;
+    function _preloadFlipSound() {
+        try {
+            const customUrl = state.gameConfig?.flip_sound_url;
+            const soundUrl = customUrl || '/static/sounds/money-flip.mp3';
+            if (_flipSoundUrl === soundUrl && _flipSound) return;
+            _flipSound = new Audio(soundUrl);
+            _flipSound.volume = 0.8;
+            _flipSound.preload = 'auto';
+            _flipSoundUrl = soundUrl;
+            if (customUrl) {
+                _flipSound.onerror = () => {
+                    _flipSound = new Audio('/static/sounds/money-flip.mp3');
+                    _flipSound.volume = 0.8;
+                    _flipSound.preload = 'auto';
+                    _flipSoundUrl = '/static/sounds/money-flip.mp3';
+                };
+            }
+        } catch (e) {}
+    }
     function _playFlipSound() {
         if (!state.gameConfig?.flip_sound_enabled) return;
         try {
-            // Use custom sound URL from admin config, fallback to default
-            const customUrl = state.gameConfig?.flip_sound_url;
-            const soundUrl = customUrl || '/static/sounds/money-flip.mp3';
-
-            // Reload audio if URL changed (admin uploaded a new sound)
-            if (!_flipSound || _flipSoundUrl !== soundUrl) {
-                _flipSound = new Audio(soundUrl);
-                _flipSound.volume = 0.7;
-                _flipSoundUrl = soundUrl;
-                // Fallback: if custom URL fails, use default
-                if (customUrl) {
-                    _flipSound.onerror = () => {
-                        _flipSound = new Audio('/static/sounds/money-flip.mp3');
-                        _flipSound.volume = 0.7;
-                        _flipSoundUrl = '/static/sounds/money-flip.mp3';
-                        _flipSound.play().catch(() => {});
-                    };
-                }
-            }
-            _flipSound.currentTime = 0;
-            _flipSound.play().catch(() => {});
+            if (!_flipSound) _preloadFlipSound();
+            // Clone for overlapping rapid flips
+            const s = _flipSound.cloneNode();
+            s.volume = 0.8;
+            s.play().catch(() => {});
         } catch (e) {}
     }
 
@@ -1911,6 +1914,7 @@
                 state.gameConfig = await resp.json();
                 state.denominations = state.gameConfig.denominations || [];
                 _preloadGifFirstFrames();
+                _preloadFlipSound();
                 const c = state.gameConfig;
                 const sym = c.currency?.symbol || 'GH₵';
                 // Update CTA hint dynamically
