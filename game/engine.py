@@ -259,6 +259,18 @@ def select_denomination_wysiwyg(session, config, result_hash):
                 selected = cand
                 break
 
+    # Belt-and-suspenders: ensure selected denomination fits remaining budget
+    if selected.value > remaining:
+        # Shouldn't happen (affordable filter), but guard against it
+        cheaper = [d for d in affordable if d.value <= remaining]
+        if cheaper:
+            selected = min(cheaper, key=lambda d: abs(float(d.value) - target))
+        else:
+            zero_denom = CurrencyDenomination.objects.filter(
+                currency=session.currency, is_zero=True, is_active=True
+            ).first()
+            return zero_denom, Decimal('0.00'), True
+
     return selected, selected.value, False
 
 
@@ -367,29 +379,40 @@ def execute_flip(session):
         )
 
     # Apply result
+    actual_payout = Decimal('0.00')
     if is_zero:
         session.cashout_balance = Decimal('0.00')
         session.remaining_budget = Decimal('0.00')
         session.status = 'lost'
         session.ended_at = timezone.now()
     else:
-        session.cashout_balance += value
-        session.remaining_budget -= value
+        # Guard: never let remaining_budget go negative
+        actual_payout = min(value, session.remaining_budget)
+        session.cashout_balance += actual_payout
+        session.remaining_budget -= actual_payout
+        if session.remaining_budget < Decimal('0'):
+            session.remaining_budget = Decimal('0.00')
         # Enforce max_cashout cap
         if config.max_cashout and session.cashout_balance > config.max_cashout:
             session.cashout_balance = config.max_cashout
+        # Log if actual_payout differs from denomination value (shouldn't happen)
+        if actual_payout != value:
+            logger.warning(
+                f'WYSIWYG payout mismatch: session={session.id} flip={flip_number} '
+                f'denom_value={value} actual_payout={actual_payout} remaining={session.remaining_budget}'
+            )
 
     session.save(update_fields=[
         'nonce', 'flip_count', 'cashout_balance',
         'remaining_budget', 'status', 'ended_at',
     ])
 
-    # Record flip result
+    # Record flip result (use actual_payout as the recorded value for WYSIWYG accuracy)
     FlipResult.objects.create(
         session=session,
         flip_number=flip_number,
         denomination=denomination,
-        value=value,
+        value=actual_payout,
         is_zero=is_zero,
         cumulative_balance=session.cashout_balance,
         result_hash=result_hash,
@@ -408,7 +431,7 @@ def execute_flip(session):
     result = {
         'success': True,
         'is_zero': is_zero,
-        'value': str(value),
+        'value': str(actual_payout),
         'cashout_balance': str(session.cashout_balance),
         'remaining_budget': str(session.remaining_budget),
         'flip_number': flip_number,
@@ -428,6 +451,20 @@ def execute_flip(session):
             'flip_sequence_frames': denomination.flip_sequence_frames,
             'flip_gif_path': denomination.flip_gif_path or None,
             'flip_video_path': denomination.flip_video_path or None,
+        }
+    else:
+        # No denomination found (e.g. zero denom not configured) — create minimal data
+        logger.warning(f'No denomination object for session={session.id} flip={flip_number} is_zero={is_zero}')
+        result['denomination'] = {
+            'value': str(value),
+            'is_zero': is_zero,
+            'front_image_url': None,
+            'back_image_url': None,
+            'face_image_path': None,
+            'flip_sequence_prefix': None,
+            'flip_sequence_frames': 0,
+            'flip_gif_path': None,
+            'flip_video_path': None,
         }
 
     return result

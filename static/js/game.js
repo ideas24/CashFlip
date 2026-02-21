@@ -709,20 +709,24 @@
     // ---- MP4/WebM VIDEO FLIP ANIMATION ----
     function _flipWithVideo(card, videoPath, durationMs, value, sym, resolve, denomData) {
         const videoUrl = _assetUrl(videoPath);
+        let _videoFired = false; // Double-fire guard
 
         card.classList.remove('entering');
 
         // Pre-place next card underneath (hidden)
         _placeNextCardUnderneath();
 
-        // Replace card content with a <video> element
-        card.innerHTML = `<video muted playsinline
+        // Replace card content with a <video> element (preload for instant playback)
+        card.innerHTML = `<video muted playsinline preload="auto"
             style="width:100%;height:100%;object-fit:cover;display:block;border-radius:inherit;"
             src="${videoUrl}"></video>`;
         const video = card.querySelector('video');
 
-        // Play video and resolve when done
+        // Guarded completion handler — only fires once
         const onVideoEnd = () => {
+            if (_videoFired) return;
+            _videoFired = true;
+
             _noteFlipCount++;
             updateRunningTotal();
             const pile = document.getElementById('note-pile');
@@ -752,16 +756,52 @@
             resolve();
         };
 
+        // Fallback: if video completely fails, fall back to GIF or CSS animation
+        const onVideoError = () => {
+            if (_videoFired) return;
+            _videoFired = true;
+            // Try GIF fallback
+            const gifPath = denomData?.flip_gif_path;
+            if (gifPath) {
+                _flipWithGif(card, gifPath, durationMs, value, sym, resolve, denomData);
+            } else {
+                // Last resort: CSS animation
+                _flipWithCSS(card, false, value, sym, denomData, resolve);
+            }
+        };
+
         if (video) {
             video.addEventListener('ended', onVideoEnd, { once: true });
-            video.play().catch(() => {
-                // Video play failed — fall back to timeout
-                setTimeout(onVideoEnd, durationMs);
-            });
-            // Safety timeout in case video doesn't fire 'ended'
+            video.addEventListener('error', onVideoError, { once: true });
+
+            // Adjust playback rate to match admin-configured flip speed
+            video.addEventListener('loadedmetadata', () => {
+                if (video.duration && durationMs > 0) {
+                    const desiredSec = durationMs / 1000;
+                    const rate = video.duration / desiredSec;
+                    // Clamp playbackRate to browser-safe range (0.25x – 4x)
+                    video.playbackRate = Math.max(0.25, Math.min(4.0, rate));
+                }
+            }, { once: true });
+
+            // Wait for enough data to play smoothly, then start
+            const tryPlay = () => {
+                video.play().catch(() => {
+                    // Autoplay blocked or decode error — fall back
+                    setTimeout(onVideoEnd, durationMs);
+                });
+            };
+            if (video.readyState >= 3) {
+                tryPlay();
+            } else {
+                video.addEventListener('canplay', tryPlay, { once: true });
+                // If canplay never fires (bad URL), the error handler above catches it
+            }
+
+            // Safety timeout: absolute maximum wait to prevent hang
             setTimeout(() => {
-                if (card.parentNode && card.id === 'active-note') onVideoEnd();
-            }, durationMs + 500);
+                if (!_videoFired) onVideoEnd();
+            }, durationMs + 2000);
         } else {
             setTimeout(onVideoEnd, durationMs);
         }
