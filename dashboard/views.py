@@ -2078,14 +2078,17 @@ def sms_provider_detail(request, pk):
         provider.delete()
         return Response({'success': True})
 
-    # PUT — update
+    # PUT — update (skip blank api_key/api_secret to allow partial updates)
     data = request.data
     updatable = ['name', 'provider_type', 'api_key', 'api_secret', 'sender_id',
                  'base_url', 'is_active', 'priority', 'extra_config']
     changed = []
     for field in updatable:
         if field in data:
-            setattr(provider, field, data[field])
+            val = data[field]
+            if field in ('api_key', 'api_secret') and not val:
+                continue
+            setattr(provider, field, val)
             changed.append(field)
     if changed:
         provider.save()

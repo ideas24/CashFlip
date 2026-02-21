@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { api } from '@/lib/api'
-import { Save, Shield, Gamepad2, FlaskConical, Plus, Trash2, X, Check, Upload, Image } from 'lucide-react'
+import { Save, Shield, Gamepad2, FlaskConical, Plus, Trash2, X, Check, Upload, Image, MessageSquare, Edit2 } from 'lucide-react'
 
 interface AuthSettings {
   sms_otp_enabled: boolean
@@ -155,6 +155,36 @@ interface BrandingSettings {
 
 interface OutcomeChoice { value: string; label: string }
 
+interface SMSProvider {
+  id: number
+  name: string
+  provider_type: string
+  provider_type_display: string
+  api_key: string
+  api_secret_set: boolean
+  sender_id: string
+  base_url: string
+  is_active: boolean
+  priority: number
+  extra_config: Record<string, string>
+  created_at: string | null
+  updated_at: string | null
+}
+
+const PROVIDER_TYPES = [
+  { value: 'twilio', label: 'Twilio' },
+  { value: 'arkesel', label: 'Arkesel' },
+  { value: 'hubtel', label: 'Hubtel' },
+  { value: 'mnotify', label: 'mNotify' },
+  { value: 'wigal', label: 'Wigal' },
+]
+
+const EMPTY_PROVIDER = {
+  name: '', provider_type: 'twilio', api_key: '', api_secret: '',
+  sender_id: 'CASHFLIP', base_url: '', is_active: true, priority: 10,
+  extra_config: {} as Record<string, string>,
+}
+
 interface AllSettings {
   auth: AuthSettings
   game: GameSettings
@@ -173,8 +203,15 @@ export default function SettingsPage() {
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
-  const [tab, setTab] = useState<'auth' | 'game' | 'denominations' | 'tiers' | 'features' | 'wheel' | 'branding' | 'simulated'>('auth')
+  const [tab, setTab] = useState<'auth' | 'game' | 'denominations' | 'tiers' | 'features' | 'wheel' | 'branding' | 'sms' | 'simulated'>('auth')
   const [uploading, setUploading] = useState(false)
+
+  // SMS Providers state
+  const [smsProviders, setSmsProviders] = useState<SMSProvider[]>([])
+  const [smsForm, setSmsForm] = useState<typeof EMPTY_PROVIDER>({ ...EMPTY_PROVIDER })
+  const [smsEditing, setSmsEditing] = useState<number | null>(null)
+  const [smsAdding, setSmsAdding] = useState(false)
+  const [smsSaving, setSmsSaving] = useState(false)
 
   const refresh = () => {
     api.get<AllSettings>('/settings/')
@@ -184,6 +221,47 @@ export default function SettingsPage() {
   }
 
   useEffect(() => { refresh() }, [])
+
+  const loadSmsProviders = () => {
+    api.get<{ providers: SMSProvider[] }>('/sms-providers/').then(d => setSmsProviders(d.providers)).catch(() => {})
+  }
+  useEffect(() => { if (tab === 'sms') loadSmsProviders() }, [tab])
+
+  const saveSmsProvider = async () => {
+    setSmsSaving(true)
+    try {
+      if (smsEditing !== null) {
+        await api.put(`/sms-providers/${smsEditing}/`, smsForm)
+      } else {
+        await api.post('/sms-providers/', smsForm)
+      }
+      setSmsForm({ ...EMPTY_PROVIDER })
+      setSmsEditing(null)
+      setSmsAdding(false)
+      loadSmsProviders()
+    } catch (e: unknown) {
+      alert((e as Error).message || 'Failed to save provider')
+    }
+    setSmsSaving(false)
+  }
+
+  const deleteSmsProvider = async (id: number) => {
+    if (!confirm('Delete this SMS provider?')) return
+    try {
+      await api.delete(`/sms-providers/${id}/`)
+      loadSmsProviders()
+    } catch {}
+  }
+
+  const editSmsProvider = (p: SMSProvider) => {
+    setSmsEditing(p.id)
+    setSmsAdding(true)
+    setSmsForm({
+      name: p.name, provider_type: p.provider_type, api_key: '', api_secret: '',
+      sender_id: p.sender_id, base_url: p.base_url, is_active: p.is_active,
+      priority: p.priority, extra_config: p.extra_config || {},
+    })
+  }
 
   const saveSettings = async () => {
     if (!settings) return
@@ -313,6 +391,7 @@ export default function SettingsPage() {
             { key: 'features' as const, label: 'Features', icon: Gamepad2 },
             { key: 'wheel' as const, label: 'Daily Wheel', icon: Gamepad2 },
             { key: 'branding' as const, label: 'Branding', icon: Gamepad2 },
+            { key: 'sms' as const, label: 'SMS Providers', icon: MessageSquare },
             { key: 'simulated' as const, label: 'Simulation', icon: FlaskConical },
           ].map(t => (
             <button
@@ -1588,8 +1667,119 @@ export default function SettingsPage() {
           </>
         )}
 
+        {/* ===== SMS PROVIDERS TAB ===== */}
+        {tab === 'sms' && (
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>SMS Providers</CardTitle>
+                  <CardDescription>Configure SMS providers for OTP delivery. Providers are tried in priority order (highest first). If no providers are configured, Twilio env vars are used as fallback.</CardDescription>
+                </div>
+                {!smsAdding && (
+                  <Button onClick={() => { setSmsAdding(true); setSmsEditing(null); setSmsForm({ ...EMPTY_PROVIDER }) }} size="sm">
+                    <Plus size={16} /> Add Provider
+                  </Button>
+                )}
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Add / Edit form */}
+              {smsAdding && (
+                <div className="p-4 rounded-lg border border-primary/30 bg-surface space-y-3">
+                  <h4 className="text-sm font-semibold text-white">{smsEditing ? 'Edit Provider' : 'New SMS Provider'}</h4>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs text-muted mb-1">Name</label>
+                      <Input value={smsForm.name} onChange={e => setSmsForm({ ...smsForm, name: e.target.value })} placeholder="e.g. Arkesel Primary" />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-muted mb-1">Provider Type</label>
+                      <select value={smsForm.provider_type} onChange={e => setSmsForm({ ...smsForm, provider_type: e.target.value })}
+                        className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-white">
+                        {PROVIDER_TYPES.map(pt => <option key={pt.value} value={pt.value}>{pt.label}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs text-muted mb-1">API Key / Account SID</label>
+                      <Input value={smsForm.api_key} onChange={e => setSmsForm({ ...smsForm, api_key: e.target.value })} placeholder={smsEditing ? '(leave blank to keep current)' : 'API key'} />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-muted mb-1">API Secret / Auth Token</label>
+                      <Input type="password" value={smsForm.api_secret} onChange={e => setSmsForm({ ...smsForm, api_secret: e.target.value })} placeholder={smsEditing ? '(leave blank to keep current)' : 'Secret (if needed)'} />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-muted mb-1">Sender ID</label>
+                      <Input value={smsForm.sender_id} onChange={e => setSmsForm({ ...smsForm, sender_id: e.target.value })} placeholder="CASHFLIP" />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-muted mb-1">Priority (higher = tried first)</label>
+                      <Input type="number" value={smsForm.priority} onChange={e => setSmsForm({ ...smsForm, priority: parseInt(e.target.value) || 0 })} />
+                    </div>
+                    <div className="col-span-2">
+                      <label className="block text-xs text-muted mb-1">Base URL (blank = provider default)</label>
+                      <Input value={smsForm.base_url} onChange={e => setSmsForm({ ...smsForm, base_url: e.target.value })} placeholder="https://..." />
+                    </div>
+                    {smsForm.provider_type === 'twilio' && (
+                      <div className="col-span-2">
+                        <label className="block text-xs text-muted mb-1">Fallback Phone Number (for Ghana)</label>
+                        <Input value={smsForm.extra_config.fallback_number || ''}
+                          onChange={e => setSmsForm({ ...smsForm, extra_config: { ...smsForm.extra_config, fallback_number: e.target.value } })}
+                          placeholder="+1234567890" />
+                      </div>
+                    )}
+                    <div className="col-span-2 flex items-center gap-3">
+                      <button onClick={() => setSmsForm({ ...smsForm, is_active: !smsForm.is_active })}
+                        className={`w-12 h-6 rounded-full transition-colors ${smsForm.is_active ? 'bg-primary' : 'bg-zinc-700'}`}>
+                        <div className={`w-5 h-5 bg-white rounded-full transition-transform ${smsForm.is_active ? 'translate-x-6' : 'translate-x-0.5'}`} />
+                      </button>
+                      <span className="text-sm text-slate-300">Active</span>
+                    </div>
+                  </div>
+                  <div className="flex gap-2 pt-2">
+                    <Button onClick={saveSmsProvider} disabled={smsSaving || !smsForm.name || (!smsEditing && !smsForm.api_key)} size="sm">
+                      <Save size={14} /> {smsSaving ? 'Saving...' : smsEditing ? 'Update' : 'Create'}
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={() => { setSmsAdding(false); setSmsEditing(null) }}>
+                      <X size={14} /> Cancel
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {/* Provider list */}
+              {smsProviders.length === 0 && !smsAdding && (
+                <div className="text-center py-8 text-muted">
+                  <MessageSquare size={32} className="mx-auto mb-2 opacity-40" />
+                  <p className="text-sm">No SMS providers configured.</p>
+                  <p className="text-xs mt-1">SMS OTP will use Twilio env vars as fallback.</p>
+                </div>
+              )}
+              {smsProviders.map(p => (
+                <div key={p.id} className="flex items-center justify-between p-3 rounded-lg bg-card border border-border">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-2.5 h-2.5 rounded-full ${p.is_active ? 'bg-green-500' : 'bg-zinc-500'}`} />
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-medium text-white">{p.name}</p>
+                        <Badge className="text-xs">{p.provider_type_display}</Badge>
+                        <span className="text-xs text-muted">Priority: {p.priority}</span>
+                      </div>
+                      <p className="text-xs text-muted">Sender: {p.sender_id} &middot; Key: {p.api_key} &middot; Secret: {p.api_secret_set ? 'Set' : 'Not set'}</p>
+                    </div>
+                  </div>
+                  <div className="flex gap-1">
+                    <Button variant="ghost" size="sm" onClick={() => editSmsProvider(p)}><Edit2 size={14} /></Button>
+                    <Button variant="ghost" size="sm" onClick={() => deleteSmsProvider(p.id)} className="text-danger hover:text-danger"><Trash2 size={14} /></Button>
+                  </div>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        )}
+
         {/* Save / Cancel Buttons (for auth & game tabs) */}
-        {tab !== 'simulated' && (
+        {tab !== 'simulated' && tab !== 'sms' && (
           <div className="flex items-center justify-end gap-3">
             {saved && <span className="text-sm text-success flex items-center gap-1"><Check size={16} /> Saved successfully</span>}
             <Button variant="ghost" onClick={() => { setLoading(true); refresh() }} disabled={saving} size="lg">

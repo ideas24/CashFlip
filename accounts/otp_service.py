@@ -286,6 +286,7 @@ def _send_via_provider(provider, phone, body):
         'arkesel': _send_via_arkesel,
         'hubtel': _send_via_hubtel,
         'mnotify': _send_via_mnotify,
+        'wigal': _send_via_wigal,
     }
     handler = dispatch.get(provider.provider_type)
     if not handler:
@@ -386,6 +387,28 @@ def _send_via_mnotify(provider, phone, body):
         return resp.status_code == 200 and data.get('status') != 'error'
     except Exception as e:
         logger.warning(f'mNotify error: {e}')
+        return False
+
+
+def _send_via_wigal(provider, phone, body):
+    """Send SMS via Wigal API."""
+    api_key = provider.api_key
+    sender_id = provider.sender_id or 'CASHFLIP'
+    url = provider.base_url or 'https://frog.wigal.com.gh/api/v2/send'
+
+    try:
+        resp = requests.post(url, json={
+            'sender': sender_id,
+            'message': body,
+            'recipients': [phone],
+        }, headers={
+            'Authorization': f'Bearer {api_key}',
+            'Content-Type': 'application/json',
+        }, timeout=30)
+        logger.info(f'Wigal response: {resp.status_code} {resp.text[:300]}')
+        return resp.status_code in [200, 201]
+    except Exception as e:
+        logger.warning(f'Wigal error: {e}')
         return False
 
 
