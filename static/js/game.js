@@ -294,7 +294,7 @@
     }
 
     // Cloudinary transform for animated GIFs:
-    // dl_X controls frame delay (centiseconds), e_trim removes transparent borders,
+    // dl_X controls frame delay (centiseconds),
     // c_pad adds dark bg to reach 16:9.
     // durationMs = desired total animation time, frames = number of GIF frames.
     function _gifAnimatedFill(url, durationMs, frames) {
@@ -305,11 +305,23 @@
         const before = url.substring(0, idx + marker.length);
         const after = url.substring(idx + marker.length);
         if (after.startsWith('c_') || after.startsWith('e_') || after.startsWith('dl_')) return url;
-        // Compute frame delay: dl_X where X is centiseconds (1/100 sec)
         const numFrames = frames || 31;
         const delayMs = (durationMs || 1500) / numFrames;
-        const dlVal = Math.max(2, Math.round(delayMs / 10)); // minimum 20ms per frame
+        const dlVal = Math.max(2, Math.round(delayMs / 10));
         return before + `dl_${dlVal}/c_pad,ar_16:9,g_center,b_rgb:0d0d1a/` + after;
+    }
+
+    // Cloudinary resize for GIFs — reduces file size for faster loading.
+    // Uses w_480 scale (480px wide) which is sufficient for mobile card display.
+    function _gifOptimized(url) {
+        if (!url) return url;
+        const marker = '/image/upload/';
+        const idx = url.indexOf(marker);
+        if (idx === -1) return url; // Not Cloudinary — serve as-is
+        const before = url.substring(0, idx + marker.length);
+        const after = url.substring(idx + marker.length);
+        if (after.startsWith('w_') || after.startsWith('c_')) return url;
+        return before + 'w_480,c_scale/' + after;
     }
 
     // ==================== STAKE TIER DENOMINATION FILTER ====================
@@ -808,10 +820,12 @@
     // ---- GIF FLIP ANIMATION ----
     // GIF plays on the current card as a transition effect.
     // Next card underneath already shows the new denomination face.
+    // Uses Cloudinary w_480 resize for fast loading on mobile.
     function _flipWithGif(card, gifPath, durationMs, value, sym, resolve, denomData) {
-        const gifUrl = _assetUrl(gifPath);
+        const rawGifUrl = _assetUrl(gifPath);
+        const gifUrl = _gifOptimized(rawGifUrl);
         const cacheBust = `?cb=${Date.now()}`;
-        let _gifFired = false; // Double-fire guard
+        let _gifFired = false;
 
         card.classList.remove('entering', 'dragging', 'spring-back');
         card.style.transform = '';
@@ -820,10 +834,9 @@
         // Place next card underneath with denomination face image (visible)
         _placeNextCardUnderneath(denomData);
 
-        // Load the denomination's flip GIF onto the current card as transition effect
+        // Load the resized denomination flip GIF onto the current card
         card.innerHTML = `<img src="${gifUrl}${cacheBust}" alt="flip" style="${_imgStyle}" />`;
 
-        // Guarded completion handler — only fires once
         const onGifEnd = () => {
             if (_gifFired) return;
             _gifFired = true;
@@ -835,11 +848,9 @@
             if (pile) pile.classList.add('visible');
             if (pileCount) pileCount.textContent = _noteFlipCount;
 
-            // Remove current card — next card underneath already shows denomination
+            // Instant removal — next card underneath already shows denomination
             card.removeAttribute('id');
-            card.classList.add('to-pile');
-            card.addEventListener('animationend', () => card.remove(), { once: true });
-            setTimeout(() => { if (card.parentNode) card.remove(); }, 600);
+            if (card.parentNode) card.remove();
 
             // Promote the underneath card to active
             const next = document.getElementById('next-note');
@@ -849,7 +860,7 @@
             resolve();
         };
 
-        // GIF plays for the configured duration, then move to pile
+        // GIF plays for the configured duration, then complete instantly
         setTimeout(onGifEnd, durationMs);
     }
 
@@ -1209,30 +1220,10 @@
         }
     }
 
-    // --- 2. STREAK FIRE SYSTEM ---
+    // --- 2. STREAK (disabled — UI decluttered) ---
     let currentStreak = 0;
-
     function updateStreakBadge(won) {
-        if (won) {
-            currentStreak++;
-        } else {
-            currentStreak = 0;
-        }
-        const badge = document.getElementById('streak-badge');
-        if (!badge) return;
-
-        if (currentStreak >= 2) {
-            badge.classList.remove('hidden');
-            const fireEmoji = currentStreak >= 7 ? '🔥🔥🔥' : currentStreak >= 5 ? '🔥🔥' : '🔥';
-            const label = currentStreak >= 7 ? 'INFERNO!' : currentStreak >= 5 ? 'ON FIRE!' : 'STREAK';
-            badge.innerHTML = `${fireEmoji} <span class="streak-count">×${currentStreak}</span> <span class="streak-label">${label}</span>`;
-            badge.className = 'streak-badge';
-            if (currentStreak >= 7) badge.classList.add('inferno');
-            else if (currentStreak >= 5) badge.classList.add('fire');
-            else if (currentStreak >= 3) badge.classList.add('hot');
-        } else {
-            badge.classList.add('hidden');
-        }
+        if (won) { currentStreak++; } else { currentStreak = 0; }
     }
 
     // --- 3. HAPTIC FEEDBACK ---
@@ -2087,66 +2078,8 @@
         document.getElementById('cashout-btn').disabled = cashout <= 0;
     }
 
-    // ==================== SIDE ENGAGEMENT PANELS ====================
-    function updateSidePanels(reset) {
-        if (!state.session) return;
-        const s = state.session;
-        const sym = s.currency?.symbol || 'GH₵';
-        const flipCount = s.flip_count || 0;
-        const cashout = parseFloat(s.cashout_balance || 0);
-        const stake = parseFloat(s.stake_amount || 1);
-
-        // Left panel: flip count with pop animation
-        const flipEl = document.getElementById('side-flip-count');
-        if (flipEl) {
-            flipEl.textContent = flipCount;
-            if (!reset) {
-                flipEl.classList.remove('pop');
-                void flipEl.offsetWidth;
-                flipEl.classList.add('pop');
-            }
-        }
-
-        // Left panel: best denomination
-        const bestEl = document.getElementById('side-best-denom');
-        if (bestEl) {
-            bestEl.textContent = _bestDenom > 0 ? `${sym}${_bestDenom.toFixed(0)}` : '--';
-            if (_bestDenom > 0) {
-                const card = bestEl.closest('.side-stat-card');
-                if (card) card.classList.add('highlight');
-            }
-        }
-
-        // Left panel: streak
-        const streakCard = document.getElementById('side-streak-card');
-        const streakVal = document.getElementById('side-streak-val');
-        if (streakCard && streakVal) {
-            if (currentStreak >= 2) {
-                streakCard.style.display = '';
-                streakVal.textContent = `${currentStreak}🔥`;
-            } else {
-                streakCard.style.display = 'none';
-            }
-        }
-
-        // Right panel: multiplier (cashout / stake ratio)
-        const multEl = document.getElementById('side-multiplier');
-        if (multEl) {
-            const ratio = stake > 0 ? (cashout / stake) : 0;
-            multEl.textContent = `${ratio.toFixed(1)}×`;
-            multEl.classList.remove('hot', 'danger');
-            if (ratio >= 3) multEl.classList.add('danger');
-            else if (ratio >= 1.5) multEl.classList.add('hot');
-        }
-
-        // Right panel: risk meter (visual only, based on flip count)
-        const riskFill = document.getElementById('side-risk-fill');
-        if (riskFill) {
-            // Risk rises with flip count — purely visual, logarithmic curve
-            const risk = Math.min(95, Math.max(5, 5 + 90 * (1 - Math.exp(-flipCount * 0.12))));
-            riskFill.style.height = `${risk}%`;
-        }
-    }
+    // Side panels removed — keeping function stub for any remaining callers
+    function updateSidePanels() {}
 
     async function doFlip() {
         if (state.isFlipping || !state.session || state.session.status !== 'active') return;

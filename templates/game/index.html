@@ -11,7 +11,7 @@
     {% load static %}
     <link rel="icon" type="image/svg+xml" href="{% static 'images/cashflip-favicon.svg' %}">
     <meta name="theme-color" content="#0D1117">
-    <link rel="stylesheet" href="{% static 'css/game.css' %}?v=20260221h">
+    <link rel="stylesheet" href="{% static 'css/game.css' %}?v=20260221i">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
 <body>
@@ -284,33 +284,6 @@
             </div>
         </div>
 
-        <!-- Side Engagement Panels -->
-        <div class="game-side-left">
-            <div class="side-stat-card">
-                <span class="side-label">Flips</span>
-                <span class="side-value" id="side-flip-count">0</span>
-            </div>
-            <div class="side-stat-card">
-                <span class="side-label">Best</span>
-                <span class="side-value gold" id="side-best-denom">--</span>
-            </div>
-            <div class="side-stat-card" id="side-streak-card" style="display:none;">
-                <span class="side-label">Streak</span>
-                <span class="side-value" id="side-streak-val">0</span>
-            </div>
-        </div>
-
-        <div class="game-side-right">
-            <div class="multiplier-card">
-                <span class="multiplier-label">Return</span>
-                <span class="multiplier-value" id="side-multiplier">0.0×</span>
-            </div>
-            <div class="risk-meter">
-                <div class="risk-fill" id="side-risk-fill"></div>
-            </div>
-            <span class="risk-label">RISK</span>
-        </div>
-
         <!-- HUD Overlay -->
         <div class="game-hud">
             <div class="hud-top-left">
@@ -329,7 +302,6 @@
                 <div class="denomination-display" id="denom-display">
                     <span id="denom-value"></span>
                 </div>
-                <div id="streak-badge" class="streak-badge hidden"></div>
             </div>
 
             <div class="hud-top-right">
@@ -839,6 +811,6 @@
         <span id="toast-message"></span>
     </div>
 
-    <script src="{% static 'js/game.js' %}?v=20260221h"></script>
+    <script src="{% static 'js/game.js' %}?v=20260221i"></script>
 </body>
 </html>

@@ -329,9 +329,8 @@ def execute_flip(session):
     except GameConfig.DoesNotExist:
         return {'success': False, 'error': 'Game configuration not found'}
 
-    # Check max flips
-    if session.flip_count >= config.max_flips_per_session:
-        return {'success': False, 'error': 'Maximum flips reached for this session'}
+    # max_flips_per_session is used for payout schedule calculation only.
+    # Budget exhaustion naturally ends the session — no hard flip cap.
 
     # Increment nonce and flip count
     session.nonce += 1
