@@ -403,9 +403,11 @@
     let _autoFlipTimer = null;
     let _autoFlipCountdown = 0;
     let _autoFlipTick = null;
+    let _isFirstCard = true; // Only show start_flip_image on the very first card
 
     function initNoteStage() {
         _noteFlipCount = 0;
+        _isFirstCard = true;
         const stage = document.getElementById('note-stage');
         if (stage) stage.innerHTML = '';
         const pile = document.getElementById('note-pile');
@@ -509,9 +511,14 @@
         card.id = 'active-note';
         card.style.zIndex = '1';
 
-        // Session start: show configurable start flip image (or random denom fallback).
-        // Subsequent cards use _randomDenomCardHTML() via _placeNextCardUnderneath.
-        card.innerHTML = _startFlipCardHTML();
+        // First card of session: show configurable start flip image.
+        // All subsequent cards: show random denomination glimpse.
+        if (_isFirstCard) {
+            card.innerHTML = _startFlipCardHTML();
+            _isFirstCard = false;
+        } else {
+            card.innerHTML = _randomDenomCardHTML();
+        }
 
         stage.appendChild(card);
         _startAutoFlipTimer();
