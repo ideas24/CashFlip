@@ -195,6 +195,8 @@ class GameConfig(models.Model):
         help_text='Duration of the flip animation in milliseconds (e.g. 1500 = 1.5s)')
     flip_sound_enabled = models.BooleanField(default=True,
         help_text='Play money-flipping sound during flip animation')
+    flip_sound_url = models.URLField(max_length=500, blank=True, default='',
+        help_text='Custom flip sound URL (Cloudinary). Empty = use default /static/sounds/money-flip.mp3')
     simulated_feed_enabled = models.BooleanField(default=False,
         help_text='Enable simulated live feed for demo/pitching (fake leaderboard entries)')
     simulated_feed_data = models.JSONField(default=list, blank=True,

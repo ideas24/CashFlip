@@ -44,6 +44,7 @@ interface GameSettings {
   flip_display_mode: string
   flip_animation_speed_ms: number
   flip_sound_enabled: boolean
+  flip_sound_url: string
   simulated_feed_enabled: boolean
   simulated_feed_data: SimFeedEntry[]
   is_active: boolean
@@ -645,6 +646,49 @@ export default function SettingsPage() {
                           </div>
                         </div>
                       </div>
+                      {/* Custom Flip Sound Upload */}
+                      {s.game.flip_sound_enabled && (
+                        <div className="mt-4 p-3 rounded-lg border border-border/50 bg-zinc-900/50">
+                          <label className="block text-xs text-slate-400 mb-2 font-medium">Custom Flip Sound (MP3/WAV/OGG)</label>
+                          <p className="text-xs text-muted mb-2">Upload a custom sound for the card flip. Default is a natural money-flip sound. Short clips (&lt;1s) work best.</p>
+                          {s.game.flip_sound_url && (
+                            <div className="mb-2 flex items-center gap-2">
+                              <audio controls src={s.game.flip_sound_url} className="h-8" style={{maxWidth: '250px'}} />
+                              <button onClick={() => updateGame('flip_sound_url', '')}
+                                className="text-xs text-red-400 hover:text-red-300 cursor-pointer px-2 py-1 rounded border border-red-500/30 bg-red-500/10">
+                                Remove
+                              </button>
+                            </div>
+                          )}
+                          <div className="flex items-center gap-2">
+                            <Input type="text" placeholder="Cloudinary URL (leave empty for default)" value={s.game.flip_sound_url || ''}
+                              className="text-xs flex-1" onChange={e => updateGame('flip_sound_url', e.target.value)} />
+                            <label className="shrink-0">
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-emerald-500/20 text-emerald-400 text-xs rounded cursor-pointer hover:bg-emerald-500/30 transition">
+                                <Upload size={12} /> {uploading ? '...' : 'Upload'}
+                              </span>
+                              <input type="file" className="hidden" accept="audio/mp3,audio/mpeg,audio/wav,audio/ogg,audio/*" disabled={uploading}
+                                onChange={async e => {
+                                  const file = e.target.files?.[0]
+                                  if (!file) return
+                                  setUploading(true)
+                                  try {
+                                    const formData = new FormData()
+                                    formData.append('file', file)
+                                    formData.append('folder', 'cashflip/sounds')
+                                    const resp = await api.upload<{ url: string }>('/settings/cloudinary-upload/', formData)
+                                    if (resp.url) updateGame('flip_sound_url', resp.url)
+                                  } catch {}
+                                  setUploading(false)
+                                  e.target.value = ''
+                                }} />
+                            </label>
+                          </div>
+                          {!s.game.flip_sound_url && (
+                            <p className="text-xs text-emerald-400/60 mt-1.5">Using default: /static/sounds/money-flip.mp3</p>
+                          )}
+                        </div>
+                      )}
                     </div>
 
                     {/* ── SIMULATED LIVE FEED ── */}

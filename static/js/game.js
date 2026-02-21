@@ -628,14 +628,28 @@
 
     // ---- FLIP SOUND ----
     let _flipSound = null;
+    let _flipSoundUrl = null; // tracks which URL is loaded
     function _playFlipSound() {
         if (!state.gameConfig?.flip_sound_enabled) return;
         try {
-            if (!_flipSound) {
-                // Try mp3 first, fallback to wav
-                _flipSound = new Audio('/static/sounds/money-flip.mp3');
-                _flipSound.onerror = () => { _flipSound = new Audio('/static/sounds/money-flip.wav'); };
-                _flipSound.volume = 0.6;
+            // Use custom sound URL from admin config, fallback to default
+            const customUrl = state.gameConfig?.flip_sound_url;
+            const soundUrl = customUrl || '/static/sounds/money-flip.mp3';
+
+            // Reload audio if URL changed (admin uploaded a new sound)
+            if (!_flipSound || _flipSoundUrl !== soundUrl) {
+                _flipSound = new Audio(soundUrl);
+                _flipSound.volume = 0.7;
+                _flipSoundUrl = soundUrl;
+                // Fallback: if custom URL fails, use default
+                if (customUrl) {
+                    _flipSound.onerror = () => {
+                        _flipSound = new Audio('/static/sounds/money-flip.mp3');
+                        _flipSound.volume = 0.7;
+                        _flipSoundUrl = '/static/sounds/money-flip.mp3';
+                        _flipSound.play().catch(() => {});
+                    };
+                }
             }
             _flipSound.currentTime = 0;
             _flipSound.play().catch(() => {});
@@ -2125,8 +2139,6 @@
             state.session.cashout_balance = data.cashout_balance;
             state.session.remaining_budget = data.remaining_budget || '0.00';
 
-            // Sound + booklet page-turn animation
-            sfxFlip();
             // isFlipping is managed inside flipNoteAnimation
             state.isFlipping = false;
             await flipNoteAnimation(data.is_zero, data.value, data.denomination);
@@ -3138,7 +3150,7 @@
             const startTime = Date.now();
             const duration = 4000;
 
-            sfxFlip();
+            _playFlipSound();
 
             function animateSpin() {
                 const elapsed = Date.now() - startTime;

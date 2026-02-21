@@ -72,7 +72,7 @@ class GameConfigPublicSerializer(serializers.ModelSerializer):
         fields = ['currency', 'min_deposit', 'max_cashout', 'min_stake', 'pause_cost_percent',
                   'min_flips_before_cashout', 'instant_cashout_enabled', 'instant_cashout_min_amount',
                   'auto_flip_seconds', 'flip_animation_mode', 'flip_display_mode',
-                  'flip_animation_speed_ms', 'flip_sound_enabled', 'simulated_feed_enabled',
+                  'flip_animation_speed_ms', 'flip_sound_enabled', 'flip_sound_url', 'simulated_feed_enabled',
                   'payout_mode', 'decay_factor', 'max_flips_per_session',
                   'holiday_mode_enabled']
 
