@@ -1699,6 +1699,19 @@
             })
             .catch(() => {}); // Fail silently — buttons stay hidden
 
+        // Load dynamic SMS disclosure + legal links from admin config
+        fetch(API.base + '/game/legal/')
+            .then(r => r.json())
+            .then(legal => {
+                const disclosureEl = document.getElementById('sms-disclosure-text');
+                if (disclosureEl && legal.sms_disclosure) disclosureEl.textContent = legal.sms_disclosure;
+                const privacyLink = document.getElementById('privacy-link');
+                if (privacyLink && legal.privacy_policy_url) privacyLink.href = legal.privacy_policy_url;
+                const termsLink = document.getElementById('terms-link');
+                if (termsLink && legal.terms_url) termsLink.href = legal.terms_url;
+            })
+            .catch(() => {});
+
         // "Continue with Email" button — switch to email auth step
         document.getElementById('btn-email-auth')?.addEventListener('click', () => {
             document.querySelectorAll('.auth-step').forEach(s => s.classList.remove('active'));

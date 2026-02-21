@@ -63,6 +63,47 @@ class SiteBranding(models.Model):
         return obj
 
 
+class LegalDocument(models.Model):
+    """
+    Singleton store for editable legal documents (Privacy Policy, Terms of Service).
+    Content is stored as HTML for rich formatting. Editable from admin dashboard.
+    """
+    privacy_policy = models.TextField(blank=True, default='',
+        help_text='Privacy Policy content (HTML)')
+    terms_of_service = models.TextField(blank=True, default='',
+        help_text='Terms of Service content (HTML)')
+    sms_disclosure = models.TextField(blank=True,
+        default='By providing your phone number, you consent to receive a one-time verification code via SMS. Standard message and data rates may apply. Carriers are not liable for delayed or undelivered messages.',
+        help_text='SMS/messaging disclosure shown on login screen')
+    support_email = models.EmailField(blank=True, default='support@cashflip.cash',
+        help_text='Support email shown in legal docs')
+    support_phone = models.CharField(max_length=30, blank=True, default='',
+        help_text='Support phone shown in legal docs')
+    company_name = models.CharField(max_length=200, blank=True, default='CashFlip',
+        help_text='Legal company name')
+    company_address = models.TextField(blank=True, default='',
+        help_text='Registered company address')
+    license_info = models.TextField(blank=True, default='Licensed and regulated by the Gaming Commission of Ghana.',
+        help_text='License/regulatory information')
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Legal Document'
+        verbose_name_plural = 'Legal Documents'
+
+    def __str__(self):
+        return 'Legal Documents'
+
+    def save(self, *args, **kwargs):
+        self.pk = 1
+        super().save(*args, **kwargs)
+
+    @classmethod
+    def get_legal(cls):
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj
+
+
 class Currency(models.Model):
     code = models.CharField(max_length=5, unique=True, db_index=True)
     name = models.CharField(max_length=50)

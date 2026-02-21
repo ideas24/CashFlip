@@ -1320,6 +1320,20 @@ def settings_view(request):
                     'is_active': t.is_active,
                 })
 
+        # Legal documents
+        from game.models import LegalDocument
+        legal = LegalDocument.get_legal()
+        legal_data = {
+            'privacy_policy': legal.privacy_policy,
+            'terms_of_service': legal.terms_of_service,
+            'sms_disclosure': legal.sms_disclosure,
+            'support_email': legal.support_email,
+            'support_phone': legal.support_phone,
+            'company_name': legal.company_name,
+            'company_address': legal.company_address,
+            'license_info': legal.license_info,
+        }
+
         return Response({
             'auth': AuthSettingsSerializer(auth_config).data,
             'game': game_data,
@@ -1328,6 +1342,7 @@ def settings_view(request):
             'denominations': denoms,
             'stake_tiers': tiers_data,
             'branding': branding_data,
+            'legal': legal_data,
             'simulated_configs': sim_list,
             'outcome_mode_choices': [
                 {'value': c[0], 'label': c[1]} for c in SimulatedGameConfig.OUTCOME_CHOICES
@@ -1500,6 +1515,22 @@ def settings_view(request):
             StakeTier.objects.filter(
                 currency=game_config.currency
             ).exclude(id__in=existing_tier_ids).delete()
+
+    # Save legal documents
+    from game.models import LegalDocument
+    legal_data = request.data.get('legal', {})
+    if legal_data:
+        legal = LegalDocument.get_legal()
+        legal_fields = ['privacy_policy', 'terms_of_service', 'sms_disclosure',
+                        'support_email', 'support_phone', 'company_name',
+                        'company_address', 'license_info']
+        updated = []
+        for field in legal_fields:
+            if field in legal_data:
+                setattr(legal, field, legal_data[field])
+                updated.append(field)
+        if updated:
+            legal.save(update_fields=updated + ['updated_at'])
 
     return Response({'status': 'saved'})
 

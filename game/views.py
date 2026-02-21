@@ -19,7 +19,7 @@ from game.engine import execute_flip
 from game.models import (
     Currency, CurrencyDenomination, GameConfig, SimulatedGameConfig,
     GameSession, FlipResult, Badge, PlayerBadge, DailyBonusConfig,
-    DailyBonusSpin, FeatureConfig,
+    DailyBonusSpin, FeatureConfig, LegalDocument,
 )
 from game.serializers import (
     StartGameSerializer, GameSessionSerializer, GameSessionListSerializer,
@@ -819,4 +819,21 @@ def daily_wheel_spin(request):
         'label': chosen['label'],
         'amount': str(amount),
         'new_balance': str(wallet.balance),
+    })
+
+
+# ─── Legal Documents API ───────────────────────────────────────────────
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def legal_api(request):
+    """Return legal document metadata and SMS disclosure for the frontend."""
+    legal = LegalDocument.get_legal()
+    return Response({
+        'sms_disclosure': legal.sms_disclosure,
+        'support_email': legal.support_email,
+        'support_phone': legal.support_phone,
+        'company_name': legal.company_name,
+        'privacy_policy_url': '/privacy-policy/',
+        'terms_url': '/terms/',
+        'updated_at': legal.updated_at.isoformat(),
     })

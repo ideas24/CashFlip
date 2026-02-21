@@ -11,7 +11,7 @@
     {% load static %}
     <link rel="icon" type="image/svg+xml" href="{% static 'images/cashflip-favicon.svg' %}">
     <meta name="theme-color" content="#0D1117">
-    <link rel="stylesheet" href="{% static 'css/game.css' %}?v=20260221n">
+    <link rel="stylesheet" href="{% static 'css/game.css' %}?v=20260221p">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
 <body>
@@ -62,6 +62,16 @@
                     <button class="channel-btn active" data-channel="sms">� SMS</button>
                 </div>
                 <button id="send-otp-btn" class="btn-primary">Send Code</button>
+
+                <!-- SMS/Messaging Disclosure (Twilio compliance) -->
+                <div class="sms-disclosure" id="sms-disclosure">
+                    <p id="sms-disclosure-text">By providing your phone number, you consent to receive a one-time verification code via SMS. Standard message and data rates may apply. Carriers are not liable for delayed or undelivered messages.</p>
+                    <p class="legal-links">
+                        <a href="/privacy-policy/" target="_blank" id="privacy-link">Privacy Policy</a>
+                        <span>&middot;</span>
+                        <a href="/terms/" target="_blank" id="terms-link">Terms of Service</a>
+                    </p>
+                </div>
 
                 <!-- Alternative login methods -->
                 <div id="alt-auth-divider" class="divider" style="display:none"><span>or</span></div>
@@ -811,6 +821,6 @@
         <span id="toast-message"></span>
     </div>
 
-    <script src="{% static 'js/game.js' %}?v=20260221n"></script>
+    <script src="{% static 'js/game.js' %}?v=20260221p"></script>
 </body>
 </html>

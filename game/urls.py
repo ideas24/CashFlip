@@ -19,4 +19,5 @@ urlpatterns = [
     path('badges/', views.player_badges, name='player_badges'),
     path('wheel/status/', views.daily_wheel_status, name='daily_wheel_status'),
     path('wheel/spin/', views.daily_wheel_spin, name='daily_wheel_spin'),
+    path('legal/', views.legal_api, name='legal_api'),
 ]

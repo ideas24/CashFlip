@@ -312,6 +312,28 @@ html, body {
 .btn-social.facebook { background: #1877F2; border-color: #1877F2; }
 .btn-social:hover { opacity: 0.9; }
 
+/* SMS Disclosure (Twilio compliance) */
+.sms-disclosure {
+    margin-top: 0.75rem; padding: 0.6rem 0.75rem;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 8px; text-align: center;
+}
+.sms-disclosure p {
+    font-size: 0.68rem; color: var(--text-secondary);
+    line-height: 1.45; margin: 0;
+}
+.sms-disclosure .legal-links {
+    margin-top: 0.4rem; display: flex;
+    justify-content: center; align-items: center; gap: 0.4rem;
+}
+.sms-disclosure .legal-links a {
+    color: var(--teal); text-decoration: none;
+    font-size: 0.7rem; font-weight: 500;
+}
+.sms-disclosure .legal-links a:hover { text-decoration: underline; }
+.sms-disclosure .legal-links span { color: var(--text-secondary); font-size: 0.6rem; }
+
 /* Alt-auth buttons (full-width stacked) */
 .alt-auth-buttons { display: flex; flex-direction: column; gap: 0.6rem; }
 .btn-alt-auth {

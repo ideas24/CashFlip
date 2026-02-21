@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { api } from '@/lib/api'
-import { Save, Shield, Gamepad2, FlaskConical, Plus, Trash2, X, Check, Upload, Image, MessageSquare, Edit2 } from 'lucide-react'
+import { Save, Shield, Gamepad2, FlaskConical, Plus, Trash2, X, Check, Upload, Image, MessageSquare, Edit2, FileText } from 'lucide-react'
 
 interface AuthSettings {
   sms_otp_enabled: boolean
@@ -153,6 +153,17 @@ interface BrandingSettings {
   show_regulatory_footer: boolean
 }
 
+interface LegalSettings {
+  privacy_policy: string
+  terms_of_service: string
+  sms_disclosure: string
+  support_email: string
+  support_phone: string
+  company_name: string
+  company_address: string
+  license_info: string
+}
+
 interface OutcomeChoice { value: string; label: string }
 
 interface SMSProvider {
@@ -194,6 +205,7 @@ interface AllSettings {
   denominations: Denomination[]
   stake_tiers: StakeTier[]
   branding: BrandingSettings
+  legal: LegalSettings
   simulated_configs: SimConfig[]
   outcome_mode_choices: OutcomeChoice[]
 }
@@ -204,7 +216,7 @@ export default function SettingsPage() {
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
-  const [tab, setTab] = useState<'auth' | 'game' | 'denominations' | 'tiers' | 'features' | 'wheel' | 'branding' | 'sms' | 'simulated'>('auth')
+  const [tab, setTab] = useState<'auth' | 'game' | 'denominations' | 'tiers' | 'features' | 'wheel' | 'branding' | 'legal' | 'sms' | 'simulated'>('auth')
   const [uploading, setUploading] = useState(false)
 
   // SMS Providers state
@@ -269,7 +281,7 @@ export default function SettingsPage() {
     setSaving(true)
     setSaved(false)
     try {
-      await api.post('/settings/', { auth: settings.auth, game: settings.game, features: settings.features, wheel: settings.wheel, denominations: settings.denominations, stake_tiers: settings.stake_tiers, branding: settings.branding })
+      await api.post('/settings/', { auth: settings.auth, game: settings.game, features: settings.features, wheel: settings.wheel, denominations: settings.denominations, stake_tiers: settings.stake_tiers, branding: settings.branding, legal: settings.legal })
       setSaved(true)
       setTimeout(() => setSaved(false), 2000)
     } catch {}
@@ -299,6 +311,11 @@ export default function SettingsPage() {
   const updateBranding = (key: keyof BrandingSettings, value: string | boolean) => {
     if (!settings) return
     setSettings({ ...settings, branding: { ...settings.branding, [key]: value } })
+  }
+
+  const updateLegal = (key: keyof LegalSettings, value: string) => {
+    if (!settings) return
+    setSettings({ ...settings, legal: { ...settings.legal, [key]: value } })
   }
 
   const uploadBrandingFile = async (field: string, file: File) => {
@@ -392,6 +409,7 @@ export default function SettingsPage() {
             { key: 'features' as const, label: 'Features', icon: Gamepad2 },
             { key: 'wheel' as const, label: 'Daily Wheel', icon: Gamepad2 },
             { key: 'branding' as const, label: 'Branding', icon: Gamepad2 },
+            { key: 'legal' as const, label: 'Legal', icon: FileText },
             { key: 'sms' as const, label: 'SMS Providers', icon: MessageSquare },
             { key: 'simulated' as const, label: 'Simulation', icon: FlaskConical },
           ].map(t => (
@@ -1665,6 +1683,93 @@ export default function SettingsPage() {
                 ))}
               </div>
             )}
+          </>
+        )}
+
+        {/* ===== LEGAL DOCUMENTS TAB ===== */}
+        {tab === 'legal' && settings && (
+          <>
+            <Card>
+              <CardHeader>
+                <CardTitle>Company & Contact</CardTitle>
+                <CardDescription>Legal entity details shown in legal documents and footers</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs text-muted mb-1">Company Name</label>
+                    <Input value={settings.legal.company_name} onChange={e => updateLegal('company_name', e.target.value)} />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-muted mb-1">Support Email</label>
+                    <Input value={settings.legal.support_email} onChange={e => updateLegal('support_email', e.target.value)} />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-muted mb-1">Support Phone</label>
+                    <Input value={settings.legal.support_phone} onChange={e => updateLegal('support_phone', e.target.value)} placeholder="+233..." />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-muted mb-1">License Info</label>
+                    <Input value={settings.legal.license_info} onChange={e => updateLegal('license_info', e.target.value)} />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs text-muted mb-1">Company Address</label>
+                  <textarea className="w-full bg-card border border-border rounded-lg p-3 text-sm text-white resize-y" rows={2}
+                    value={settings.legal.company_address} onChange={e => updateLegal('company_address', e.target.value)} />
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>SMS / Messaging Disclosure</CardTitle>
+                <CardDescription>Shown on the login screen below the phone input (required by Twilio / carriers)</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <textarea className="w-full bg-card border border-border rounded-lg p-3 text-sm text-white resize-y" rows={4}
+                  value={settings.legal.sms_disclosure} onChange={e => updateLegal('sms_disclosure', e.target.value)} />
+                <p className="text-xs text-muted mt-2">
+                  Must include: consent statement, "standard message and data rates may apply", how to stop (STOP), customer care info, and "carriers are not liable for delayed or undelivered messages."
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle>Privacy Policy</CardTitle>
+                    <CardDescription>HTML content served at <a href="/privacy-policy/" target="_blank" className="text-primary underline">/privacy-policy/</a></CardDescription>
+                  </div>
+                  <a href="/privacy-policy/" target="_blank" className="text-xs text-primary underline">Preview</a>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <textarea className="w-full bg-card border border-border rounded-lg p-3 text-sm text-white font-mono resize-y" rows={20}
+                  value={settings.legal.privacy_policy} onChange={e => updateLegal('privacy_policy', e.target.value)}
+                  placeholder="<h1>Privacy Policy</h1><p>Enter your privacy policy HTML here...</p>" />
+                <p className="text-xs text-muted mt-2">Supports HTML tags: h1, h2, h3, p, ul, ol, li, a, strong, em, blockquote</p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle>Terms of Service</CardTitle>
+                    <CardDescription>HTML content served at <a href="/terms/" target="_blank" className="text-primary underline">/terms/</a></CardDescription>
+                  </div>
+                  <a href="/terms/" target="_blank" className="text-xs text-primary underline">Preview</a>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <textarea className="w-full bg-card border border-border rounded-lg p-3 text-sm text-white font-mono resize-y" rows={20}
+                  value={settings.legal.terms_of_service} onChange={e => updateLegal('terms_of_service', e.target.value)}
+                  placeholder="<h1>Terms of Service</h1><p>Enter your terms of service HTML here...</p>" />
+                <p className="text-xs text-muted mt-2">Supports HTML tags: h1, h2, h3, p, ul, ol, li, a, strong, em, blockquote</p>
+              </CardContent>
+            </Card>
           </>
         )}
 

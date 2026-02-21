@@ -3,12 +3,47 @@ from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
 from django.http import JsonResponse
+from django.shortcuts import render
 from django.views.generic import TemplateView
 from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
+
+from datetime import datetime
 
 
 def health_check(request):
     return JsonResponse({'status': 'ok', 'service': 'cashflip'})
+
+
+def privacy_policy_view(request):
+    from game.models import LegalDocument
+    legal = LegalDocument.get_legal()
+    return render(request, 'game/legal.html', {
+        'title': 'Privacy Policy',
+        'doc_type': 'privacy',
+        'content': legal.privacy_policy,
+        'company_name': legal.company_name,
+        'license_info': legal.license_info,
+        'support_email': legal.support_email,
+        'support_phone': legal.support_phone,
+        'updated_at': legal.updated_at,
+        'year': datetime.now().year,
+    })
+
+
+def terms_of_service_view(request):
+    from game.models import LegalDocument
+    legal = LegalDocument.get_legal()
+    return render(request, 'game/legal.html', {
+        'title': 'Terms of Service',
+        'doc_type': 'terms',
+        'content': legal.terms_of_service,
+        'company_name': legal.company_name,
+        'license_info': legal.license_info,
+        'support_email': legal.support_email,
+        'support_phone': legal.support_phone,
+        'updated_at': legal.updated_at,
+        'year': datetime.now().year,
+    })
 
 
 urlpatterns = [
@@ -34,6 +69,10 @@ urlpatterns = [
 
     # Social auth
     path('auth/', include('social_django.urls', namespace='social')),
+
+    # Legal pages (public)
+    path('privacy-policy/', privacy_policy_view, name='privacy_policy'),
+    path('terms/', terms_of_service_view, name='terms_of_service'),
 
     # Game UI (served as SPA)
     path('', TemplateView.as_view(template_name='game/index.html'), name='home'),
