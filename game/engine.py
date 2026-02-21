@@ -441,15 +441,18 @@ def execute_flip(session):
     }
 
     if denomination:
+        # Upload fields take priority over static paths (matching serializer logic)
+        face_path = denomination.face_image_upload.url if denomination.face_image_upload else (denomination.face_image_path or None)
+        gif_path = denomination.flip_gif_upload.url if denomination.flip_gif_upload else (denomination.flip_gif_path or None)
         result['denomination'] = {
             'value': str(denomination.value),
             'is_zero': denomination.is_zero,
             'front_image_url': denomination.front_image.url if denomination.front_image else None,
             'back_image_url': denomination.back_image.url if denomination.back_image else None,
-            'face_image_path': denomination.face_image_path or None,
+            'face_image_path': face_path,
             'flip_sequence_prefix': denomination.flip_sequence_prefix or None,
             'flip_sequence_frames': denomination.flip_sequence_frames,
-            'flip_gif_path': denomination.flip_gif_path or None,
+            'flip_gif_path': gif_path,
             'flip_video_path': denomination.flip_video_path or None,
         }
     else:
