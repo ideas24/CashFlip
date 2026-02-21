@@ -45,6 +45,8 @@ interface GameSettings {
   flip_animation_speed_ms: number
   flip_sound_enabled: boolean
   flip_sound_url: string
+  win_sound_url: string
+  cashout_sound_url: string
   start_flip_image_url: string
   simulated_feed_enabled: boolean
   simulated_feed_data: SimFeedEntry[]
@@ -648,48 +650,105 @@ export default function SettingsPage() {
                           </div>
                         </div>
                       </div>
-                      {/* Custom Flip Sound Upload */}
+                      {/* Sound Configuration */}
                       {s.game.flip_sound_enabled && (
-                        <div className="mt-4 p-3 rounded-lg border border-border/50 bg-zinc-900/50">
-                          <label className="block text-xs text-slate-400 mb-2 font-medium">Custom Flip Sound (MP3/WAV/OGG)</label>
-                          <p className="text-xs text-muted mb-2">Upload a custom sound for the card flip. Default is a natural money-flip sound. Short clips (&lt;1s) work best.</p>
-                          {s.game.flip_sound_url && (
-                            <div className="mb-2 flex items-center gap-2">
-                              <audio controls src={s.game.flip_sound_url} className="h-8" style={{maxWidth: '250px'}} />
-                              <button onClick={() => updateGame('flip_sound_url', '')}
-                                className="text-xs text-red-400 hover:text-red-300 cursor-pointer px-2 py-1 rounded border border-red-500/30 bg-red-500/10">
-                                Remove
-                              </button>
-                            </div>
-                          )}
-                          <div className="flex items-center gap-2">
-                            <Input type="text" placeholder="Cloudinary URL (leave empty for default)" value={s.game.flip_sound_url || ''}
-                              className="text-xs flex-1" onChange={e => updateGame('flip_sound_url', e.target.value)} />
-                            <label className="shrink-0">
-                              <span className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-emerald-500/20 text-emerald-400 text-xs rounded cursor-pointer hover:bg-emerald-500/30 transition">
-                                <Upload size={12} /> {uploading ? '...' : 'Upload'}
-                              </span>
-                              <input type="file" className="hidden" accept="audio/mp3,audio/mpeg,audio/wav,audio/ogg,audio/*" disabled={uploading}
-                                onChange={async e => {
-                                  const file = e.target.files?.[0]
-                                  if (!file) return
-                                  setUploading(true)
-                                  try {
-                                    const formData = new FormData()
-                                    formData.append('file', file)
-                                    formData.append('folder', 'cashflip/sounds')
-                                    const resp = await api.upload<{ url: string }>('/settings/cloudinary-upload/', formData)
-                                    if (resp.url) updateGame('flip_sound_url', resp.url)
-                                  } catch {}
-                                  setUploading(false)
-                                  e.target.value = ''
-                                }} />
-                            </label>
-                          </div>
-                          {!s.game.flip_sound_url && (
-                            <p className="text-xs text-emerald-400/60 mt-1.5">Using default: /static/sounds/money-flip.mp3</p>
-                          )}
-                        </div>
+                        <>
+                        {/* --- Flip Sound --- */}
+                        {(() => {
+                          const SOUND_PRESETS = [
+                            { label: 'Money Flip (default)', value: '' },
+                            { label: 'Paper Snap', value: '/static/sounds/money-paper.mp3' },
+                            { label: 'Coins', value: '/static/sounds/money-coins.mp3' },
+                            { label: 'Classic', value: '/static/sounds/money-flip-old.mp3' },
+                          ];
+                          const WIN_PRESETS = [
+                            { label: 'Money Win (default)', value: '' },
+                            { label: 'Coins', value: '/static/sounds/money-coins.mp3' },
+                            { label: 'Big Win', value: '/static/sounds/money-win-big.mp3' },
+                            { label: 'Cashout', value: '/static/sounds/money-cashout.mp3' },
+                          ];
+                          const CASHOUT_PRESETS = [
+                            { label: 'Money Cashout (default)', value: '' },
+                            { label: 'Big Win', value: '/static/sounds/money-win-big.mp3' },
+                            { label: 'Money Win', value: '/static/sounds/money-win.mp3' },
+                            { label: 'Coins', value: '/static/sounds/money-coins.mp3' },
+                          ];
+                          const isCustom = (url: string, presets: {value:string}[]) => url && !presets.some(p => p.value === url);
+                          const SoundBlock = ({label, desc, field, presets}: {label:string, desc:string, field: 'flip_sound_url'|'win_sound_url'|'cashout_sound_url', presets:{label:string,value:string}[]}) => {
+                            const val = (s.game as any)[field] || '';
+                            const custom = isCustom(val, presets);
+                            return (
+                              <div className="mt-4 p-3 rounded-lg border border-border/50 bg-zinc-900/50">
+                                <label className="block text-xs text-slate-400 mb-1 font-medium">{label}</label>
+                                <p className="text-xs text-muted mb-2">{desc}</p>
+                                <div className="flex items-center gap-2 mb-2">
+                                  <select className="flex-1 bg-zinc-800 border border-border rounded px-2 py-1.5 text-xs text-slate-200"
+                                    value={custom ? '__custom__' : val}
+                                    onChange={e => {
+                                      if (e.target.value === '__custom__') return;
+                                      updateGame(field, e.target.value);
+                                    }}>
+                                    {presets.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
+                                    <option value="__custom__">Custom upload...</option>
+                                  </select>
+                                  {(val && !custom) && (
+                                    <button onClick={() => { const a = new Audio(val || (field === 'flip_sound_url' ? '/static/sounds/money-flip.mp3' : field === 'win_sound_url' ? '/static/sounds/money-win.mp3' : '/static/sounds/money-cashout.mp3')); a.volume = 0.8; a.play().catch(()=>{}); }}
+                                      className="shrink-0 text-xs px-2 py-1.5 rounded bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 cursor-pointer transition">
+                                      Preview
+                                    </button>
+                                  )}
+                                </div>
+                                {(custom || val === '__custom__') && (
+                                  <div className="mt-2">
+                                    {val && val !== '__custom__' && (
+                                      <div className="mb-2 flex items-center gap-2">
+                                        <audio controls src={val} className="h-8" style={{maxWidth: '220px'}} />
+                                        <button onClick={() => updateGame(field, '')}
+                                          className="text-xs text-red-400 hover:text-red-300 cursor-pointer px-2 py-1 rounded border border-red-500/30 bg-red-500/10">
+                                          Remove
+                                        </button>
+                                      </div>
+                                    )}
+                                    <div className="flex items-center gap-2">
+                                      <Input type="text" placeholder="Cloudinary URL" value={val === '__custom__' ? '' : val}
+                                        className="text-xs flex-1" onChange={e => updateGame(field, e.target.value)} />
+                                      <label className="shrink-0">
+                                        <span className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-emerald-500/20 text-emerald-400 text-xs rounded cursor-pointer hover:bg-emerald-500/30 transition">
+                                          <Upload size={12} /> {uploading ? '...' : 'Upload'}
+                                        </span>
+                                        <input type="file" className="hidden" accept="audio/mp3,audio/mpeg,audio/wav,audio/ogg,audio/*" disabled={uploading}
+                                          onChange={async e => {
+                                            const file = e.target.files?.[0]; if (!file) return;
+                                            setUploading(true);
+                                            try {
+                                              const formData = new FormData(); formData.append('file', file); formData.append('folder', 'cashflip/sounds');
+                                              const resp = await api.upload<{url:string}>('/settings/cloudinary-upload/', formData);
+                                              if (resp.url) updateGame(field, resp.url);
+                                            } catch {}
+                                            setUploading(false); e.target.value = '';
+                                          }} />
+                                      </label>
+                                    </div>
+                                  </div>
+                                )}
+                                {!val && (
+                                  <button onClick={() => { const defaults: Record<string,string> = {flip_sound_url:'/static/sounds/money-flip.mp3',win_sound_url:'/static/sounds/money-win.mp3',cashout_sound_url:'/static/sounds/money-cashout.mp3'}; const a = new Audio(defaults[field]); a.volume = 0.8; a.play().catch(()=>{}); }}
+                                    className="text-xs px-2 py-1 rounded bg-zinc-800 text-slate-400 hover:text-slate-200 cursor-pointer transition mt-1">
+                                    Preview default
+                                  </button>
+                                )}
+                              </div>
+                            );
+                          };
+                          return (
+                            <>
+                              <SoundBlock label="Flip Sound" desc="Plays on each card flip. Short clips (<1s) work best." field="flip_sound_url" presets={SOUND_PRESETS} />
+                              <SoundBlock label="Win Sound" desc="Plays when a denomination is won and balance updates. Money sounds recommended." field="win_sound_url" presets={WIN_PRESETS} />
+                              <SoundBlock label="Cashout Sound" desc="Plays on successful cashout celebration." field="cashout_sound_url" presets={CASHOUT_PRESETS} />
+                            </>
+                          );
+                        })()}
+                        </>
                       )}
                       {/* Start Flip Image */}
                       <div className="mt-4 p-3 rounded-lg border border-border/50 bg-zinc-900/50">

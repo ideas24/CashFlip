@@ -197,6 +197,10 @@ class GameConfig(models.Model):
         help_text='Play money-flipping sound during flip animation')
     flip_sound_url = models.URLField(max_length=500, blank=True, default='',
         help_text='Custom flip sound URL (Cloudinary). Empty = use default /static/sounds/money-flip.mp3')
+    win_sound_url = models.URLField(max_length=500, blank=True, default='',
+        help_text='Custom win celebration sound URL. Empty = use default /static/sounds/money-win.mp3')
+    cashout_sound_url = models.URLField(max_length=500, blank=True, default='',
+        help_text='Custom cashout celebration sound URL. Empty = use default /static/sounds/money-cashout.mp3')
     start_flip_image_url = models.URLField(max_length=500, blank=True, default='',
         help_text='Image shown on the first card when a new session starts (Cloudinary). Subsequent cards show denomination glimpses.')
     simulated_feed_enabled = models.BooleanField(default=False,

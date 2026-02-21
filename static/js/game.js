@@ -312,7 +312,7 @@
     }
 
     // Cloudinary resize for GIFs — reduces file size for faster loading.
-    // Uses w_480 scale (480px wide) which is sufficient for mobile card display.
+    // Uses w_360 scale (360px wide) — sweet spot for mobile card display (~590KB vs 3.5MB raw).
     function _gifOptimized(url) {
         if (!url) return url;
         const marker = '/image/upload/';
@@ -321,7 +321,7 @@
         const before = url.substring(0, idx + marker.length);
         const after = url.substring(idx + marker.length);
         if (after.startsWith('w_') || after.startsWith('c_')) return url;
-        return before + 'w_480,c_scale/' + after;
+        return before + 'w_360,c_scale/' + after;
     }
 
     // ==================== STAKE TIER DENOMINATION FILTER ====================
@@ -1246,7 +1246,7 @@
         }
     }
 
-    // --- 4. CASINO SOUND ENGINE (Web Audio API, inline generated) ---
+    // --- 4. MONEY SOUND ENGINE (file-based, configurable from admin) ---
     let audioCtx = null;
     function getAudio() {
         if (!audioCtx) {
@@ -1268,26 +1268,64 @@
         osc.start(); osc.stop(ctx.currentTime + duration);
     }
 
+    // Preloaded file-based sounds (configurable from admin)
+    let _winSound = null, _winSoundUrl = null;
+    let _cashoutSound = null, _cashoutSoundUrl = null;
+
+    function _preloadWinSound() {
+        try {
+            const url = state.gameConfig?.win_sound_url || '/static/sounds/money-win.mp3';
+            if (_winSoundUrl === url && _winSound) return;
+            _winSound = new Audio(url);
+            _winSound.volume = 0.8;
+            _winSound.preload = 'auto';
+            _winSoundUrl = url;
+            _winSound.onerror = () => {
+                _winSound = new Audio('/static/sounds/money-win.mp3');
+                _winSound.volume = 0.8;
+                _winSound.preload = 'auto';
+                _winSoundUrl = '/static/sounds/money-win.mp3';
+            };
+        } catch (e) {}
+    }
+
+    function _preloadCashoutSound() {
+        try {
+            const url = state.gameConfig?.cashout_sound_url || '/static/sounds/money-cashout.mp3';
+            if (_cashoutSoundUrl === url && _cashoutSound) return;
+            _cashoutSound = new Audio(url);
+            _cashoutSound.volume = 0.8;
+            _cashoutSound.preload = 'auto';
+            _cashoutSoundUrl = url;
+            _cashoutSound.onerror = () => {
+                _cashoutSound = new Audio('/static/sounds/money-cashout.mp3');
+                _cashoutSound.volume = 0.8;
+                _cashoutSound.preload = 'auto';
+                _cashoutSoundUrl = '/static/sounds/money-cashout.mp3';
+            };
+        } catch (e) {}
+    }
+
+    function _playSoundClone(src) {
+        if (!src) return;
+        try {
+            const s = src.cloneNode();
+            s.volume = src.volume;
+            s.play().catch(() => {});
+        } catch (e) {}
+    }
+
     function sfxFlip() {
-        playTone(800, 0.08, 'square', 0.08);
-        setTimeout(() => playTone(1200, 0.06, 'square', 0.06), 50);
-        setTimeout(() => playTone(600, 0.06, 'square', 0.05), 100);
+        _playFlipSound();
     }
 
     function sfxWin() {
-        playTone(523, 0.12, 'sine', 0.15);
-        setTimeout(() => playTone(659, 0.12, 'sine', 0.15), 100);
-        setTimeout(() => playTone(784, 0.15, 'sine', 0.18), 200);
-        setTimeout(() => playTone(1047, 0.2, 'sine', 0.12), 320);
+        if (!_winSound) _preloadWinSound();
+        _playSoundClone(_winSound);
     }
 
     function sfxBigWin() {
         sfxWin();
-        setTimeout(() => {
-            playTone(1047, 0.15, 'sine', 0.12);
-            setTimeout(() => playTone(1319, 0.15, 'sine', 0.12), 80);
-            setTimeout(() => playTone(1568, 0.25, 'sine', 0.15), 160);
-        }, 450);
     }
 
     function sfxLoss() {
@@ -1297,10 +1335,8 @@
     }
 
     function sfxCashout() {
-        for (let i = 0; i < 6; i++) {
-            setTimeout(() => playTone(800 + i * 200, 0.1, 'sine', 0.1), i * 60);
-        }
-        setTimeout(() => playTone(2000, 0.4, 'sine', 0.15), 400);
+        if (!_cashoutSound) _preloadCashoutSound();
+        _playSoundClone(_cashoutSound);
     }
 
     // --- 5. SOCIAL PROOF TOASTS ---
@@ -1915,6 +1951,8 @@
                 state.denominations = state.gameConfig.denominations || [];
                 _preloadGifFirstFrames();
                 _preloadFlipSound();
+                _preloadWinSound();
+                _preloadCashoutSound();
                 const c = state.gameConfig;
                 const sym = c.currency?.symbol || 'GH₵';
                 // Update CTA hint dynamically
