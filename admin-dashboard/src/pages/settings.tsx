@@ -615,14 +615,15 @@ export default function SettingsPage() {
                       <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                         <div>
                           <label className="block text-xs font-medium text-slate-400 mb-1.5">Animation Mode</label>
-                          <select value={s.game.flip_animation_mode || 'gif'}
+                          <select value={s.game.flip_animation_mode || 'css3d'}
                             onChange={e => updateGame('flip_animation_mode', e.target.value)}
                             className="w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-white">
+                            <option value="css3d">CSS 3D Flip (recommended)</option>
                             <option value="gif">GIF Animation</option>
                             <option value="png">PNG Sequence</option>
                             <option value="video">MP4/WebM Video</option>
                           </select>
-                          <p className="text-xs text-muted mt-1">GIF recommended. Video for premium feel.</p>
+                          <p className="text-xs text-muted mt-1">CSS 3D recommended. GIF/PNG for asset-based animation.</p>
                         </div>
                         <div>
                           <label className="block text-xs font-medium text-slate-400 mb-1.5">Animation Speed (ms)</label>

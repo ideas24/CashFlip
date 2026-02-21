@@ -693,7 +693,7 @@
             if (!card) { state.isFlipping = false; resolve(); return; }
 
             // Get animation config from game config
-            const animMode = state.gameConfig?.flip_animation_mode || 'gif';
+            const animMode = state.gameConfig?.flip_animation_mode || 'css3d';
             const animSpeed = state.gameConfig?.flip_animation_speed_ms || 1500;
 
             // Play flip sound
@@ -724,6 +724,12 @@
             const seqPrefix = denomData?.flip_sequence_prefix;
             const videoPath = denomData?.flip_video_path;
 
+            // CSS 3D flip — recommended mode, works without any assets
+            if (animMode === 'css3d') {
+                _flipWithCSS3D(card, animSpeed, value, sym, resolve, denomData);
+                return;
+            }
+
             // Prefer video if configured
             if (animMode === 'video' && videoPath) {
                 _flipWithVideo(card, videoPath, animSpeed, value, sym, resolve, denomData);
@@ -737,14 +743,14 @@
                 return;
             } else if (animMode === 'png' && seqPrefix) {
                 const seqFrames = denomData?.flip_sequence_frames || 31;
-                _flipWithSequence(card, seqPrefix, seqFrames, animSpeed, value, sym, resolve);
+                _flipWithSequence(card, seqPrefix, seqFrames, animSpeed, value, sym, resolve, denomData);
                 return;
             } else if (gifPath) {
                 _flipWithGif(card, gifPath, animSpeed, value, sym, resolve, denomData);
                 return;
             } else if (seqPrefix) {
                 const seqFrames = denomData?.flip_sequence_frames || 31;
-                _flipWithSequence(card, seqPrefix, seqFrames, animSpeed, value, sym, resolve);
+                _flipWithSequence(card, seqPrefix, seqFrames, animSpeed, value, sym, resolve, denomData);
                 return;
             }
 
@@ -753,11 +759,55 @@
         });
     }
 
+    // ---- CSS 3D FLIP-AWAY ANIMATION ----
+    // Current card flips away via CSS 3D rotateY, revealing the next card underneath
+    // which already shows the new denomination face image. Smooth, GPU-accelerated.
+    function _flipWithCSS3D(card, durationMs, value, sym, resolve, denomData) {
+        let _fired = false;
+        card.classList.remove('entering', 'dragging', 'spring-back');
+        card.style.transform = '';
+        card.style.opacity = '1';
+
+        // Place next card underneath with denomination face image (visible)
+        _placeNextCardUnderneath(denomData);
+
+        // Set flip duration via CSS custom property
+        card.style.setProperty('--flip-speed', `${durationMs}ms`);
+
+        // Trigger 3D flip-away animation
+        card.classList.add('flip-away-3d');
+
+        const onFlipEnd = () => {
+            if (_fired) return;
+            _fired = true;
+
+            _noteFlipCount++;
+            updateRunningTotal();
+            const pile = document.getElementById('note-pile');
+            const pileCount = document.getElementById('pile-count');
+            if (pile) pile.classList.add('visible');
+            if (pileCount) pileCount.textContent = _noteFlipCount;
+
+            // Remove current card
+            card.removeAttribute('id');
+            if (card.parentNode) card.remove();
+
+            // Promote next card to active
+            const next = document.getElementById('next-note');
+            if (next) { next.id = 'active-note'; }
+            _startAutoFlipTimer();
+            state.isFlipping = false;
+            resolve();
+        };
+
+        card.addEventListener('animationend', onFlipEnd, { once: true });
+        // Safety timeout in case animationend doesn't fire
+        setTimeout(onFlipEnd, durationMs + 500);
+    }
+
     // ---- GIF FLIP ANIMATION ----
-    // Card starts empty (dark). On flip: load the denomination's animated GIF
-    // directly — the GIF IS the flip animation revealing the denomination (WYSIWYG).
-    // Uses raw GIF URL (no Cloudinary speed transforms — they break animation).
-    // Cache-bust forces GIF to restart from frame 0 every time.
+    // GIF plays on the current card as a transition effect.
+    // Next card underneath already shows the new denomination face.
     function _flipWithGif(card, gifPath, durationMs, value, sym, resolve, denomData) {
         const gifUrl = _assetUrl(gifPath);
         const cacheBust = `?cb=${Date.now()}`;
@@ -767,25 +817,16 @@
         card.style.transform = '';
         card.style.opacity = '1';
 
-        // Pre-place next card underneath (hidden, empty dark card)
-        _placeNextCardUnderneath();
+        // Place next card underneath with denomination face image (visible)
+        _placeNextCardUnderneath(denomData);
 
-        // Load the denomination's flip GIF directly onto the card.
-        // The GIF animation reveals the denomination — WYSIWYG.
+        // Load the denomination's flip GIF onto the current card as transition effect
         card.innerHTML = `<img src="${gifUrl}${cacheBust}" alt="flip" style="${_imgStyle}" />`;
 
         // Guarded completion handler — only fires once
         const onGifEnd = () => {
             if (_gifFired) return;
             _gifFired = true;
-
-            // Swap to denomination face image as final resting state (clear WYSIWYG visual)
-            const faceUrl = denomData?.face_image_path
-                ? _cloudinaryFill(_assetUrl(denomData.face_image_path)) : null;
-            if (faceUrl) {
-                const img = card.querySelector('img');
-                if (img) { img.src = faceUrl; img.style.cssText = _imgStyle; }
-            }
 
             _noteFlipCount++;
             updateRunningTotal();
@@ -794,27 +835,21 @@
             if (pile) pile.classList.add('visible');
             if (pileCount) pileCount.textContent = _noteFlipCount;
 
-            // Brief pause to show the denomination face, then move to pile
-            setTimeout(() => {
-                // Reveal the next card underneath (empty dark card)
-                const nextCard = document.getElementById('next-note');
-                if (nextCard) nextCard.style.opacity = '1';
+            // Remove current card — next card underneath already shows denomination
+            card.removeAttribute('id');
+            card.classList.add('to-pile');
+            card.addEventListener('animationend', () => card.remove(), { once: true });
+            setTimeout(() => { if (card.parentNode) card.remove(); }, 600);
 
-                card.removeAttribute('id');
-                card.classList.add('to-pile');
-                card.addEventListener('animationend', () => card.remove(), { once: true });
-                setTimeout(() => { if (card.parentNode) card.remove(); }, 600);
-
-                // Promote the underneath card to active
-                const next = document.getElementById('next-note');
-                if (next) { next.id = 'active-note'; }
-                _startAutoFlipTimer();
-                state.isFlipping = false;
-                resolve();
-            }, 400); // 400ms pause to see the denomination face
+            // Promote the underneath card to active
+            const next = document.getElementById('next-note');
+            if (next) { next.id = 'active-note'; }
+            _startAutoFlipTimer();
+            state.isFlipping = false;
+            resolve();
         };
 
-        // GIF plays for the configured duration, then show face + move to pile
+        // GIF plays for the configured duration, then move to pile
         setTimeout(onGifEnd, durationMs);
     }
 
@@ -828,8 +863,8 @@
 
         card.classList.remove('entering');
 
-        // Pre-place next card underneath (hidden — also a paused video in video mode)
-        _placeNextCardUnderneath();
+        // Place next card underneath with denomination face image (visible)
+        _placeNextCardUnderneath(denomData);
 
         // Get existing video element from card (created by _placeReadyCard or _placeNextCardUnderneath)
         let video = card.querySelector('video');
@@ -860,10 +895,7 @@
             if (pile) pile.classList.add('visible');
             if (pileCount) pileCount.textContent = _noteFlipCount;
 
-            // Reveal the next card underneath (also a paused video — looks like a static card)
-            const nextCard = document.getElementById('next-note');
-            if (nextCard) nextCard.style.opacity = '1';
-
+            // Remove current card — next card underneath already shows denomination
             card.removeAttribute('id');
             card.classList.add('to-pile');
             card.addEventListener('animationend', () => card.remove(), { once: true });
@@ -871,12 +903,7 @@
 
             // Promote next card to active
             const next = document.getElementById('next-note');
-            if (next) {
-                next.id = 'active-note';
-                // Ensure the next card's video stays paused at frame 0
-                const nextVid = next.querySelector('video');
-                if (nextVid) { nextVid.pause(); nextVid.currentTime = 0; }
-            }
+            if (next) { next.id = 'active-note'; }
             _startAutoFlipTimer();
             state.isFlipping = false;
             resolve();
@@ -933,8 +960,8 @@
         }
     }
 
-    // Place a new card underneath the current active card
-    function _placeNextCardUnderneath() {
+    // Place a new card underneath the current active card — with denomination face visible
+    function _placeNextCardUnderneath(denomData) {
         const stage = document.getElementById('note-stage');
         if (!stage) return;
         // Don't duplicate
@@ -944,9 +971,17 @@
         nextCard.className = 'banknote-card';
         nextCard.id = 'next-note';
         nextCard.style.zIndex = '0';
-        nextCard.style.opacity = '0'; // Hidden until current card exits
-        // Empty card — dark background from .banknote-card CSS.
-        // Denomination appears on flip via API result.
+        nextCard.style.opacity = '1'; // Visible immediately — denomination face showing
+
+        // Show denomination face image on the next card (no dark/empty state)
+        if (denomData) {
+            const faceUrl = denomData.face_image_path
+                ? _cloudinaryFill(_assetUrl(denomData.face_image_path))
+                : (denomData.front_image_url || null);
+            if (faceUrl) {
+                nextCard.innerHTML = `<img src="${faceUrl}" alt="${denomData.is_zero ? 'ZERO' : denomData.value}" style="${_imgStyle}" />`;
+            }
+        }
 
         // Insert underneath (before active card)
         const active = document.getElementById('active-note');
@@ -958,40 +993,59 @@
     }
 
     // ---- PNG SEQUENCE FLIP ANIMATION ----
-    function _flipWithSequence(card, seqPrefix, totalFrames, durationMs, value, sym, resolve) {
+    // Plays denomination PNG frames on the current card (note flipping away).
+    // Next card underneath already shows the new denomination face.
+    // Uses requestAnimationFrame for smoother playback.
+    function _flipWithSequence(card, seqPrefix, totalFrames, durationMs, value, sym, resolve, denomData) {
         const staticBase = _assetUrl(seqPrefix);
         const denomVal = seqPrefix.split('/').pop();
         const filePrefix = (denomVal === '1') ? `${denomVal}cedi` : `${denomVal}cedis`;
 
-        // Clear CSS classes
         card.classList.remove('entering', 'dragging', 'spring-back');
         card.style.transform = '';
         card.style.opacity = '1';
 
-        // Use existing img element to play frames — no overlay
+        // Place next card underneath with denomination face image (visible)
+        _placeNextCardUnderneath(denomData);
+
+        // Set frame 0 on current card
         let frameImg = card.querySelector('img');
         if (!frameImg) {
-            card.innerHTML = `<img src="${staticBase}/${filePrefix}_00000.png" alt="flip"
-                 style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:10px;display:block;" />`;
+            card.innerHTML = `<img src="${staticBase}/${filePrefix}_00000.png" alt="flip" style="${_imgStyle}" />`;
             frameImg = card.querySelector('img');
         } else {
             frameImg.src = `${staticBase}/${filePrefix}_00000.png`;
         }
 
         let currentFrame = 0;
-        const interval = Math.max(16, Math.floor(durationMs / totalFrames));
+        const frameInterval = Math.max(16, Math.floor(durationMs / totalFrames));
 
-        // Preload first few frames
+        // Preload frames ahead
         for (let i = 1; i <= Math.min(5, totalFrames - 1); i++) {
             const img = new Image();
             img.src = `${staticBase}/${filePrefix}_${String(i).padStart(5, '0')}.png`;
         }
 
-        const seqTimer = setInterval(() => {
-            currentFrame++;
-            if (currentFrame >= totalFrames) {
-                clearInterval(seqTimer);
+        let startTime = null;
+        const animate = (timestamp) => {
+            if (!startTime) startTime = timestamp;
+            const elapsed = timestamp - startTime;
+            const targetFrame = Math.min(totalFrames - 1, Math.floor(elapsed / frameInterval));
 
+            if (targetFrame > currentFrame) {
+                currentFrame = targetFrame;
+                // Preload ahead
+                if (currentFrame + 3 < totalFrames) {
+                    const preload = new Image();
+                    preload.src = `${staticBase}/${filePrefix}_${String(currentFrame + 3).padStart(5, '0')}.png`;
+                }
+                frameImg.src = `${staticBase}/${filePrefix}_${String(currentFrame).padStart(5, '0')}.png`;
+            }
+
+            if (currentFrame < totalFrames - 1) {
+                requestAnimationFrame(animate);
+            } else {
+                // Sequence complete
                 _noteFlipCount++;
                 updateRunningTotal();
                 const pile = document.getElementById('note-pile');
@@ -999,23 +1053,21 @@
                 if (pile) pile.classList.add('visible');
                 if (pileCount) pileCount.textContent = _noteFlipCount;
 
-                setTimeout(() => {
-                    card.removeAttribute('id');
-                    card.classList.add('to-pile');
-                    card.addEventListener('animationend', () => card.remove(), { once: true });
-                    _placeReadyCard();
-                    state.isFlipping = false;
-                    resolve();
-                }, 500);
-                return;
-            }
+                // Remove current card — next card underneath already shows denomination
+                card.removeAttribute('id');
+                card.classList.add('to-pile');
+                card.addEventListener('animationend', () => card.remove(), { once: true });
+                setTimeout(() => { if (card.parentNode) card.remove(); }, 600);
 
-            if (currentFrame + 3 < totalFrames) {
-                const preload = new Image();
-                preload.src = `${staticBase}/${filePrefix}_${String(currentFrame + 3).padStart(5, '0')}.png`;
+                const next = document.getElementById('next-note');
+                if (next) { next.id = 'active-note'; }
+                _startAutoFlipTimer();
+                state.isFlipping = false;
+                resolve();
             }
-            frameImg.src = `${staticBase}/${filePrefix}_${String(currentFrame).padStart(5, '0')}.png`;
-        }, interval);
+        };
+
+        requestAnimationFrame(animate);
     }
 
     // ---- CSS FALLBACK FLIP ANIMATION ----
@@ -1026,10 +1078,10 @@
         card.style.transform = '';
         card.style.opacity = '1';
 
-        // Pre-place next card underneath
-        if (!isZero) _placeNextCardUnderneath();
+        // Place next card underneath with denomination face (visible, not for zero)
+        if (!isZero) _placeNextCardUnderneath(denomData);
 
-        // Build the denomination face content
+        // Build the denomination face content on current card (transition effect)
         const faceUrl = denomData?.face_image_path
             ? _cloudinaryFill(_assetUrl(denomData.face_image_path))
             : (denomData?.front_image_url || null);
@@ -1039,7 +1091,7 @@
             // Trigger reveal animation
             requestAnimationFrame(() => {
                 const img = card.querySelector('img');
-                if (img) { img.style.transition = 'opacity 0.4s ease, transform 0.4s ease'; img.style.opacity = '1'; }
+                if (img) { img.style.transition = 'opacity 0.4s ease'; img.style.opacity = '1'; }
             });
         } else {
             // Minimal text fallback
@@ -1060,11 +1112,6 @@
             }
 
             setTimeout(() => {
-                if (!isZero) {
-                    const nextCard = document.getElementById('next-note');
-                    if (nextCard) nextCard.style.opacity = '1';
-                }
-
                 card.removeAttribute('id');
                 card.classList.add('to-pile');
                 card.addEventListener('animationend', () => card.remove(), { once: true });

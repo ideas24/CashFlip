@@ -1194,7 +1194,7 @@ def settings_view(request):
                 'instant_cashout_min_amount': '5.00',
                 'max_session_duration_minutes': 120,
                 'auto_flip_seconds': 8,
-                'flip_animation_mode': 'gif',
+                'flip_animation_mode': 'css3d',
                 'flip_display_mode': 'face_then_gif',
                 'flip_animation_speed_ms': 1500,
                 'flip_sound_enabled': True,

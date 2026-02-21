@@ -184,8 +184,8 @@ class GameConfig(models.Model):
         help_text='1 in N active players gets the holiday boost (e.g. 1000 = 0.1% chance)')
     holiday_max_tier_name = models.CharField(max_length=50, default='Standard', blank=True,
         help_text='Only players in this tier or lower get holiday boost (empty = all tiers)')
-    flip_animation_mode = models.CharField(max_length=10, default='gif',
-        choices=[('gif', 'GIF Animation'), ('png', 'PNG Sequence'), ('video', 'MP4/WebM Video')],
+    flip_animation_mode = models.CharField(max_length=10, default='css3d',
+        choices=[('css3d', 'CSS 3D Flip'), ('gif', 'GIF Animation'), ('png', 'PNG Sequence'), ('video', 'MP4/WebM Video')],
         help_text='Which animation format to use for note flips')
     flip_display_mode = models.CharField(max_length=20, default='face_then_gif',
         choices=[('face_then_gif', 'Face Image then GIF'), ('gif_only', 'GIF Only (static first frame)')],
