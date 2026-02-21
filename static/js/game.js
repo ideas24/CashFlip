@@ -1968,6 +1968,11 @@
     async function enterLobby() {
         showScreen('lobby-screen');
         await Promise.all([loadProfile(), loadWalletBalance(), loadGameConfig(), loadFeatureConfig()]);
+        // Hide lobby buttons for disabled features
+        const wheelBtn = document.getElementById('wheel-btn');
+        const badgesBtn = document.getElementById('badges-btn');
+        if (wheelBtn) wheelBtn.style.display = featureFlags.daily_wheel_enabled ? '' : 'none';
+        if (badgesBtn) badgesBtn.style.display = featureFlags.badges_enabled ? '' : 'none';
         startLiveFeed();
         startSocialProof();
         checkActiveSession();

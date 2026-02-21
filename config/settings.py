@@ -276,6 +276,8 @@ SPECTACULAR_SETTINGS = {
     'SCHEMA_PATH_PREFIX': r'/api/',
     'SCHEMA_PATH_PREFIX_TRIM': False,
     'PREPROCESSING_HOOKS': ['config.spectacular_hooks.preprocess_exclude_admin'],
+    'ENUM_NAME_OVERRIDES': {},
+    'WARN_LEVEL': 'error',  # Suppress "unable to guess serializer" warnings for FBVs
 }
 
 # ============ Celery ============

@@ -36,16 +36,58 @@ html, body {
     -webkit-tap-highlight-color: transparent;
 }
 
-/* Force landscape ONLY during gameplay */
+/* Portrait gameplay: rearrange HUD and note stage for vertical play */
 @media (orientation: portrait) and (max-width: 768px) {
-    #game-screen.active::after {
-        content: '📱 Please rotate your device to landscape mode';
-        position: fixed; inset: 0; z-index: 99999;
-        background: var(--casino-dark);
-        display: flex; align-items: center; justify-content: center;
-        font-size: 1.2rem; color: var(--teal); text-align: center; padding: 2rem;
-        font-family: 'Orbitron', sans-serif;
+    .note-flipper {
+        flex-direction: column;
+        padding-top: 3.5rem;
+        justify-content: flex-start;
+        padding-bottom: 4rem;
     }
+    .note-stage {
+        width: 94vw; max-width: 420px;
+        margin-top: 1rem;
+    }
+    .hud-top-left {
+        top: 0.4rem; left: 0.5rem; gap: 0.35rem;
+    }
+    .hud-top-center {
+        top: auto; bottom: 3.5rem; left: 50%; right: auto;
+    }
+    .hud-top-right {
+        top: 0.4rem; right: 0.5rem;
+    }
+    .cashout-button {
+        padding: 0.4rem 0.9rem; border-radius: 12px;
+    }
+    .cashout-amount { font-size: 1rem; }
+    .hud-bottom {
+        bottom: 0.5rem;
+        left: 0.5rem; right: auto;
+        justify-content: flex-start;
+    }
+    .stake-display, .flip-counter {
+        padding: 0.2rem 0.5rem;
+    }
+    .stake-display span:last-child, .flip-counter span:last-child {
+        font-size: 0.75rem;
+    }
+    .hud-label { font-size: 0.5rem; }
+    .icon-btn.small { width: 28px; height: 28px; font-size: 0.8rem; }
+    /* Running total below card — use bottom positioning relative to flipper */
+    .note-running-total {
+        bottom: 22%; top: auto;
+    }
+    .autoflip-ring {
+        bottom: 21%; top: auto; right: 5%;
+        width: 44px; height: 44px;
+    }
+    .note-pile {
+        left: 2%; top: auto; bottom: 28%;
+        transform: none;
+        width: 44px; height: 28px;
+    }
+    .btn-game-action { font-size: 0.75rem; padding: 0.35rem 0.7rem; }
 }
 
 /* Auth & lobby: allow portrait scrolling */
@@ -1783,13 +1825,24 @@ html, body {
 }
 
 @media (max-width: 480px) {
-    .note-stage { width: 92vw; }
     .note-pile { width: 44px; height: 28px; left: 2%; }
     .pile-count { font-size: 0.65rem; }
+    .game-side-left, .game-side-right { display: none; }
+}
+
+/* Landscape mobile: compact layout */
+@media (orientation: landscape) and (max-width: 480px) {
+    .note-stage { width: 92vw; }
     .note-running-total { bottom: 12%; padding: 0.3rem 1rem; }
     .autoflip-ring { width: 42px; height: 42px; bottom: 12%; right: 3%; }
     .afr-text { font-size: 24px; }
-    .game-side-left, .game-side-right { display: none; }
+}
+
+/* Portrait mobile game: smaller elements */
+@media (orientation: portrait) and (max-width: 480px) {
+    .note-running-total { padding: 0.25rem 0.8rem; }
+    .nrt-value { font-size: 0.85rem; }
+    .afr-text { font-size: 22px; }
 }
 
 @media (min-width: 481px) and (max-width: 768px) {
