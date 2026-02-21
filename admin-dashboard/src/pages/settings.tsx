@@ -172,7 +172,8 @@ interface SMSProvider {
 }
 
 const PROVIDER_TYPES = [
-  { value: 'twilio', label: 'Twilio' },
+  { value: 'twilio', label: 'Twilio (Messages API)' },
+  { value: 'twilio_verify', label: 'Twilio Verify' },
   { value: 'arkesel', label: 'Arkesel' },
   { value: 'hubtel', label: 'Hubtel' },
   { value: 'mnotify', label: 'mNotify' },
@@ -1726,6 +1727,15 @@ export default function SettingsPage() {
                         <Input value={smsForm.extra_config.fallback_number || ''}
                           onChange={e => setSmsForm({ ...smsForm, extra_config: { ...smsForm.extra_config, fallback_number: e.target.value } })}
                           placeholder="+1234567890" />
+                      </div>
+                    )}
+                    {smsForm.provider_type === 'twilio_verify' && (
+                      <div className="col-span-2">
+                        <label className="block text-xs text-muted mb-1">Verify Service SID (starts with VA)</label>
+                        <Input value={smsForm.extra_config.service_sid || ''}
+                          onChange={e => setSmsForm({ ...smsForm, extra_config: { ...smsForm.extra_config, service_sid: e.target.value } })}
+                          placeholder="VAaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" />
+                        <p className="text-xs text-muted mt-1">Create a Verify Service at twilio.com/console/verify/services. Twilio generates and sends the OTP code — you don't need a phone number.</p>
                       </div>
                     )}
                     <div className="col-span-2 flex items-center gap-3">

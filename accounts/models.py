@@ -84,6 +84,8 @@ class OTPToken(models.Model):
     phone = models.CharField(max_length=20, db_index=True)
     code = models.CharField(max_length=6)
     channel = models.CharField(max_length=10, choices=CHANNELS, default='sms')
+    provider_type = models.CharField(max_length=20, blank=True, default='',
+        help_text='SMS provider type used (e.g. twilio_verify, arkesel). Empty = legacy/whatsapp.')
     expires_at = models.DateTimeField()
     is_used = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -213,7 +215,8 @@ class AuthConfig(models.Model):
 class SMSProvider(models.Model):
     """Configurable SMS provider for OTP delivery. Supports multiple providers with priority-based fallback."""
     PROVIDER_CHOICES = [
-        ('twilio', 'Twilio'),
+        ('twilio', 'Twilio (Messages API)'),
+        ('twilio_verify', 'Twilio Verify'),
         ('arkesel', 'Arkesel'),
         ('hubtel', 'Hubtel'),
         ('mnotify', 'mNotify'),

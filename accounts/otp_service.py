@@ -73,28 +73,24 @@ def send_otp(phone, channel='sms', ip_address=None):
     # Invalidate previous unused OTPs
     OTPToken.objects.filter(phone=phone, is_used=False).update(is_used=True)
     
-    # Generate new OTP
-    code = OTPToken.generate_code()
-    otp = OTPToken.objects.create(
-        phone=phone,
-        code=code,
-        channel=channel,
-        expires_at=timezone.now() + timedelta(minutes=otp_expiry),
-        ip_address=ip_address,
-    )
-    
     # Send via appropriate channel
     if channel == 'whatsapp':
+        code = OTPToken.generate_code()
+        otp = OTPToken.objects.create(
+            phone=phone, code=code, channel=channel,
+            expires_at=timezone.now() + timedelta(minutes=otp_expiry),
+            ip_address=ip_address,
+        )
         success = _send_whatsapp_otp(phone, code)
     else:
-        success = _send_sms_otp(phone, code)
+        # For SMS, determine provider first (Twilio Verify manages its own code)
+        success, provider_type = _send_sms_otp(phone, otp_expiry, ip_address)
     
     if success:
         logger.info(f'OTP sent successfully: {phone[:6]}*** via {channel}')
         return {'success': True, 'message': f'OTP sent via {channel}'}
     else:
         logger.error(f'OTP send FAILED: {phone[:6]}*** via {channel}')
-        # Friendly message suggesting the other channel
         alt = 'WhatsApp' if channel == 'sms' else 'SMS'
         return {
             'success': False,
@@ -107,15 +103,34 @@ def verify_otp(phone, code):
     """
     Verify OTP code.
     
+    For Twilio Verify: checks with Twilio's Verification Check API.
+    For all other providers: checks against our DB.
+    
     Returns:
         dict: {'success': bool, 'message': str}
     """
     phone = normalize_phone(phone)
+    
+    # Check if the most recent unused OTP for this phone was sent via Twilio Verify
+    latest_otp = OTPToken.objects.filter(
+        phone=phone, is_used=False, expires_at__gt=timezone.now()
+    ).order_by('-created_at').first()
+    
+    if not latest_otp:
+        return {'success': False, 'message': 'Invalid or expired OTP'}
+    
+    if latest_otp.provider_type == 'twilio_verify':
+        # Verify via Twilio Verify API
+        result = _verify_via_twilio_verify(phone, code)
+        if result:
+            latest_otp.is_used = True
+            latest_otp.save(update_fields=['is_used'])
+            return {'success': True, 'message': 'OTP verified'}
+        return {'success': False, 'message': 'Invalid or expired OTP'}
+    
+    # Standard DB verification — match phone + code
     otp = OTPToken.objects.filter(
-        phone=phone,
-        code=code,
-        is_used=False,
-        expires_at__gt=timezone.now()
+        phone=phone, code=code, is_used=False, expires_at__gt=timezone.now()
     ).order_by('-created_at').first()
     
     if not otp:
@@ -123,7 +138,6 @@ def verify_otp(phone, code):
     
     otp.is_used = True
     otp.save(update_fields=['is_used'])
-    
     return {'success': True, 'message': 'OTP verified'}
 
 
@@ -236,13 +250,16 @@ def _send_whatsapp_otp(phone, code):
     return False
 
 
-def _send_sms_otp(phone, code):
+def _send_sms_otp(phone, otp_expiry, ip_address=None):
     """
     Send OTP via SMS using multi-provider fallback chain.
     
     1. Query SMSProvider model for active providers (ordered by priority desc)
     2. Try each provider until one succeeds
     3. Fall back to Twilio env vars if no DB providers configured
+    
+    Returns:
+        tuple: (success: bool, provider_type: str)
     """
     # Normalize phone to E.164 format
     normalized = phone.replace(' ', '')
@@ -250,9 +267,6 @@ def _send_sms_otp(phone, code):
         normalized = '+233' + normalized[1:]
     elif not normalized.startswith('+'):
         normalized = '+' + normalized
-
-    otp_expiry, _ = _get_auth_config()
-    body = f'Cashflip - Your verification code is: {code}. Expires in {otp_expiry} minutes.'
 
     # Try DB-configured providers first
     try:
@@ -265,22 +279,44 @@ def _send_sms_otp(phone, code):
         for provider in providers:
             logger.info(f'SMS OTP: trying {provider.name} ({provider.provider_type}) to {normalized[:6]}***')
             try:
-                success = _send_via_provider(provider, normalized, body)
+                if provider.provider_type == 'twilio_verify':
+                    success = _send_via_twilio_verify(provider, normalized, otp_expiry, ip_address)
+                else:
+                    # Standard provider: generate code, create OTPToken, send
+                    code = OTPToken.generate_code()
+                    body = f'Cashflip - Your verification code is: {code}. Expires in {otp_expiry} minutes.'
+                    success = _send_via_provider(provider, normalized, body)
+                    if success:
+                        OTPToken.objects.create(
+                            phone=phone, code=code, channel='sms',
+                            provider_type=provider.provider_type,
+                            expires_at=timezone.now() + timedelta(minutes=otp_expiry),
+                            ip_address=ip_address,
+                        )
                 if success:
                     logger.info(f'SMS OTP sent via {provider.name} to {normalized[:6]}***')
-                    return True
+                    return True, provider.provider_type
                 logger.warning(f'SMS OTP failed via {provider.name}, trying next...')
             except Exception as e:
                 logger.warning(f'SMS OTP error via {provider.name}: {e}')
         logger.error(f'All DB SMS providers exhausted for {normalized[:6]}***')
-        return False
+        return False, ''
 
     # Fallback: use Twilio from env vars (legacy path)
-    return _send_via_twilio_env(normalized, body)
+    code = OTPToken.generate_code()
+    body = f'Cashflip - Your verification code is: {code}. Expires in {otp_expiry} minutes.'
+    success = _send_via_twilio_env(normalized, body)
+    if success:
+        OTPToken.objects.create(
+            phone=phone, code=code, channel='sms', provider_type='twilio',
+            expires_at=timezone.now() + timedelta(minutes=otp_expiry),
+            ip_address=ip_address,
+        )
+    return success, 'twilio'
 
 
 def _send_via_provider(provider, phone, body):
-    """Dispatch to the correct provider-specific sender."""
+    """Dispatch to the correct provider-specific sender (non-Verify providers only)."""
     dispatch = {
         'twilio': _send_via_twilio,
         'arkesel': _send_via_arkesel,
@@ -293,6 +329,86 @@ def _send_via_provider(provider, phone, body):
         logger.warning(f'Unknown SMS provider type: {provider.provider_type}')
         return False
     return handler(provider, phone, body)
+
+
+def _send_via_twilio_verify(provider, phone, otp_expiry, ip_address=None):
+    """
+    Send OTP via Twilio Verify API.
+    
+    Twilio generates and sends the OTP code. We create an OTPToken with a
+    placeholder code for rate limiting tracking. Verification is done via
+    Twilio's Verification Check API in _verify_via_twilio_verify().
+    
+    Requires extra_config.service_sid (Twilio Verify Service SID, starts with VA).
+    """
+    service_sid = (provider.extra_config or {}).get('service_sid', '')
+    if not service_sid:
+        logger.error(f'Twilio Verify: no service_sid in extra_config for provider {provider.name}')
+        return False
+
+    try:
+        from twilio.rest import Client
+        client = Client(provider.api_key, provider.api_secret)
+    except Exception as e:
+        logger.error(f'Twilio Verify client init error: {e}')
+        return False
+
+    try:
+        verification = client.verify.v2.services(service_sid).verifications.create(
+            to=phone, channel='sms'
+        )
+        logger.info(f'Twilio Verify started: to={phone[:6]}***, status={verification.status}, sid={verification.sid}')
+        if verification.status == 'pending':
+            # Create OTPToken with placeholder code for rate limiting
+            OTPToken.objects.create(
+                phone=phone, code='000000', channel='sms',
+                provider_type='twilio_verify',
+                expires_at=timezone.now() + timedelta(minutes=otp_expiry),
+                ip_address=ip_address,
+            )
+            return True
+        logger.warning(f'Twilio Verify unexpected status: {verification.status}')
+        return False
+    except Exception as e:
+        logger.error(f'Twilio Verify send error: {e}')
+        return False
+
+
+def _verify_via_twilio_verify(phone, code):
+    """
+    Verify OTP via Twilio Verify Verification Check API.
+    
+    Finds the active Twilio Verify provider and calls the check endpoint.
+    Returns True if Twilio confirms the code is correct (status=approved).
+    """
+    try:
+        from accounts.models import SMSProvider
+        provider = SMSProvider.objects.filter(
+            provider_type='twilio_verify', is_active=True
+        ).order_by('-priority').first()
+    except Exception:
+        provider = None
+
+    if not provider:
+        logger.error('Twilio Verify check: no active twilio_verify provider found')
+        return False
+
+    service_sid = (provider.extra_config or {}).get('service_sid', '')
+    if not service_sid:
+        logger.error(f'Twilio Verify check: no service_sid for provider {provider.name}')
+        return False
+
+    try:
+        from twilio.rest import Client
+        client = Client(provider.api_key, provider.api_secret)
+        check = client.verify.v2.services(service_sid).verification_checks.create(
+            to=phone, code=code
+        )
+        logger.info(f'Twilio Verify check: phone={phone[:6]}***, status={check.status}, valid={check.valid}')
+        return check.status == 'approved'
+    except Exception as e:
+        logger.error(f'Twilio Verify check error: {e}')
+        return False
 
 
 def _send_via_twilio(provider, phone, body):
