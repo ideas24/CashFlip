@@ -914,7 +914,7 @@ export default function SettingsPage() {
                                     <option value="__custom__">Custom upload...</option>
                                   </select>
                                   {(val && !custom) && (
-                                    <button onClick={() => { const a = new Audio(val || (field === 'flip_sound_url' ? '/static/images/assets/sound/money-flip-sound.mp3' : field === 'win_sound_url' ? '/static/sounds/money-win.mp3' : '/static/sounds/money-cashout.mp3')); a.volume = 0.8; a.play().catch(()=>{}); }}
+                                    <button onClick={() => { const a = new Audio(val || (field === 'flip_sound_url' ? '/static/sounds/money-flip.mp3' : field === 'win_sound_url' ? '/static/sounds/money-win.mp3' : '/static/sounds/money-cashout.mp3')); a.volume = 0.8; a.play().catch(()=>{}); }}
                                       className="shrink-0 text-xs px-2 py-1.5 rounded bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 cursor-pointer transition">
                                       Preview
                                     </button>
@@ -954,7 +954,7 @@ export default function SettingsPage() {
                                   </div>
                                 )}
                                 {!val && (
-                                  <button onClick={() => { const defaults: Record<string,string> = {flip_sound_url:'/static/images/assets/sound/money-flip-sound.mp3',win_sound_url:'/static/sounds/money-win.mp3',cashout_sound_url:'/static/sounds/money-cashout.mp3'}; const a = new Audio(defaults[field]); a.volume = 0.8; a.play().catch(()=>{}); }}
+                                  <button onClick={() => { const defaults: Record<string,string> = {flip_sound_url:'/static/sounds/money-flip.mp3',win_sound_url:'/static/sounds/money-win.mp3',cashout_sound_url:'/static/sounds/money-cashout.mp3'}; const a = new Audio(defaults[field]); a.volume = 0.8; a.play().catch(()=>{}); }}
                                     className="text-xs px-2 py-1 rounded bg-zinc-800 text-slate-400 hover:text-slate-200 cursor-pointer transition mt-1">
                                     Preview default
                                   </button>

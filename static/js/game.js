@@ -6,6 +6,26 @@
 (function() {
     'use strict';
 
+    // ==================== MOBILE AUDIO UNLOCK ====================
+    // Mobile browsers block Audio.play() until user interacts with the page.
+    // Unlock on first touch/click by playing + pausing a silent buffer.
+    let _audioCtxUnlocked = false;
+    function _unlockAudioContext() {
+        if (_audioCtxUnlocked) return;
+        _audioCtxUnlocked = true;
+        try {
+            const ctx = new (window.AudioContext || window.webkitAudioContext)();
+            const buf = ctx.createBuffer(1, 1, 22050);
+            const src = ctx.createBufferSource();
+            src.buffer = buf;
+            src.connect(ctx.destination);
+            src.start(0);
+            ctx.resume().catch(() => {});
+        } catch (e) {}
+    }
+    document.addEventListener('touchstart', _unlockAudioContext, { once: true });
+    document.addEventListener('click', _unlockAudioContext, { once: true });
+
     // ==================== STATE ====================
     const state = {
         token: localStorage.getItem('cf_access_token') || null,
@@ -739,7 +759,7 @@
     function _preloadFlipSound() {
         try {
             const customUrl = state.gameConfig?.flip_sound_url;
-            const soundUrl = customUrl || '/static/images/assets/sound/money-flip-sound.mp3';
+            const soundUrl = customUrl || '/static/sounds/money-flip.mp3';
             if (_flipSoundUrl === soundUrl && _flipSound) return;
             _flipSound = new Audio(soundUrl);
             _flipSound.volume = 0.8;
@@ -747,33 +767,26 @@
             _flipSoundUrl = soundUrl;
             if (customUrl) {
                 _flipSound.onerror = () => {
-                    _flipSound = new Audio('/static/images/assets/sound/money-flip-sound.mp3');
+                    _flipSound = new Audio('/static/sounds/money-flip.mp3');
                     _flipSound.volume = 0.8;
                     _flipSound.preload = 'auto';
-                    _flipSoundUrl = '/static/images/assets/sound/money-flip-sound.mp3';
+                    _flipSoundUrl = '/static/sounds/money-flip.mp3';
                 };
             }
         } catch (e) {}
     }
-    let _activeFlipSoundClone = null;
     function _playFlipSound() {
         if (!state.gameConfig?.flip_sound_enabled) return;
         try {
             if (!_flipSound) _preloadFlipSound();
-            // Stop any previous flip sound still playing
-            if (_activeFlipSoundClone) {
-                try { _activeFlipSoundClone.pause(); _activeFlipSoundClone.currentTime = 0; } catch(e) {}
-            }
-            const s = _flipSound.cloneNode();
-            s.volume = 0.8;
-            s.play().catch(() => {});
-            _activeFlipSoundClone = s;
+            // Reuse same Audio element (cloneNode fails on mobile Chrome)
+            _flipSound.currentTime = 0;
+            _flipSound.play().catch(() => {});
         } catch (e) {}
     }
     function _stopFlipSound() {
-        if (_activeFlipSoundClone) {
-            try { _activeFlipSoundClone.pause(); _activeFlipSoundClone.currentTime = 0; } catch(e) {}
-            _activeFlipSoundClone = null;
+        if (_flipSound) {
+            try { _flipSound.pause(); _flipSound.currentTime = 0; } catch(e) {}
         }
     }
 
@@ -788,9 +801,6 @@
             // Get animation config from game config
             const animMode = state.gameConfig?.flip_animation_mode || 'css3d';
             const animSpeed = state.gameConfig?.flip_animation_speed_ms || 1500;
-
-            // Play flip sound
-            _playFlipSound();
 
             // ZERO denomination: show 0f.jpg face image, no animation needed.
             // The zero popup (zero-note overlay) handles the result display.
@@ -928,16 +938,23 @@
         const spriteFps = state.gameConfig?.flip_sprite_fps || 25;
         const frameInterval = Math.max(16, Math.round(1000 / spriteFps));
 
-        // Ensure sprite is loaded before clearing card (prevents flash on slow connections)
+        // Guard: ensure animation starts exactly once
+        let _spriteStarted = false;
         const startSpriteAnimation = () => {
-            card.innerHTML = '';
+            if (_spriteStarted) return;
+            _spriteStarted = true;
+            // Set sprite background FIRST while card face is still visible
             card.style.zIndex = '2'; // Above next-note (z-index:0)
-            card.style.backgroundColor = 'transparent'; // Let next card show through sprite transparency
             card.style.backgroundImage = `url(${spriteUrl})`;
             card.style.backgroundSize = `${totalFrames * 100}% 100%`;
             card.style.backgroundPosition = '0% 0%';
             card.style.backgroundRepeat = 'no-repeat';
-            requestAnimationFrame(animate);
+            // Wait one frame for background to paint, then clear face and start
+            requestAnimationFrame(() => {
+                card.innerHTML = '';
+                card.style.backgroundColor = 'transparent';
+                requestAnimationFrame(animate);
+            });
         };
 
         // Check if sprite is already cached/loaded (from _preloadSpriteSheet)
@@ -948,10 +965,12 @@
             // Load on demand — wait for it, then start
             const loader = new Image();
             loader.onload = () => { startSpriteAnimation(); };
-            loader.onerror = () => { startSpriteAnimation(); }; // fallback: start anyway
+            loader.onerror = () => { startSpriteAnimation(); };
             loader.src = spriteUrl;
-            // Safety: if load takes too long, start after 150ms regardless
-            setTimeout(() => { if (!startTime) startSpriteAnimation(); }, 150);
+            // Handle synchronous cache hit (onload won't fire if already complete)
+            if (loader.complete) startSpriteAnimation();
+            // Safety: if load takes too long, start after 300ms regardless
+            setTimeout(() => { startSpriteAnimation(); }, 300);
         }
 
         let currentFrame = 0;
@@ -2364,6 +2383,9 @@
         if (state.isFlipping || !state.session || state.session.status !== 'active') return;
         state.isFlipping = true;
 
+        // Play flip sound NOW, in user gesture context (mobile Chrome blocks play() after await)
+        _playFlipSound();
+
         try {
             const resp = await API.post('/game/flip/', {});
             const data = await resp.json();
@@ -2648,7 +2670,10 @@
     }
 
     function showStakeModalInGame() {
-        // Reset session state
+        // Reset session state fully
+        _stopAutoFlipTimer();
+        _stopFlipSound();
+        state.isFlipping = false;
         state.session = null;
         document.getElementById('loss-overlay')?.classList.add('hidden');
         document.getElementById('cashout-overlay')?.classList.add('hidden');
