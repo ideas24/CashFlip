@@ -949,8 +949,8 @@
         const ctx = canvas.getContext('2d');
         ctx.scale(dpr, dpr);
 
-        // Cover-fit: scale frame to fill card, crop excess (like object-fit:cover)
-        const scale = Math.max(cardW / srcFrameW, cardH / srcFrameH);
+        // Contain-fit: scale frame to fit entirely within card (like object-fit:contain)
+        const scale = Math.min(cardW / srcFrameW, cardH / srcFrameH);
         const drawW = srcFrameW * scale;
         const drawH = srcFrameH * scale;
         const offX = (cardW - drawW) / 2;

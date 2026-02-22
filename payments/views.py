@@ -339,7 +339,6 @@ def deposit_card(request):
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
-@throttle_classes([WithdrawThrottle])
 def withdraw(request):
     """
     Initiate withdrawal to mobile money.
