@@ -6,10 +6,9 @@ import logging
 import random
 
 from rest_framework import status
-from rest_framework.decorators import api_view, permission_classes, throttle_classes
+from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
-from rest_framework.throttling import AnonRateThrottle
 
 from accounts.authentication import generate_access_token, generate_refresh_token, verify_refresh_token
 from accounts.models import Player, PlayerProfile, AuthConfig
@@ -44,13 +43,8 @@ def _generate_username():
     return f'Player{random.randint(1000, 9999)}'
 
 
-class OTPThrottle(AnonRateThrottle):
-    rate = '3/minute'
-
-
 @api_view(['POST'])
 @permission_classes([AllowAny])
-@throttle_classes([OTPThrottle])
 def request_otp(request):
     """Send OTP to phone number (generic — channel via request body)."""
     serializer = RequestOTPSerializer(data=request.data)
@@ -81,7 +75,6 @@ def request_otp(request):
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
-@throttle_classes([OTPThrottle])
 def request_sms_otp(request):
     """
     Request OTP via SMS.
@@ -113,7 +106,6 @@ def request_sms_otp(request):
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
-@throttle_classes([OTPThrottle])
 def request_whatsapp_otp(request):
     """
     Request OTP via WhatsApp Authentication template (copy-code button).

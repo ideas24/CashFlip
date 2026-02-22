@@ -168,12 +168,11 @@ REST_FRAMEWORK = {
         'rest_framework.throttling.UserRateThrottle',
     ],
     'DEFAULT_THROTTLE_RATES': {
-        'anon': '30/minute',
-        'user': '60/minute',
-        'otp': '3/minute',
+        'anon': '60/minute',
+        'user': '120/minute',
         'flip': '30/minute',
         'cashout': '5/minute',
-        'withdraw': '3/minute',
+        'withdraw': '5/minute',
     },
     'DEFAULT_FILTER_BACKENDS': [
         'django_filters.rest_framework.DjangoFilterBackend',
