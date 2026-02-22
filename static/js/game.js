@@ -449,7 +449,7 @@
         if (!denomValue) return null;
         const val = Math.round(parseFloat(denomValue));
         if (val <= 0) return null;
-        return `/static/images/assets/sprites/${val}cedi_flip.webp`;
+        return `/static/images/assets/sprites/${val}cedi_flip.webp?v=20260222b`;
     }
 
     // Shared style for video-as-card elements (looks identical to an image)
