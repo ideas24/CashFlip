@@ -406,16 +406,19 @@
     const _denomFaceCache = {}; // Preloaded face Image elements
 
     function _preloadSpriteSheet() {
-        const spriteUrl = state.gameConfig?.flip_sprite_url || '/static/images/assets/flip_motion_sprite.webp';
-        if (!_spriteImg || _spriteImg.src !== spriteUrl) {
-            _spriteImg = new Image();
-            _spriteImg.crossOrigin = 'anonymous';
-            _spriteImg.src = spriteUrl;
-        }
-        // Preload all denomination face WebPs
+        // Preload per-denomination sprites + face WebPs
         const denoms = state.denominations || [];
         denoms.forEach(d => {
             if (d.is_zero) return;
+            // Preload denomination-specific sprite
+            const spritePath = _getDenomSpritePath(d.value);
+            if (spritePath && !_denomFaceCache[spritePath]) {
+                const sImg = new Image();
+                sImg.crossOrigin = 'anonymous';
+                sImg.src = spritePath;
+                _denomFaceCache[spritePath] = sImg;
+            }
+            // Preload denomination face WebP
             const facePath = _getDenomFacePath(d.value);
             if (facePath && !_denomFaceCache[facePath]) {
                 const img = new Image();
@@ -424,6 +427,13 @@
                 _denomFaceCache[facePath] = img;
             }
         });
+        // Preload fallback universal sprite
+        const fallbackUrl = state.gameConfig?.flip_sprite_url || '/static/images/assets/flip_motion_sprite.webp';
+        if (!_spriteImg || _spriteImg.src !== fallbackUrl) {
+            _spriteImg = new Image();
+            _spriteImg.crossOrigin = 'anonymous';
+            _spriteImg.src = fallbackUrl;
+        }
     }
 
     function _getDenomFacePath(denomValue) {
@@ -431,6 +441,13 @@
         const val = Math.round(parseFloat(denomValue));
         if (val <= 0) return null;
         return `/static/images/assets/faces/${val}cedi_face.webp`;
+    }
+
+    function _getDenomSpritePath(denomValue) {
+        if (!denomValue) return null;
+        const val = Math.round(parseFloat(denomValue));
+        if (val <= 0) return null;
+        return `/static/images/assets/sprites/${val}cedi_flip.webp`;
     }
 
     // Shared style for video-as-card elements (looks identical to an image)
@@ -881,7 +898,10 @@
         // Place next card underneath with denomination face image (visible)
         _placeNextCardUnderneath(denomData);
 
-        const spriteUrl = state.gameConfig?.flip_sprite_url || '/static/images/assets/flip_motion_sprite.webp';
+        // Pick per-denomination sprite, fall back to universal
+        const denomSprite = _getDenomSpritePath(denomData?.value);
+        const fallbackSprite = state.gameConfig?.flip_sprite_url || '/static/images/assets/flip_motion_sprite.webp';
+        const spriteUrl = denomSprite || fallbackSprite;
         const totalFrames = state.gameConfig?.flip_sprite_frames || 22;
 
         // Set card to show sprite frame 0 via background
