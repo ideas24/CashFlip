@@ -232,6 +232,8 @@ class GameConfig(models.Model):
         help_text='URL to universal flip sprite sheet (WebP). Empty = use default /static/images/assets/flip_motion_sprite.webp')
     flip_sprite_frames = models.PositiveIntegerField(default=22,
         help_text='Number of frames in the sprite sheet (horizontal strip)')
+    flip_sprite_fps = models.PositiveIntegerField(default=25,
+        help_text='Frames per second for sprite playback (e.g. 20, 25, 30). Higher = faster animation.')
     flip_display_mode = models.CharField(max_length=20, default='face_then_gif',
         choices=[('face_then_gif', 'Face Image then GIF'), ('gif_only', 'GIF Only (static first frame)')],
         help_text='face_then_gif = show face JPG then play GIF on flip. '

@@ -904,6 +904,10 @@
         const spriteUrl = denomSprite || fallbackSprite;
         const totalFrames = state.gameConfig?.flip_sprite_frames || 22;
 
+        // FPS-based timing: frame interval derived from configured FPS
+        const spriteFps = state.gameConfig?.flip_sprite_fps || 25;
+        const frameInterval = Math.max(16, Math.round(1000 / spriteFps));
+
         // Set card to show sprite frame 0 via background
         card.innerHTML = '';
         card.style.backgroundImage = `url(${spriteUrl})`;
@@ -913,7 +917,6 @@
 
         let currentFrame = 0;
         let startTime = null;
-        const frameInterval = Math.max(16, Math.floor(durationMs / totalFrames));
 
         // Fade out in the last ~30% of the animation to reveal denomination face underneath
         const fadeStartFrame = Math.floor(totalFrames * 0.7);
@@ -974,10 +977,11 @@
         // Start animation
         requestAnimationFrame(animate);
 
-        // Safety timeout
+        // Safety timeout based on FPS-derived total duration
+        const totalDurationMs = totalFrames * frameInterval;
         setTimeout(() => {
             if (!_spriteFired) onSpriteEnd();
-        }, durationMs + 500);
+        }, totalDurationMs + 500);
     }
 
     // ---- GIF FLIP ANIMATION ----

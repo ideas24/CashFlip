@@ -43,6 +43,7 @@ interface GameSettings {
   flip_animation_mode: string
   flip_sprite_url: string
   flip_sprite_frames: number
+  flip_sprite_fps: number
   flip_display_mode: string
   flip_animation_speed_ms: number
   flip_sound_enabled: boolean
@@ -789,6 +790,36 @@ export default function SettingsPage() {
                               <Input type="number" min="1" max="120" value={s.game.flip_sprite_frames || 22}
                                 onChange={e => updateGame('flip_sprite_frames', parseInt(e.target.value) || 22)} />
                               <p className="text-xs text-muted mt-1">Number of frames in the sprite (default: 22)</p>
+                            </div>
+                            <div className="col-span-2">
+                              <label className="block text-xs text-muted mb-1">Sprite FPS (Playback Speed)</label>
+                              <div className="flex items-center gap-2">
+                                {[15, 20, 25, 30, 60].map(fps => (
+                                  <button key={fps}
+                                    onClick={() => updateGame('flip_sprite_fps', fps)}
+                                    className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors cursor-pointer ${
+                                      (s.game.flip_sprite_fps || 25) === fps
+                                        ? 'bg-emerald-600 border-emerald-500 text-white'
+                                        : 'bg-zinc-800 border-border text-slate-400 hover:text-white'
+                                    }`}>
+                                    {fps} fps
+                                  </button>
+                                ))}
+                                <div className="flex items-center gap-1 ml-2">
+                                  <span className="text-xs text-muted">Custom:</span>
+                                  <Input type="number" min="1" max="120" className="w-20 text-xs"
+                                    value={s.game.flip_sprite_fps || 25}
+                                    onChange={e => updateGame('flip_sprite_fps', parseInt(e.target.value) || 25)} />
+                                </div>
+                              </div>
+                              <p className="text-xs text-muted mt-1">
+                                {(() => {
+                                  const fps = s.game.flip_sprite_fps || 25;
+                                  const frames = s.game.flip_sprite_frames || 22;
+                                  const duration = (frames / fps).toFixed(2);
+                                  return `${fps} fps × ${frames} frames = ${duration}s total animation`;
+                                })()}
+                              </p>
                             </div>
                           </div>
                         </div>
