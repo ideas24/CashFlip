@@ -512,7 +512,7 @@ html, body {
 .zero-note {
     position: fixed; top: 50%; left: 50%;
     transform: translate(-50%, -50%) scale(0);
-    z-index: 1000; pointer-events: none;
+    z-index: 250; pointer-events: none;
     animation: zeroNotePop 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
 }
 .zero-note.show {
@@ -1100,9 +1100,10 @@ html, body {
 
 /* Result/Loss/Cashout Overlays */
 .result-overlay, .loss-overlay, .cashout-overlay {
-    position: absolute; inset: 0; z-index: 20;
+    position: fixed; inset: 0; z-index: 200;
     display: flex; align-items: center; justify-content: center;
     background: rgba(0,0,0,0.75); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+    padding: 1rem;
 }
 .hidden { display: none !important; }
 
@@ -1113,10 +1114,11 @@ html, body {
 .result-balance { font-size: 0.9rem; color: var(--text-secondary); margin-top: 0.3rem; }
 
 .loss-content, .cashout-content {
-    text-align: center; background: rgba(28,35,51,0.9); border: 1px solid rgba(42,51,69,0.5);
-    border-radius: 24px; padding: 2rem 3rem; animation: resultPop 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    text-align: center; background: rgba(28,35,51,0.95); border: 1px solid rgba(42,51,69,0.5);
+    border-radius: 20px; padding: 1.5rem 1.5rem; animation: resultPop 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
     backdrop-filter: blur(16px); box-shadow: 0 20px 60px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.04);
-    position: relative; overflow: hidden;
+    position: relative; overflow-y: auto; overflow-x: hidden;
+    width: 92%; max-width: 380px; max-height: 85vh; max-height: 85dvh;
 }
 .loss-content::before, .cashout-content::before {
     content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1px;
@@ -1126,7 +1128,7 @@ html, body {
 .loss-content h2 { font-family: 'Orbitron', sans-serif; font-size: 2rem; color: var(--danger); margin: 0.5rem 0; }
 .loss-content p { color: var(--text-secondary); margin: 0.3rem 0; }
 .loss-stake { color: var(--danger); font-weight: 600; }
-.loss-content button, .cashout-content button { margin-top: 1rem; margin-right: 0.5rem; min-width: 140px; }
+.loss-content button, .cashout-content button { margin-top: 0.5rem; min-width: 0; width: 100%; }
 
 .cashout-icon { font-size: 4rem; }
 .cashout-content h2 { font-family: 'Orbitron', sans-serif; font-size: 2rem; color: var(--success); margin: 0.5rem 0; }
@@ -1197,12 +1199,13 @@ html, body {
 .modal-backdrop { position: absolute; inset: 0; background: rgba(0,0,0,0.7); backdrop-filter: blur(4px); }
 .modal-content {
     position: relative; z-index: 1;
-    background: rgba(28,35,51,0.9); border: 1px solid rgba(42,51,69,0.5);
-    border-radius: 20px; padding: 1.5rem; width: 90%; max-width: 420px;
-    max-height: 90vh; overflow-y: auto;
+    background: rgba(28,35,51,0.95); border: 1px solid rgba(42,51,69,0.5);
+    border-radius: 16px; padding: 1.25rem; width: 92%; max-width: 400px;
+    max-height: 88vh; max-height: 88dvh; overflow-y: auto;
     animation: modalIn 0.3s ease;
     backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
     box-shadow: 0 20px 60px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.04);
+    -webkit-overflow-scrolling: touch;
 }
 .modal-content.wide { max-width: 600px; }
 @keyframes modalIn { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
@@ -1959,4 +1962,93 @@ html, body {
 @media (max-height: 500px) and (orientation: portrait) {
     .note-stage { width: 90vw; max-width: 400px; }
     .note-flipper { padding-top: 2.5rem; padding-bottom: 2.5rem; }
+}
+
+/* ==================== MOBILE MODAL & OVERLAY RESPONSIVENESS ==================== */
+/* Portrait phones — overlays, modals, zero-note */
+@media (max-width: 480px) {
+    /* Overlays: compact content for small screens */
+    .loss-content, .cashout-content {
+        padding: 1.2rem 1rem;
+        border-radius: 16px;
+        max-height: 82vh; max-height: 82dvh;
+        width: 94%;
+    }
+    .loss-icon, .cashout-icon { font-size: 2.5rem; }
+    .loss-content h2, .cashout-content h2 { font-size: 1.4rem; margin: 0.3rem 0; }
+    .cashout-total { font-size: 1.8rem; }
+    .cashout-content p { font-size: 0.85rem; margin: 0.2rem 0; }
+    .loss-content p { font-size: 0.85rem; }
+
+    /* Instant MoMo section — tighter */
+    .instant-momo-section { padding: 0.6rem; margin-top: 0.6rem; }
+    .momo-send-label { font-size: 0.8rem; margin-bottom: 0.3rem; }
+    .momo-name { font-size: 0.85rem; }
+    .momo-number { font-size: 0.75rem; }
+    .btn-momo-send { padding: 0.6rem; font-size: 0.85rem; }
+    .momo-add-inline { gap: 0.3rem; }
+    .momo-phone-input { padding: 0.5rem 0.6rem; font-size: 0.85rem; }
+
+    /* Result overlay (win addition) */
+    .result-icon { font-size: 2rem; margin-bottom: 0.3rem; }
+    .result-value { font-size: 1.5rem; }
+    .result-balance { font-size: 0.8rem; }
+
+    /* Zero note — slightly smaller */
+    .zero-note-content { width: 100px; height: 160px; border-radius: 10px; }
+    .zero-note-face { font-size: 3rem; }
+    .zero-note-label { font-size: 0.65rem; }
+
+    /* Modals — full-width, safe area */
+    .modal { padding: 0.5rem; }
+    .modal-content {
+        width: 96%; max-width: none;
+        padding: 1rem;
+        border-radius: 14px;
+        max-height: 85vh; max-height: 85dvh;
+    }
+    .modal-header { margin-bottom: 0.75rem; }
+    .modal-header h3 { font-size: 0.9rem; }
+
+    /* Inputs and buttons inside modals */
+    .input-group label { font-size: 0.8rem; }
+    .input-group input, .input-group select, .form-select {
+        font-size: 0.9rem; padding: 0.6rem 0.8rem;
+    }
+    .btn-primary, .btn-secondary { padding: 0.65rem 1rem; font-size: 0.9rem; }
+    .tab-btn { padding: 0.5rem; font-size: 0.8rem; }
+}
+
+/* Very small phones (< 360px width) */
+@media (max-width: 360px) {
+    .loss-content, .cashout-content {
+        padding: 1rem 0.8rem;
+    }
+    .cashout-total { font-size: 1.5rem; }
+    .loss-content h2, .cashout-content h2 { font-size: 1.2rem; }
+    .modal-content { padding: 0.8rem; }
+}
+
+/* Landscape with modals/overlays — limit height, scroll */
+@media (orientation: landscape) and (max-height: 500px) {
+    .loss-content, .cashout-content {
+        padding: 0.8rem 1rem;
+        max-height: 90vh; max-height: 90dvh;
+        max-width: 360px;
+    }
+    .loss-icon, .cashout-icon { font-size: 2rem; }
+    .loss-content h2, .cashout-content h2 { font-size: 1.2rem; margin: 0.2rem 0; }
+    .cashout-total { font-size: 1.5rem; }
+
+    .modal-content {
+        max-height: 92vh; max-height: 92dvh;
+        padding: 0.8rem 1rem;
+    }
+    .modal-header { margin-bottom: 0.5rem; }
+
+    .result-icon { font-size: 2rem; }
+    .result-value { font-size: 1.3rem; }
+
+    .zero-note-content { width: 80px; height: 130px; }
+    .zero-note-face { font-size: 2.5rem; }
 }
