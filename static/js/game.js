@@ -755,15 +755,26 @@
             }
         } catch (e) {}
     }
+    let _activeFlipSoundClone = null;
     function _playFlipSound() {
         if (!state.gameConfig?.flip_sound_enabled) return;
         try {
             if (!_flipSound) _preloadFlipSound();
-            // Clone for overlapping rapid flips
+            // Stop any previous flip sound still playing
+            if (_activeFlipSoundClone) {
+                try { _activeFlipSoundClone.pause(); _activeFlipSoundClone.currentTime = 0; } catch(e) {}
+            }
             const s = _flipSound.cloneNode();
             s.volume = 0.8;
             s.play().catch(() => {});
+            _activeFlipSoundClone = s;
         } catch (e) {}
+    }
+    function _stopFlipSound() {
+        if (_activeFlipSoundClone) {
+            try { _activeFlipSoundClone.pause(); _activeFlipSoundClone.currentTime = 0; } catch(e) {}
+            _activeFlipSoundClone = null;
+        }
     }
 
     // ---- FLIP NOTE ANIMATION (called after API returns) ----
@@ -982,6 +993,7 @@
         const onSpriteEnd = () => {
             if (_spriteFired) return;
             _spriteFired = true;
+            _stopFlipSound();
 
             _noteFlipCount++;
             updateRunningTotal();
