@@ -5,6 +5,7 @@ from django.conf.urls.static import static
 from django.http import JsonResponse
 from django.shortcuts import render
 from django.views.generic import TemplateView
+from django.views.decorators.cache import never_cache
 from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
 
 from datetime import datetime
@@ -76,7 +77,7 @@ urlpatterns = [
     path('terms/', terms_of_service_view, name='terms_of_service'),
 
     # Game UI (served as SPA)
-    path('', TemplateView.as_view(template_name='game/index.html'), name='home'),
+    path('', never_cache(TemplateView.as_view(template_name='game/index.html')), name='home'),
 ]
 
 if settings.DEBUG:

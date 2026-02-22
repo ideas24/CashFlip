@@ -894,9 +894,8 @@
     }
 
     // ---- UNIVERSAL SPRITE FLIP ANIMATION ----
-    // Uses a single horizontal spritesheet for ALL denominations.
-    // The current card plays the sprite frames via background-position stepping,
-    // while the next card underneath shows the static denomination face WebP.
+    // Uses Canvas to render individual frames from a horizontal spritesheet.
+    // Each frame is drawn pixel-perfect (cover-fit) regardless of card aspect ratio.
     function _flipWithSprite(card, durationMs, value, sym, resolve, denomData) {
         let _spriteFired = false;
         card.classList.remove('entering', 'dragging', 'spring-back');
@@ -918,12 +917,47 @@
         const spriteFps = state.gameConfig?.flip_sprite_fps || 25;
         const frameInterval = Math.max(16, Math.round(1000 / spriteFps));
 
-        // Set card to show sprite frame 0 via background
+        // Get preloaded sprite image
+        const cachedImg = _denomFaceCache[spriteUrl];
+        if (!cachedImg || !cachedImg.complete || !cachedImg.naturalWidth) {
+            // Image not ready — skip animation, just reveal next card
+            card.style.opacity = '0';
+            _noteFlipCount++;
+            updateRunningTotal();
+            card.removeAttribute('id'); if (card.parentNode) card.remove();
+            const next = document.getElementById('next-note');
+            if (next) { next.id = 'active-note'; }
+            _startAutoFlipTimer(); state.isFlipping = false; resolve();
+            return;
+        }
+
+        // Sprite frame dimensions (source)
+        const srcFrameW = cachedImg.naturalWidth / totalFrames;
+        const srcFrameH = cachedImg.naturalHeight;
+
+        // Create canvas sized to card element (with device pixel ratio for sharpness)
+        const dpr = window.devicePixelRatio || 1;
+        const cardW = card.offsetWidth || 580;
+        const cardH = card.offsetHeight || 279;
+        const canvas = document.createElement('canvas');
+        canvas.width = cardW * dpr;
+        canvas.height = cardH * dpr;
+        canvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;border-radius:inherit;';
         card.innerHTML = '';
-        card.style.backgroundImage = `url(${spriteUrl})`;
-        card.style.backgroundSize = `${totalFrames * 100}% 100%`;
-        card.style.backgroundPosition = '0% 0%';
-        card.style.backgroundRepeat = 'no-repeat';
+        card.style.background = '#0d0d1a';
+        card.appendChild(canvas);
+        const ctx = canvas.getContext('2d');
+        ctx.scale(dpr, dpr);
+
+        // Cover-fit: scale frame to fill card, crop excess (like object-fit:cover)
+        const scale = Math.max(cardW / srcFrameW, cardH / srcFrameH);
+        const drawW = srcFrameW * scale;
+        const drawH = srcFrameH * scale;
+        const offX = (cardW - drawW) / 2;
+        const offY = (cardH - drawH) / 2;
+
+        // Draw frame 0
+        ctx.drawImage(cachedImg, 0, 0, srcFrameW, srcFrameH, offX, offY, drawW, drawH);
 
         let currentFrame = 0;
         let startTime = null;
@@ -944,9 +978,9 @@
 
             if (targetFrame > currentFrame) {
                 currentFrame = targetFrame;
-                // Step background-position to show current frame
-                const pct = (currentFrame / (totalFrames - 1)) * 100;
-                card.style.backgroundPosition = `${pct}% 0%`;
+                // Draw current frame from spritesheet
+                ctx.clearRect(0, 0, cardW, cardH);
+                ctx.drawImage(cachedImg, currentFrame * srcFrameW, 0, srcFrameW, srcFrameH, offX, offY, drawW, drawH);
 
                 // Fade out in the last portion to reveal face underneath
                 if (currentFrame >= fadeStartFrame) {
@@ -972,11 +1006,6 @@
             const pileCount = document.getElementById('pile-count');
             if (pile) pile.classList.add('visible');
             if (pileCount) pileCount.textContent = _noteFlipCount;
-
-            // Clean up sprite styles from card before removal
-            card.style.backgroundImage = '';
-            card.style.backgroundSize = '';
-            card.style.backgroundPosition = '';
 
             // Remove current card — next card underneath already shows denomination
             card.removeAttribute('id');
