@@ -286,7 +286,12 @@ export default function SettingsPage() {
     setSaving(true)
     setSaved(false)
     try {
-      await api.post('/settings/', { auth: settings.auth, game: settings.game, features: settings.features, wheel: settings.wheel, denominations: settings.denominations, stake_tiers: settings.stake_tiers, branding: settings.branding, legal: settings.legal })
+      // Sanitize __custom__ placeholder values before saving
+      const cleanGame = { ...settings.game }
+      for (const k of ['flip_sound_url', 'win_sound_url', 'cashout_sound_url'] as const) {
+        if ((cleanGame as any)[k] === '__custom__') (cleanGame as any)[k] = ''
+      }
+      await api.post('/settings/', { auth: settings.auth, game: cleanGame, features: settings.features, wheel: settings.wheel, denominations: settings.denominations, stake_tiers: settings.stake_tiers, branding: settings.branding, legal: settings.legal })
       setSaved(true)
       setTimeout(() => setSaved(false), 2000)
     } catch {}
@@ -901,14 +906,15 @@ export default function SettingsPage() {
                                   <select className="flex-1 bg-zinc-800 border border-border rounded px-2 py-1.5 text-xs text-slate-200"
                                     value={custom ? '__custom__' : val}
                                     onChange={e => {
-                                      if (e.target.value === '__custom__') return;
-                                      updateGame(field, e.target.value);
+                                      const v = e.target.value;
+                                      if (v === '__custom__') { updateGame(field, '__custom__'); return; }
+                                      updateGame(field, v);
                                     }}>
                                     {presets.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
                                     <option value="__custom__">Custom upload...</option>
                                   </select>
                                   {(val && !custom) && (
-                                    <button onClick={() => { const a = new Audio(val || (field === 'flip_sound_url' ? '/static/sounds/money-flip.mp3' : field === 'win_sound_url' ? '/static/sounds/money-win.mp3' : '/static/sounds/money-cashout.mp3')); a.volume = 0.8; a.play().catch(()=>{}); }}
+                                    <button onClick={() => { const a = new Audio(val || (field === 'flip_sound_url' ? '/static/images/assets/sound/money-flip-sound.mp3' : field === 'win_sound_url' ? '/static/sounds/money-win.mp3' : '/static/sounds/money-cashout.mp3')); a.volume = 0.8; a.play().catch(()=>{}); }}
                                       className="shrink-0 text-xs px-2 py-1.5 rounded bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 cursor-pointer transition">
                                       Preview
                                     </button>
@@ -948,7 +954,7 @@ export default function SettingsPage() {
                                   </div>
                                 )}
                                 {!val && (
-                                  <button onClick={() => { const defaults: Record<string,string> = {flip_sound_url:'/static/sounds/money-flip.mp3',win_sound_url:'/static/sounds/money-win.mp3',cashout_sound_url:'/static/sounds/money-cashout.mp3'}; const a = new Audio(defaults[field]); a.volume = 0.8; a.play().catch(()=>{}); }}
+                                  <button onClick={() => { const defaults: Record<string,string> = {flip_sound_url:'/static/images/assets/sound/money-flip-sound.mp3',win_sound_url:'/static/sounds/money-win.mp3',cashout_sound_url:'/static/sounds/money-cashout.mp3'}; const a = new Audio(defaults[field]); a.volume = 0.8; a.play().catch(()=>{}); }}
                                     className="text-xs px-2 py-1 rounded bg-zinc-800 text-slate-400 hover:text-slate-200 cursor-pointer transition mt-1">
                                     Preview default
                                   </button>

@@ -739,7 +739,7 @@
     function _preloadFlipSound() {
         try {
             const customUrl = state.gameConfig?.flip_sound_url;
-            const soundUrl = customUrl || '/static/sounds/money-flip.mp3';
+            const soundUrl = customUrl || '/static/images/assets/sound/money-flip-sound.mp3';
             if (_flipSoundUrl === soundUrl && _flipSound) return;
             _flipSound = new Audio(soundUrl);
             _flipSound.volume = 0.8;
@@ -747,10 +747,10 @@
             _flipSoundUrl = soundUrl;
             if (customUrl) {
                 _flipSound.onerror = () => {
-                    _flipSound = new Audio('/static/sounds/money-flip.mp3');
+                    _flipSound = new Audio('/static/images/assets/sound/money-flip-sound.mp3');
                     _flipSound.volume = 0.8;
                     _flipSound.preload = 'auto';
-                    _flipSoundUrl = '/static/sounds/money-flip.mp3';
+                    _flipSoundUrl = '/static/images/assets/sound/money-flip-sound.mp3';
                 };
             }
         } catch (e) {}
