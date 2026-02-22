@@ -905,7 +905,12 @@
         const conventionSprite = _getDenomSpritePath(denomData?.value);
         const fallbackSprite = state.gameConfig?.flip_sprite_url || '/static/images/assets/flip_motion_sprite.webp';
         const spriteUrl = explicitSprite || conventionSprite || fallbackSprite;
-        const totalFrames = state.gameConfig?.flip_sprite_frames || 22;
+        // Auto-detect frame count from preloaded image dimensions (horizontal strip)
+        const cachedImg = _denomFaceCache[spriteUrl];
+        let totalFrames = state.gameConfig?.flip_sprite_frames || 22;
+        if (cachedImg && cachedImg.naturalWidth && cachedImg.naturalHeight) {
+            totalFrames = Math.round(cachedImg.naturalWidth / cachedImg.naturalHeight);
+        }
 
         // FPS-based timing: frame interval derived from configured FPS
         const spriteFps = state.gameConfig?.flip_sprite_fps || 25;
