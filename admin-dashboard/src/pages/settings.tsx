@@ -793,13 +793,18 @@ export default function SettingsPage() {
                       </div>
                       {/* Sprite Settings (shown when sprite mode selected) */}
                       {(s.game.flip_animation_mode || 'sprite') === 'sprite' && (
-                        <div className="mt-3 p-3 rounded-lg border border-border/50 bg-zinc-900/50">
-                          <label className="block text-xs text-slate-400 mb-2 font-medium">Sprite Sheet Settings</label>
-                          <div className="grid grid-cols-2 gap-3">
+                        <div className="mt-3 p-3 rounded-lg border border-cyan-500/20 bg-cyan-500/5">
+                          <label className="block text-xs text-cyan-400 mb-1 font-semibold">🎞️ Horizontal Sprite Strip</label>
+                          <p className="text-[11px] text-muted mb-3">
+                            Each denomination has its own sprite strip in <code className="text-cyan-400/80">/static/images/assets/sprites/</code>.
+                            Frame count is <b className="text-white">auto-detected</b> from the image dimensions (width ÷ height).
+                            FPS controls how fast the flip animation plays.
+                          </p>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                             <div>
-                              <label className="block text-xs text-muted mb-1">Sprite URL</label>
+                              <label className="block text-xs text-slate-400 mb-1">Fallback Sprite URL</label>
                               <div className="flex items-center gap-2">
-                                <Input type="text" placeholder="Default: /static/images/assets/flip_motion_sprite.webp"
+                                <Input type="text" placeholder="Only for denominations without a dedicated sprite"
                                   value={s.game.flip_sprite_url || ''} className="text-xs flex-1"
                                   onChange={e => updateGame('flip_sprite_url', e.target.value)} />
                                 <label className="shrink-0">
@@ -822,44 +827,42 @@ export default function SettingsPage() {
                                     }} />
                                 </label>
                               </div>
-                              <p className="text-xs text-muted mt-1">Horizontal spritesheet (all frames in one row). Leave empty for default.</p>
+                              <p className="text-[11px] text-muted mt-1">Used only when a denomination doesn't have <code>Xcedi_flip.webp</code> in the sprites folder.</p>
                             </div>
                             <div>
-                              <label className="block text-xs text-muted mb-1">Frame Count</label>
-                              <Input type="number" min="1" max="120" value={s.game.flip_sprite_frames || 22}
-                                onChange={e => updateGame('flip_sprite_frames', parseInt(e.target.value) || 22)} />
-                              <p className="text-xs text-muted mt-1">Number of frames in the sprite (default: 22)</p>
-                            </div>
-                            <div className="col-span-2">
-                              <label className="block text-xs text-muted mb-1">Sprite FPS (Playback Speed)</label>
-                              <div className="flex items-center gap-2">
-                                {[15, 20, 25, 30, 60].map(fps => (
+                              <label className="block text-xs text-slate-400 mb-1">Playback Speed (FPS)</label>
+                              <div className="flex items-center gap-2 flex-wrap">
+                                {[15, 20, 25, 30, 40].map(fps => (
                                   <button key={fps}
                                     onClick={() => updateGame('flip_sprite_fps', fps)}
                                     className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors cursor-pointer ${
                                       (s.game.flip_sprite_fps || 25) === fps
-                                        ? 'bg-emerald-600 border-emerald-500 text-white'
+                                        ? 'bg-cyan-600 border-cyan-500 text-white'
                                         : 'bg-zinc-800 border-border text-slate-400 hover:text-white'
                                     }`}>
-                                    {fps} fps
+                                    {fps}
                                   </button>
                                 ))}
-                                <div className="flex items-center gap-1 ml-2">
-                                  <span className="text-xs text-muted">Custom:</span>
-                                  <Input type="number" min="1" max="120" className="w-20 text-xs"
-                                    value={s.game.flip_sprite_fps || 25}
-                                    onChange={e => updateGame('flip_sprite_fps', parseInt(e.target.value) || 25)} />
-                                </div>
+                                <Input type="number" min="1" max="120" className="w-16 text-xs"
+                                  value={s.game.flip_sprite_fps || 25}
+                                  onChange={e => updateGame('flip_sprite_fps', parseInt(e.target.value) || 25)} />
+                                <span className="text-xs text-muted">fps</span>
                               </div>
-                              <p className="text-xs text-muted mt-1">
+                              <p className="text-[11px] text-muted mt-1">
                                 {(() => {
                                   const fps = s.game.flip_sprite_fps || 25;
-                                  const frames = s.game.flip_sprite_frames || 22;
-                                  const duration = (frames / fps).toFixed(2);
-                                  return `${fps} fps × ${frames} frames = ${duration}s total animation`;
+                                  const dur48 = (48 / fps).toFixed(1);
+                                  return `At ${fps} fps → ~${dur48}s per flip (48 frames). Higher = faster flip.`;
                                 })()}
                               </p>
                             </div>
+                          </div>
+                          <div className="mt-3 p-2 rounded-lg bg-zinc-800/60 border border-border/30">
+                            <p className="text-[11px] text-slate-400">
+                              <b className="text-slate-300">Naming convention:</b> <code className="text-cyan-400/70">1cedi_flip.webp</code>, <code className="text-cyan-400/70">2cedi_flip.webp</code>, …, <code className="text-cyan-400/70">200cedi_flip.webp</code>
+                              &nbsp;·&nbsp; Each is a horizontal strip where frames = width ÷ height (auto-detected, ~46-48 frames).
+                              &nbsp;·&nbsp; The <b className="text-white">dynamic reveal</b> fades out the sprite earlier for high-value denominations (exciting fast reveal) and later for low-value (suspense).
+                            </p>
                           </div>
                         </div>
                       )}

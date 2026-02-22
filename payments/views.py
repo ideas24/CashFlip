@@ -359,8 +359,9 @@ def withdraw(request):
         return Response({'error': 'Amount required'}, status=status.HTTP_400_BAD_REQUEST)
 
     try:
-        amount = float(amount)
-    except (ValueError, TypeError):
+        from decimal import Decimal, InvalidOperation
+        amount = Decimal(str(amount))
+    except (ValueError, TypeError, InvalidOperation):
         return Response({'error': 'Invalid amount'}, status=status.HTTP_400_BAD_REQUEST)
 
     # Resolve the payout account
