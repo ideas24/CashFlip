@@ -11,7 +11,7 @@
     {% load static %}
     <link rel="icon" type="image/svg+xml" href="{% static 'images/cashflip-favicon.svg' %}">
     <meta name="theme-color" content="#0D1117">
-    <link rel="stylesheet" href="{% static 'css/game.css' %}?v=20260222h">
+    <link rel="stylesheet" href="{% static 'css/game.css' %}?v=20260222j">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
 <body>
@@ -509,7 +509,13 @@
                     <label>Amount (GH₵)</label>
                     <input type="number" id="wdr-amount" min="1" step="0.5" placeholder="Enter amount">
                 </div>
-                <div class="input-group">
+                <div id="wdr-saved-accounts" class="input-group" style="display:none;">
+                    <label>Withdraw To</label>
+                    <select id="wdr-account-select" class="form-select">
+                        <option value="">-- Use a new number --</option>
+                    </select>
+                </div>
+                <div id="wdr-phone-group" class="input-group">
                     <label>Mobile Number</label>
                     <input type="tel" id="wdr-phone" placeholder="0241234567" maxlength="12" autocomplete="off">
                     <small id="wdr-network-label" class="network-badge" style="display:none;"></small>
@@ -526,7 +532,7 @@
                 </div>
                 <input type="hidden" id="wdr-account-id" value="">
                 <input type="hidden" id="wdr-network" value="">
-                <button id="wdr-btn" class="btn-primary" disabled>Withdraw</button>
+                <button id="wdr-btn" class="btn-primary" disabled>Withdraw to MoMo</button>
                 <div id="wdr-status" class="status-msg"></div>
             </div>
         </div>
@@ -670,11 +676,9 @@
             </div>
             <div class="profile-section">
                 <h4 class="section-title">🎟️ Redeem Voucher</h4>
-                <div style="display:flex;gap:0.5rem;align-items:stretch;">
-                    <input type="text" id="profile-voucher-input" placeholder="CF-XXXX-XXXX" maxlength="20" autocomplete="off" style="flex:1;text-transform:uppercase;font-family:monospace;letter-spacing:0.08em;padding:0.6rem 0.8rem;background:var(--casino-surface);border:1px solid var(--casino-border);border-radius:8px;color:var(--text-primary);font-size:0.85rem;outline:none;">
-                    <button id="profile-voucher-btn" class="btn-primary btn-small" style="padding:0.6rem 1rem;font-size:0.85rem;white-space:nowrap;">Redeem</button>
-                </div>
-                <div id="profile-voucher-status" class="status-msg" style="margin-top:0.3rem;font-size:0.8rem;"></div>
+                <input type="text" id="profile-voucher-input" placeholder="CF-XXXX-XXXX" maxlength="20" autocomplete="off" style="width:100%;text-transform:uppercase;font-family:monospace;letter-spacing:0.08em;padding:0.75rem 1rem;background:var(--casino-surface);border:1px solid var(--casino-border);border-radius:8px;color:var(--text-primary);font-size:1rem;outline:none;margin-bottom:0.5rem;box-sizing:border-box;">
+                <button id="profile-voucher-btn" class="btn-primary" style="width:100%;padding:0.7rem;font-size:0.9rem;border-radius:8px;">Redeem Voucher</button>
+                <div id="profile-voucher-status" class="status-msg" style="margin-top:0.4rem;font-size:0.8rem;"></div>
             </div>
             <div class="profile-section" id="momo-accounts-section">
                 <h4 class="section-title">Payment Accounts</h4>
@@ -838,6 +842,6 @@
         <span id="toast-message"></span>
     </div>
 
-    <script src="{% static 'js/game.js' %}?v=20260222h"></script>
+    <script src="{% static 'js/game.js' %}?v=20260222j"></script>
 </body>
 </html>

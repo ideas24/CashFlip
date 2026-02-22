@@ -2489,6 +2489,11 @@
                         statusEl.className = 'momo-status success';
                         sendBtn.textContent = '✅ Sent';
                         loadWalletBalance();
+                    } else if (d.withdrawal_paused) {
+                        statusEl.textContent = d.error || 'Withdrawals are temporarily paused.';
+                        statusEl.className = 'momo-status error';
+                        sendBtn.disabled = true;
+                        sendBtn.textContent = 'Paused';
                     } else {
                         statusEl.textContent = d.error || 'Withdrawal failed';
                         statusEl.className = 'momo-status error';
@@ -3045,7 +3050,7 @@
             statusEl.className = 'status-msg error';
         }
         btn.disabled = false;
-        btn.textContent = 'Redeem';
+        btn.textContent = 'Redeem Voucher';
     }
 
     // Withdraw phone input handler (same network detect + verify pattern)
@@ -3132,6 +3137,76 @@
         }
     }
 
+    async function loadWithdrawAccounts() {
+        const container = document.getElementById('wdr-saved-accounts');
+        const select = document.getElementById('wdr-account-select');
+        const phoneGroup = document.getElementById('wdr-phone-group');
+        if (!container || !select) return;
+
+        try {
+            const resp = await API.get('/payments/momo-accounts/');
+            if (!resp.ok) return;
+            const data = await resp.json();
+            const accounts = data.accounts || [];
+
+            select.innerHTML = '<option value="">-- Use a new number --</option>';
+
+            if (accounts.length === 0) {
+                container.style.display = 'none';
+                phoneGroup.style.display = '';
+                return;
+            }
+
+            accounts.forEach(a => {
+                const opt = document.createElement('option');
+                opt.value = JSON.stringify(a);
+                opt.textContent = `${a.verified_name} - ${a.mobile_number} (${NETWORK_NAMES[a.network] || a.network})`;
+                if (a.is_primary) opt.textContent += ' ★';
+                select.appendChild(opt);
+            });
+
+            container.style.display = '';
+
+            // Auto-select primary account
+            const primary = accounts.find(a => a.is_primary) || accounts[0];
+            if (primary) {
+                select.value = JSON.stringify(primary);
+                onWithdrawAccountSelect(primary);
+            }
+        } catch (e) {
+            container.style.display = 'none';
+        }
+    }
+
+    function onWithdrawAccountSelect(account) {
+        const phoneGroup = document.getElementById('wdr-phone-group');
+        const verifyStatus = document.getElementById('wdr-verify-status');
+        const verifiedInfo = document.getElementById('wdr-verified-info');
+        const verifiedName = document.getElementById('wdr-verified-name');
+        const btn = document.getElementById('wdr-btn');
+
+        if (!account) {
+            // "Use a new number" — show phone input, reset
+            phoneGroup.style.display = '';
+            resetWithdrawVerification();
+            return;
+        }
+
+        // Saved account selected — hide phone input, show verified info
+        phoneGroup.style.display = 'none';
+        if (verifyStatus) verifyStatus.style.display = 'none';
+        verifiedInfo.style.display = 'block';
+        verifiedName.textContent = `${account.verified_name} (${NETWORK_NAMES[account.network] || account.network})`;
+        document.getElementById('wdr-account-id').value = account.id;
+        document.getElementById('wdr-network').value = account.network;
+        const phoneEl = document.getElementById('wdr-phone');
+        if (phoneEl) phoneEl.value = account.mobile_number;
+        _wdrLastVerifiedPhone = account.mobile_number.replace(/\D/g, '');
+        if (btn && !(state.gameConfig && state.gameConfig.withdrawal_enabled === false)) {
+            btn.disabled = false;
+        }
+    }
+
     function _showWithdrawalPausedBanner() {
         const statusEl = document.getElementById('wdr-status');
         const btn = document.getElementById('wdr-btn');
@@ -3141,7 +3216,6 @@
             if (btn) { btn.disabled = true; btn.textContent = 'Withdrawals Paused'; }
         } else {
             if (statusEl) { statusEl.textContent = ''; statusEl.className = 'status-msg'; }
-            if (btn) { btn.disabled = false; btn.textContent = 'Withdraw to MoMo'; }
         }
     }
 
@@ -3832,8 +3906,13 @@
             const val = e.target.value;
             onDepositAccountSelect(val ? JSON.parse(val) : null);
         });
+        document.getElementById('wdr-account-select')?.addEventListener('change', (e) => {
+            const val = e.target.value;
+            onWithdrawAccountSelect(val ? JSON.parse(val) : null);
+        });
         document.getElementById('withdraw-btn')?.addEventListener('click', () => {
             showModal('withdraw-modal');
+            loadWithdrawAccounts();
             _showWithdrawalPausedBanner();
         });
         document.getElementById('transfer-btn')?.addEventListener('click', () => showModal('transfer-modal'));
@@ -3919,6 +3998,7 @@
         document.getElementById('profile-withdraw-btn')?.addEventListener('click', () => {
             document.getElementById('profile-panel')?.classList.remove('show');
             showModal('withdraw-modal');
+            loadWithdrawAccounts();
             _showWithdrawalPausedBanner();
         });
 
