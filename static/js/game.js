@@ -894,9 +894,9 @@
     }
 
     // ---- UNIVERSAL SPRITE FLIP ANIMATION ----
-    // Uses the same CSS background-position approach as the original working flip.
-    // For sprites with square frames (different aspect ratio from the 2:1 card),
-    // a correctly-sized inner div is created to match the frame proportions.
+    // Uses the universal spritesheet (580×279 frames matching the card aspect ratio)
+    // for ALL denominations. The denomination-specific face is revealed underneath
+    // at the end of the flip animation. This is the original working approach from 6a53e6b.
     function _flipWithSprite(card, durationMs, value, sym, resolve, denomData) {
         let _spriteFired = false;
         card.classList.remove('entering', 'dragging', 'spring-back');
@@ -906,45 +906,20 @@
         // Place next card underneath with denomination face image (visible)
         _placeNextCardUnderneath(denomData);
 
-        // Pick per-denomination sprite: explicit path > convention > universal fallback
-        const explicitSprite = denomData?.flip_sprite_path ? _assetUrl(denomData.flip_sprite_path) : null;
-        const conventionSprite = _getDenomSpritePath(denomData?.value);
-        const fallbackSprite = state.gameConfig?.flip_sprite_url || '/static/images/assets/flip_motion_sprite.webp';
-        const spriteUrl = explicitSprite || conventionSprite || fallbackSprite;
-        // Use preloaded frame count (detected on image load), fallback to config
-        const totalFrames = _spriteFrameCount[spriteUrl] || state.gameConfig?.flip_sprite_frames || 48;
+        // Always use the universal sprite (580×279 frames, matches card perfectly)
+        const spriteUrl = state.gameConfig?.flip_sprite_url || '/static/images/assets/flip_motion_sprite.webp';
+        const totalFrames = 22; // Universal sprite has exactly 22 frames at 580×279
 
         // FPS-based timing: frame interval derived from configured FPS
         const spriteFps = state.gameConfig?.flip_sprite_fps || 25;
         const frameInterval = Math.max(16, Math.round(1000 / spriteFps));
 
-        // Determine if sprite frames are square (different from card's 2:1 ratio)
-        // Original universal sprite: 580×279 frames (matches card) → use card directly
-        // New per-denom sprites: ~278×279 frames (square) → need inner div
-        const cachedImg = _denomFaceCache[spriteUrl];
-        const frameAspect = (cachedImg && cachedImg.naturalWidth && cachedImg.naturalHeight)
-            ? (cachedImg.naturalWidth / totalFrames) / cachedImg.naturalHeight : 1;
-        const cardAspect = 580 / 279; // ~2.08
-        const needsInner = frameAspect < cardAspect * 0.8; // square frames need inner div
-
+        // Set card to show sprite frame 0 via background (original working approach)
         card.innerHTML = '';
-        let spriteEl; // The element that receives the background sprite
-
-        if (needsInner) {
-            // Square frames: create centered inner div matching frame proportions
-            card.style.background = '#0d0d1a';
-            spriteEl = document.createElement('div');
-            spriteEl.style.cssText = `position:absolute;top:0;bottom:0;left:50%;transform:translateX(-50%);height:100%;aspect-ratio:${frameAspect};background-repeat:no-repeat;border-radius:inherit;`;
-            card.appendChild(spriteEl);
-        } else {
-            // Wide frames (match card): apply directly like the original
-            spriteEl = card;
-        }
-
-        spriteEl.style.backgroundImage = `url(${spriteUrl})`;
-        spriteEl.style.backgroundSize = `${totalFrames * 100}% 100%`;
-        spriteEl.style.backgroundPosition = '0% 0%';
-        spriteEl.style.backgroundRepeat = 'no-repeat';
+        card.style.backgroundImage = `url(${spriteUrl})`;
+        card.style.backgroundSize = `${totalFrames * 100}% 100%`;
+        card.style.backgroundPosition = '0% 0%';
+        card.style.backgroundRepeat = 'no-repeat';
 
         let currentFrame = 0;
         let startTime = null;
@@ -966,7 +941,7 @@
             if (targetFrame > currentFrame) {
                 currentFrame = targetFrame;
                 const pct = (currentFrame / (totalFrames - 1)) * 100;
-                spriteEl.style.backgroundPosition = `${pct}% 0%`;
+                card.style.backgroundPosition = `${pct}% 0%`;
 
                 // Fade out in the last portion to reveal face underneath
                 if (currentFrame >= fadeStartFrame) {
@@ -994,9 +969,9 @@
             if (pileCount) pileCount.textContent = _noteFlipCount;
 
             // Clean up sprite styles
-            spriteEl.style.backgroundImage = '';
-            spriteEl.style.backgroundSize = '';
-            spriteEl.style.backgroundPosition = '';
+            card.style.backgroundImage = '';
+            card.style.backgroundSize = '';
+            card.style.backgroundPosition = '';
 
             // Remove current card — next card underneath already shows denomination
             card.removeAttribute('id');
