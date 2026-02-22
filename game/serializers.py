@@ -77,7 +77,8 @@ class GameConfigPublicSerializer(serializers.ModelSerializer):
                   'win_sound_url', 'cashout_sound_url',
                   'start_flip_image_url', 'simulated_feed_enabled',
                   'payout_mode', 'decay_factor', 'max_flips_per_session',
-                  'holiday_mode_enabled']
+                  'holiday_mode_enabled',
+                  'withdrawal_enabled', 'withdrawal_paused_message']
 
 
 class StartGameSerializer(serializers.Serializer):

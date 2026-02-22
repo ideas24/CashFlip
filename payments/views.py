@@ -345,6 +345,13 @@ def withdraw(request):
     Initiate withdrawal to mobile money.
     MUST use a verified MobileMoneyAccount — same name as deposit account.
     """
+    # Check if withdrawals are paused
+    from game.models import GameConfig
+    game_config = GameConfig.objects.first()
+    if game_config and not game_config.withdrawal_enabled:
+        msg = game_config.withdrawal_paused_message or 'Withdrawals are temporarily paused. Your balance is safe.'
+        return Response({'error': msg, 'withdrawal_paused': True}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+
     amount = request.data.get('amount')
     account_id = request.data.get('account_id')
 

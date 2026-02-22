@@ -1170,6 +1170,8 @@ def settings_view(request):
                 'start_flip_image_url': game_config.start_flip_image_url or '',
                 'simulated_feed_enabled': game_config.simulated_feed_enabled,
                 'simulated_feed_data': game_config.simulated_feed_data or [],
+                'withdrawal_enabled': game_config.withdrawal_enabled,
+                'withdrawal_paused_message': game_config.withdrawal_paused_message,
                 'is_active': game_config.is_active,
                 'payout_mode': game_config.payout_mode,
                 'normal_payout_target': str(game_config.normal_payout_target),
@@ -1374,7 +1376,8 @@ def settings_view(request):
                        'start_flip_image_url', 'simulated_feed_enabled', 'simulated_feed_data',
                        'payout_mode', 'normal_payout_target', 'boost_payout_target', 'boost_multiplier_factor',
                        'decay_factor', 'max_flips_per_session',
-                       'holiday_mode_enabled', 'holiday_boost_pct', 'holiday_frequency', 'holiday_max_tier_name']
+                       'holiday_mode_enabled', 'holiday_boost_pct', 'holiday_frequency', 'holiday_max_tier_name',
+                       'withdrawal_enabled', 'withdrawal_paused_message']
         updated = []
         for field in game_fields:
             if field in game_data:

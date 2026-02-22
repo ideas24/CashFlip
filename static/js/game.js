@@ -3127,10 +3127,31 @@
         }
     }
 
+    function _showWithdrawalPausedBanner() {
+        const statusEl = document.getElementById('wdr-status');
+        const btn = document.getElementById('wdr-btn');
+        if (state.gameConfig && state.gameConfig.withdrawal_enabled === false) {
+            const msg = state.gameConfig.withdrawal_paused_message || 'Withdrawals are temporarily paused. Your balance is safe.';
+            if (statusEl) { statusEl.textContent = msg; statusEl.className = 'status-msg error'; }
+            if (btn) { btn.disabled = true; btn.textContent = 'Withdrawals Paused'; }
+        } else {
+            if (statusEl) { statusEl.textContent = ''; statusEl.className = 'status-msg'; }
+            if (btn) { btn.disabled = false; btn.textContent = 'Withdraw to MoMo'; }
+        }
+    }
+
     async function doWithdraw() {
         const amount = document.getElementById('wdr-amount')?.value;
         const accountId = document.getElementById('wdr-account-id')?.value;
         const statusEl = document.getElementById('wdr-status');
+
+        // Check if withdrawals are paused (frontend guard)
+        if (state.gameConfig && state.gameConfig.withdrawal_enabled === false) {
+            const msg = state.gameConfig.withdrawal_paused_message || 'Withdrawals are temporarily paused. Your balance is safe.';
+            statusEl.textContent = msg;
+            statusEl.className = 'status-msg error';
+            return;
+        }
 
         if (!amount) {
             statusEl.textContent = 'Enter an amount';
@@ -3159,6 +3180,9 @@
                     hideModal('withdraw-modal');
                     loadWalletBalance();
                 }, 4000);
+            } else if (data.withdrawal_paused) {
+                statusEl.textContent = data.error;
+                statusEl.className = 'status-msg error';
             } else {
                 statusEl.textContent = parseApiError(resp, data);
                 statusEl.className = 'status-msg error';
@@ -3803,7 +3827,10 @@
             const val = e.target.value;
             onDepositAccountSelect(val ? JSON.parse(val) : null);
         });
-        document.getElementById('withdraw-btn')?.addEventListener('click', () => showModal('withdraw-modal'));
+        document.getElementById('withdraw-btn')?.addEventListener('click', () => {
+            showModal('withdraw-modal');
+            _showWithdrawalPausedBanner();
+        });
         document.getElementById('transfer-btn')?.addEventListener('click', () => showModal('transfer-modal'));
         document.getElementById('trf-btn')?.addEventListener('click', doTransfer);
         document.getElementById('wheel-btn')?.addEventListener('click', openWheel);
@@ -3887,6 +3914,7 @@
         document.getElementById('profile-withdraw-btn')?.addEventListener('click', () => {
             document.getElementById('profile-panel')?.classList.remove('show');
             showModal('withdraw-modal');
+            _showWithdrawalPausedBanner();
         });
 
         // Profile menu items

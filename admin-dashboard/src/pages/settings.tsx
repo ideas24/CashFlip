@@ -64,7 +64,8 @@ interface GameSettings {
   holiday_boost_pct: string
   holiday_frequency: number
   holiday_max_tier_name: string
-  // Kept for backward compat but not shown in UI
+  withdrawal_enabled: boolean
+  withdrawal_paused_message: string
 }
 
 interface SimConfig {
@@ -710,6 +711,43 @@ export default function SettingsPage() {
                           <p className="text-xs text-muted mt-1">Below this → wallet credit only</p>
                         </div>
                       </div>
+                    </div>
+
+                    {/* ── WITHDRAWAL CONTROL ── */}
+                    <div className={`p-4 rounded-xl border-2 ${s.game.withdrawal_enabled === false ? 'border-red-500/40 bg-red-500/5' : 'border-border bg-card'}`}>
+                      <h3 className="text-sm font-semibold text-white mb-3">🔒 Withdrawal Control</h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="flex items-center gap-3">
+                          <button
+                            onClick={() => updateGame('withdrawal_enabled', !s.game.withdrawal_enabled)}
+                            className={`relative w-11 h-6 rounded-full transition-colors cursor-pointer ${
+                              s.game.withdrawal_enabled !== false ? 'bg-emerald-500' : 'bg-red-500'
+                            }`}
+                          >
+                            <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition-transform ${
+                              s.game.withdrawal_enabled !== false ? 'translate-x-5' : ''
+                            }`} />
+                          </button>
+                          <div>
+                            <label className="text-xs font-medium text-slate-300">
+                              {s.game.withdrawal_enabled !== false ? 'Withdrawals Active' : 'Withdrawals PAUSED'}
+                            </label>
+                            <p className="text-[10px] text-muted">Toggle off to temporarily block all withdrawals</p>
+                          </div>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-slate-400 mb-1.5">Paused Message</label>
+                          <Input type="text" value={s.game.withdrawal_paused_message || ''}
+                            placeholder="Withdrawals are temporarily paused..."
+                            onChange={e => updateGame('withdrawal_paused_message', e.target.value)} />
+                          <p className="text-xs text-muted mt-1">Shown to players when they try to withdraw while paused</p>
+                        </div>
+                      </div>
+                      {s.game.withdrawal_enabled === false && (
+                        <div className="mt-3 p-2 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-xs">
+                          ⚠️ Withdrawals are currently PAUSED. Players will see the message above when attempting to withdraw. Balances remain intact.
+                        </div>
+                      )}
                     </div>
 
                     {/* ── FLIP ANIMATION ── */}

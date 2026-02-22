@@ -257,6 +257,11 @@ class GameConfig(models.Model):
         help_text='Enable simulated live feed for demo/pitching (fake leaderboard entries)')
     simulated_feed_data = models.JSONField(default=list, blank=True,
         help_text='Simulated feed entries: [{"player":"Luc**er","won":true,"amount":"50.00","flips":5}]')
+    withdrawal_enabled = models.BooleanField(default=True,
+        help_text='Allow players to withdraw. Disable during maintenance or payout delays.')
+    withdrawal_paused_message = models.CharField(max_length=500, blank=True,
+        default='Withdrawals are temporarily paused for maintenance. Your balance is safe and will be available shortly.',
+        help_text='Friendly message shown to players when withdrawals are paused.')
     is_active = models.BooleanField(default=True)
     updated_at = models.DateTimeField(auto_now=True)
 
