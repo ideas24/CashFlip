@@ -45,7 +45,7 @@ html, body {
         padding-bottom: 4rem;
     }
     .note-stage {
-        width: 94vw; max-width: 420px;
+        width: 96vw; max-width: 460px;
         margin-top: 1rem;
     }
     .hud-top-left {
@@ -585,8 +585,8 @@ html, body {
 /* Note stage — where the active banknote lives */
 .note-stage {
     position: relative;
-    width: 92vw; max-width: 580px;
-    aspect-ratio: 16 / 9;
+    width: 94vw; max-width: 580px;
+    aspect-ratio: 580 / 279;
     overflow: hidden;
     border-radius: 12px;
     pointer-events: none;
@@ -1854,7 +1854,7 @@ html, body {
 
 /* Landscape mobile: compact layout */
 @media (orientation: landscape) and (max-width: 480px) {
-    .note-stage { width: 92vw; }
+    .note-stage { width: 94vw; }
     .note-running-total { bottom: 12%; padding: 0.3rem 1rem; }
     .autoflip-ring { width: 42px; height: 42px; bottom: 12%; right: 3%; }
     .afr-text { font-size: 24px; }
@@ -1878,7 +1878,7 @@ html, body {
 @media (max-height: 500px) {
     .lobby-card { padding: 1rem; }
     .lobby-card h2 { font-size: 0.95rem; }
-    .note-stage { width: 72vw; max-width: 420px; }
+    .note-stage { width: 78vw; max-width: 460px; }
     .note-running-total { bottom: 8%; }
     .autoflip-ring { bottom: 8%; }
     .game-side-left, .game-side-right { display: none; }

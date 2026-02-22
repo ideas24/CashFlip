@@ -398,7 +398,39 @@
     }
 
     function _isVideoMode() {
-        return (state.gameConfig?.flip_animation_mode || 'gif') === 'video';
+        return (state.gameConfig?.flip_animation_mode || 'sprite') === 'video';
+    }
+
+    // ==================== UNIVERSAL SPRITE ANIMATION ====================
+    let _spriteImg = null; // Preloaded sprite Image element
+    const _denomFaceCache = {}; // Preloaded face Image elements
+
+    function _preloadSpriteSheet() {
+        const spriteUrl = state.gameConfig?.flip_sprite_url || '/static/images/assets/flip_motion_sprite.webp';
+        if (!_spriteImg || _spriteImg.src !== spriteUrl) {
+            _spriteImg = new Image();
+            _spriteImg.crossOrigin = 'anonymous';
+            _spriteImg.src = spriteUrl;
+        }
+        // Preload all denomination face WebPs
+        const denoms = state.denominations || [];
+        denoms.forEach(d => {
+            if (d.is_zero) return;
+            const facePath = _getDenomFacePath(d.value);
+            if (facePath && !_denomFaceCache[facePath]) {
+                const img = new Image();
+                img.crossOrigin = 'anonymous';
+                img.src = facePath;
+                _denomFaceCache[facePath] = img;
+            }
+        });
+    }
+
+    function _getDenomFacePath(denomValue) {
+        if (!denomValue) return null;
+        const val = Math.round(parseFloat(denomValue));
+        if (val <= 0) return null;
+        return `/static/images/assets/faces/${val}cedi_face.webp`;
     }
 
     // Shared style for video-as-card elements (looks identical to an image)
@@ -454,8 +486,13 @@
     }
 
     function _isGifMode() {
-        const mode = state.gameConfig?.flip_animation_mode || 'gif';
+        const mode = state.gameConfig?.flip_animation_mode || 'sprite';
         return mode === 'gif';
+    }
+
+    function _isSpriteMode() {
+        const mode = state.gameConfig?.flip_animation_mode || 'sprite';
+        return mode === 'sprite';
     }
 
     const _imgStyle = 'position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:inherit;display:block;';
@@ -491,6 +528,11 @@
     }
 
     function _getCardImageUrl(denom) {
+        // Sprite mode: prefer static face WebPs
+        if (_isSpriteMode()) {
+            if (denom?.face_image_path) return _cloudinaryFill(_assetUrl(denom.face_image_path));
+            return _getDenomFacePath(denom?.value) || null;
+        }
         // GIF mode: the GIF's first frame IS the card face (no separate face image)
         if (_isGifMode() && denom?.flip_gif_path) {
             return _gifStaticFrame(_assetUrl(denom.flip_gif_path));
@@ -739,13 +781,19 @@
             const seqPrefix = denomData?.flip_sequence_prefix;
             const videoPath = denomData?.flip_video_path;
 
-            // CSS 3D flip — recommended mode, works without any assets
+            // Universal sprite — new default mode, single spritesheet for all denominations
+            if (animMode === 'sprite') {
+                _flipWithSprite(card, animSpeed, value, sym, resolve, denomData);
+                return;
+            }
+
+            // CSS 3D flip — works without any assets
             if (animMode === 'css3d') {
                 _flipWithCSS3D(card, animSpeed, value, sym, resolve, denomData);
                 return;
             }
 
-            // Prefer video if configured
+            // Prefer video if configured (deprecated)
             if (animMode === 'video' && videoPath) {
                 _flipWithVideo(card, videoPath, animSpeed, value, sym, resolve, denomData);
                 return;
@@ -818,6 +866,98 @@
         card.addEventListener('animationend', onFlipEnd, { once: true });
         // Safety timeout in case animationend doesn't fire
         setTimeout(onFlipEnd, durationMs + 500);
+    }
+
+    // ---- UNIVERSAL SPRITE FLIP ANIMATION ----
+    // Uses a single horizontal spritesheet for ALL denominations.
+    // The current card plays the sprite frames via background-position stepping,
+    // while the next card underneath shows the static denomination face WebP.
+    function _flipWithSprite(card, durationMs, value, sym, resolve, denomData) {
+        let _spriteFired = false;
+        card.classList.remove('entering', 'dragging', 'spring-back');
+        card.style.transform = '';
+        card.style.opacity = '1';
+
+        // Place next card underneath with denomination face image (visible)
+        _placeNextCardUnderneath(denomData);
+
+        const spriteUrl = state.gameConfig?.flip_sprite_url || '/static/images/assets/flip_motion_sprite.webp';
+        const totalFrames = state.gameConfig?.flip_sprite_frames || 22;
+
+        // Set card to show sprite frame 0 via background
+        card.innerHTML = '';
+        card.style.backgroundImage = `url(${spriteUrl})`;
+        card.style.backgroundSize = `${totalFrames * 100}% 100%`;
+        card.style.backgroundPosition = '0% 0%';
+        card.style.backgroundRepeat = 'no-repeat';
+
+        let currentFrame = 0;
+        let startTime = null;
+        const frameInterval = Math.max(16, Math.floor(durationMs / totalFrames));
+
+        // Fade out in the last ~30% of the animation to reveal denomination face underneath
+        const fadeStartFrame = Math.floor(totalFrames * 0.7);
+
+        const animate = (timestamp) => {
+            if (!startTime) startTime = timestamp;
+            const elapsed = timestamp - startTime;
+            const targetFrame = Math.min(totalFrames - 1, Math.floor(elapsed / frameInterval));
+
+            if (targetFrame > currentFrame) {
+                currentFrame = targetFrame;
+                // Step background-position to show current frame
+                const pct = (currentFrame / (totalFrames - 1)) * 100;
+                card.style.backgroundPosition = `${pct}% 0%`;
+
+                // Fade out in the last portion to reveal face underneath
+                if (currentFrame >= fadeStartFrame) {
+                    const fadeProgress = (currentFrame - fadeStartFrame) / (totalFrames - 1 - fadeStartFrame);
+                    card.style.opacity = String(Math.max(0, 1 - fadeProgress));
+                }
+            }
+
+            if (currentFrame < totalFrames - 1) {
+                requestAnimationFrame(animate);
+            } else {
+                onSpriteEnd();
+            }
+        };
+
+        const onSpriteEnd = () => {
+            if (_spriteFired) return;
+            _spriteFired = true;
+
+            _noteFlipCount++;
+            updateRunningTotal();
+            const pile = document.getElementById('note-pile');
+            const pileCount = document.getElementById('pile-count');
+            if (pile) pile.classList.add('visible');
+            if (pileCount) pileCount.textContent = _noteFlipCount;
+
+            // Clean up sprite styles from card before removal
+            card.style.backgroundImage = '';
+            card.style.backgroundSize = '';
+            card.style.backgroundPosition = '';
+
+            // Remove current card — next card underneath already shows denomination
+            card.removeAttribute('id');
+            if (card.parentNode) card.remove();
+
+            // Promote next card to active
+            const next = document.getElementById('next-note');
+            if (next) { next.id = 'active-note'; }
+            _startAutoFlipTimer();
+            state.isFlipping = false;
+            resolve();
+        };
+
+        // Start animation
+        requestAnimationFrame(animate);
+
+        // Safety timeout
+        setTimeout(() => {
+            if (!_spriteFired) onSpriteEnd();
+        }, durationMs + 500);
     }
 
     // ---- GIF FLIP ANIMATION ----
@@ -1001,7 +1141,7 @@
         if (denomData) {
             const faceUrl = denomData.face_image_path
                 ? _cloudinaryFill(_assetUrl(denomData.face_image_path))
-                : (denomData.front_image_url || null);
+                : (denomData.front_image_url || _getDenomFacePath(denomData.value));
             if (faceUrl) {
                 nextCard.innerHTML = `<img src="${faceUrl}" alt="${denomData.is_zero ? 'ZERO' : denomData.value}" style="${_imgStyle}" />`;
             }
@@ -1963,6 +2103,7 @@
                 state.gameConfig = await resp.json();
                 state.denominations = state.gameConfig.denominations || [];
                 _preloadGifFirstFrames();
+                _preloadSpriteSheet();
                 _preloadFlipSound();
                 _preloadWinSound();
                 _preloadCashoutSound();

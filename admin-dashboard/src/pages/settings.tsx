@@ -41,6 +41,8 @@ interface GameSettings {
   max_session_duration_minutes: number
   auto_flip_seconds: number
   flip_animation_mode: string
+  flip_sprite_url: string
+  flip_sprite_frames: number
   flip_display_mode: string
   flip_animation_speed_ms: number
   flip_sound_enabled: boolean
@@ -715,15 +717,16 @@ export default function SettingsPage() {
                       <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                         <div>
                           <label className="block text-xs font-medium text-slate-400 mb-1.5">Animation Mode</label>
-                          <select value={s.game.flip_animation_mode || 'css3d'}
+                          <select value={s.game.flip_animation_mode || 'sprite'}
                             onChange={e => updateGame('flip_animation_mode', e.target.value)}
                             className="w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-white">
-                            <option value="css3d">CSS 3D Flip (recommended)</option>
+                            <option value="sprite">Universal Sprite (recommended)</option>
+                            <option value="css3d">CSS 3D Flip</option>
                             <option value="gif">GIF Animation</option>
                             <option value="png">PNG Sequence</option>
-                            <option value="video">MP4/WebM Video</option>
+                            <option value="video">MP4/WebM Video (deprecated)</option>
                           </select>
-                          <p className="text-xs text-muted mt-1">CSS 3D recommended. GIF/PNG for asset-based animation.</p>
+                          <p className="text-xs text-muted mt-1">Sprite recommended — single WebP spritesheet for all denominations.</p>
                         </div>
                         <div>
                           <label className="block text-xs font-medium text-slate-400 mb-1.5">Animation Speed (ms)</label>
@@ -748,6 +751,48 @@ export default function SettingsPage() {
                           </div>
                         </div>
                       </div>
+                      {/* Sprite Settings (shown when sprite mode selected) */}
+                      {(s.game.flip_animation_mode || 'sprite') === 'sprite' && (
+                        <div className="mt-3 p-3 rounded-lg border border-border/50 bg-zinc-900/50">
+                          <label className="block text-xs text-slate-400 mb-2 font-medium">Sprite Sheet Settings</label>
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <label className="block text-xs text-muted mb-1">Sprite URL</label>
+                              <div className="flex items-center gap-2">
+                                <Input type="text" placeholder="Default: /static/images/assets/flip_motion_sprite.webp"
+                                  value={s.game.flip_sprite_url || ''} className="text-xs flex-1"
+                                  onChange={e => updateGame('flip_sprite_url', e.target.value)} />
+                                <label className="shrink-0">
+                                  <Button size="sm" variant="outline" className="cursor-pointer" disabled={uploading}>
+                                    <Upload size={12} className="mr-1" /> Upload
+                                  </Button>
+                                  <input type="file" className="hidden" accept="image/webp,image/png" disabled={uploading}
+                                    onChange={async e => {
+                                      const file = e.target.files?.[0]
+                                      if (!file) return
+                                      setUploading(true)
+                                      try {
+                                        const formData = new FormData()
+                                        formData.append('file', file)
+                                        formData.append('folder', 'cashflip/sprites')
+                                        const resp = await api.upload<{ url: string }>('/settings/cloudinary-upload/', formData)
+                                        if (resp.url) updateGame('flip_sprite_url', resp.url)
+                                      } catch {}
+                                      setUploading(false); e.target.value = ''
+                                    }} />
+                                </label>
+                              </div>
+                              <p className="text-xs text-muted mt-1">Horizontal spritesheet (all frames in one row). Leave empty for default.</p>
+                            </div>
+                            <div>
+                              <label className="block text-xs text-muted mb-1">Frame Count</label>
+                              <Input type="number" min="1" max="120" value={s.game.flip_sprite_frames || 22}
+                                onChange={e => updateGame('flip_sprite_frames', parseInt(e.target.value) || 22)} />
+                              <p className="text-xs text-muted mt-1">Number of frames in the sprite (default: 22)</p>
+                            </div>
+                          </div>
+                        </div>
+                      )}
                       {/* Sound Configuration */}
                       {s.game.flip_sound_enabled && (
                         <>

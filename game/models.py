@@ -225,9 +225,13 @@ class GameConfig(models.Model):
         help_text='1 in N active players gets the holiday boost (e.g. 1000 = 0.1% chance)')
     holiday_max_tier_name = models.CharField(max_length=50, default='Standard', blank=True,
         help_text='Only players in this tier or lower get holiday boost (empty = all tiers)')
-    flip_animation_mode = models.CharField(max_length=10, default='css3d',
-        choices=[('css3d', 'CSS 3D Flip'), ('gif', 'GIF Animation'), ('png', 'PNG Sequence'), ('video', 'MP4/WebM Video')],
+    flip_animation_mode = models.CharField(max_length=10, default='sprite',
+        choices=[('sprite', 'Universal Sprite'), ('css3d', 'CSS 3D Flip'), ('gif', 'GIF Animation'), ('png', 'PNG Sequence'), ('video', 'MP4/WebM Video (deprecated)')],
         help_text='Which animation format to use for note flips')
+    flip_sprite_url = models.URLField(max_length=500, blank=True, default='',
+        help_text='URL to universal flip sprite sheet (WebP). Empty = use default /static/images/assets/flip_motion_sprite.webp')
+    flip_sprite_frames = models.PositiveIntegerField(default=22,
+        help_text='Number of frames in the sprite sheet (horizontal strip)')
     flip_display_mode = models.CharField(max_length=20, default='face_then_gif',
         choices=[('face_then_gif', 'Face Image then GIF'), ('gif_only', 'GIF Only (static first frame)')],
         help_text='face_then_gif = show face JPG then play GIF on flip. '
