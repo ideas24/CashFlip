@@ -124,6 +124,7 @@ interface Denomination {
   flip_sequence_frames: number
   flip_gif_path: string
   flip_video_path: string
+  flip_sprite_path: string
   display_order: number
   is_zero: boolean
   is_active: boolean
@@ -339,10 +340,10 @@ export default function SettingsPage() {
     setUploading(false)
   }
 
-  const uploadDenomFile = async (denomIndex: number, field: 'face_image_path' | 'flip_gif_path' | 'flip_video_path', file: File) => {
+  const uploadDenomFile = async (denomIndex: number, field: 'face_image_path' | 'flip_gif_path' | 'flip_video_path' | 'flip_sprite_path', file: File) => {
     setUploading(true)
     try {
-      const folder = field === 'face_image_path' ? 'cashflip/faces' : field === 'flip_video_path' ? 'cashflip/videos' : 'cashflip/gifs'
+      const folder = field === 'face_image_path' ? 'cashflip/faces' : field === 'flip_video_path' ? 'cashflip/videos' : field === 'flip_sprite_path' ? 'cashflip/sprites' : 'cashflip/gifs'
       const formData = new FormData()
       formData.append('file', file)
       formData.append('folder', folder)
@@ -1055,7 +1056,7 @@ export default function SettingsPage() {
                   const denoms: Denomination[] = [...(s.denominations || []), {
                     id: null, value: '1.00', payout_multiplier: '6.00', boost_payout_multiplier: '0',
                     face_image_path: '', flip_sequence_prefix: '', flip_sequence_frames: 31, flip_gif_path: '',
-                    flip_video_path: '', display_order: (s.denominations?.length || 0), is_zero: false, is_active: true, weight: 10
+                    flip_video_path: '', flip_sprite_path: '', display_order: (s.denominations?.length || 0), is_zero: false, is_active: true, weight: 10
                   }]
                   setSettings({ ...s, denominations: denoms })
                 }}><Plus size={14} className="mr-1" /> Add Denomination</Button>
@@ -1157,9 +1158,39 @@ export default function SettingsPage() {
                               </label>
                             </div>
                           </div>
-                          {/* Flip Video (MP4/WebM) */}
-                          <div className="p-3 rounded-lg border border-border/50 bg-zinc-900/50">
-                            <label className="block text-xs text-slate-400 mb-2 font-medium">Flip Video (MP4/WebM)</label>
+                          {/* Flip Sprite (WebP) — recommended */}
+                          <div className="p-3 rounded-lg border border-emerald-500/30 bg-emerald-900/10">
+                            <label className="block text-xs text-emerald-400 mb-2 font-medium">Flip Sprite (WebP) ★</label>
+                            {denom.flip_sprite_path && (
+                              <div className="mb-2 rounded overflow-hidden border border-border bg-black" style={{maxHeight: 80}}>
+                                <img src={denom.flip_sprite_path.startsWith('http') ? denom.flip_sprite_path : `/static/${denom.flip_sprite_path}`}
+                                  alt="flip sprite" className="w-full h-20 object-cover" />
+                              </div>
+                            )}
+                            <div className="flex items-center gap-2">
+                              <Input type="text" placeholder="URL or /static/images/assets/sprites/5cedi_flip.webp" value={denom.flip_sprite_path || ''}
+                                className="text-xs flex-1" onChange={e => {
+                                const denoms = [...s.denominations]
+                                denoms[i] = { ...denom, flip_sprite_path: e.target.value }
+                                setSettings({ ...s, denominations: denoms })
+                              }} />
+                              <label className="shrink-0">
+                                <span className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-emerald-500/20 text-emerald-400 text-xs rounded cursor-pointer hover:bg-emerald-500/30 transition">
+                                  <Upload size={12} /> {uploading ? '...' : 'Upload'}
+                                </span>
+                                <input type="file" className="hidden" accept="image/webp,image/png" disabled={uploading}
+                                  onChange={e => {
+                                    const file = e.target.files?.[0]
+                                    if (file) uploadDenomFile(i, 'flip_sprite_path', file)
+                                    e.target.value = ''
+                                  }} />
+                              </label>
+                            </div>
+                            <p className="text-[10px] text-muted mt-1">Horizontal spritesheet for this denomination. Used in Sprite animation mode.</p>
+                          </div>
+                          {/* Flip Video (MP4/WebM) — deprecated */}
+                          <div className="p-3 rounded-lg border border-border/50 bg-zinc-900/50 opacity-60">
+                            <label className="block text-xs text-slate-400 mb-2 font-medium">Flip Video (deprecated)</label>
                             {denom.flip_video_path && (
                               <div className="mb-2 rounded overflow-hidden border border-border bg-black" style={{maxHeight: 80}}>
                                 <video src={denom.flip_video_path.startsWith('http') ? denom.flip_video_path : `/static/${denom.flip_video_path}`}

@@ -453,6 +453,7 @@ def execute_flip(session):
             'flip_sequence_frames': denomination.flip_sequence_frames,
             'flip_gif_path': gif_path,
             'flip_video_path': denomination.flip_video_path or None,
+            'flip_sprite_path': denomination.flip_sprite_path or None,
         }
     else:
         # No denomination found (e.g. zero denom not configured) — create minimal data
@@ -467,6 +468,7 @@ def execute_flip(session):
             'flip_sequence_frames': 0,
             'flip_gif_path': None,
             'flip_video_path': None,
+            'flip_sprite_path': None,
         }
 
     return result

@@ -23,7 +23,7 @@ class DenominationSerializer(serializers.ModelSerializer):
         model = CurrencyDenomination
         fields = ['id', 'value', 'payout_multiplier', 'image_url', 'front_image_url', 'back_image_url',
                   'face_image_path', 'flip_sequence_prefix', 'flip_sequence_frames', 'flip_gif_path',
-                  'flip_video_path', 'display_order', 'is_zero', 'weight']
+                  'flip_video_path', 'flip_sprite_path', 'display_order', 'is_zero', 'weight']
 
     def get_image_url(self, obj):
         if obj.front_image:

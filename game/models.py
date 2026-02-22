@@ -158,6 +158,9 @@ class CurrencyDenomination(models.Model):
         help_text='Static path to flip GIF, e.g. images/Cedi-Gifs/5cedis.gif (fallback if no upload)')
     flip_video_path = models.CharField(max_length=500, blank=True, default='',
         help_text='Path or Cloudinary URL to flip MP4/WebM video, e.g. videos/5cedis.mp4')
+    flip_sprite_path = models.CharField(max_length=500, blank=True, default='',
+        help_text='URL or static path to denomination flip sprite (WebP). '
+                  'E.g. /static/images/assets/sprites/5cedi_flip.webp or Cloudinary URL')
     display_order = models.PositiveIntegerField(default=0)
     is_zero = models.BooleanField(default=False, help_text='Is this the zero/loss denomination?')
     is_active = models.BooleanField(default=True)

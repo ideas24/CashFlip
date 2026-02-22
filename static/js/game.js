@@ -410,8 +410,10 @@
         const denoms = state.denominations || [];
         denoms.forEach(d => {
             if (d.is_zero) return;
-            // Preload denomination-specific sprite
-            const spritePath = _getDenomSpritePath(d.value);
+            // Preload explicit sprite path (from admin config) first, then convention path
+            const explicitPath = d.flip_sprite_path ? _assetUrl(d.flip_sprite_path) : null;
+            const conventionPath = _getDenomSpritePath(d.value);
+            const spritePath = explicitPath || conventionPath;
             if (spritePath && !_denomFaceCache[spritePath]) {
                 const sImg = new Image();
                 sImg.crossOrigin = 'anonymous';
@@ -898,10 +900,11 @@
         // Place next card underneath with denomination face image (visible)
         _placeNextCardUnderneath(denomData);
 
-        // Pick per-denomination sprite, fall back to universal
-        const denomSprite = _getDenomSpritePath(denomData?.value);
+        // Pick per-denomination sprite: explicit path > convention > universal fallback
+        const explicitSprite = denomData?.flip_sprite_path ? _assetUrl(denomData.flip_sprite_path) : null;
+        const conventionSprite = _getDenomSpritePath(denomData?.value);
         const fallbackSprite = state.gameConfig?.flip_sprite_url || '/static/images/assets/flip_motion_sprite.webp';
-        const spriteUrl = denomSprite || fallbackSprite;
+        const spriteUrl = explicitSprite || conventionSprite || fallbackSprite;
         const totalFrames = state.gameConfig?.flip_sprite_frames || 22;
 
         // FPS-based timing: frame interval derived from configured FPS

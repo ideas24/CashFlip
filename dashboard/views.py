@@ -1283,6 +1283,7 @@ def settings_view(request):
                     'flip_sequence_frames': d.flip_sequence_frames,
                     'flip_gif_path': d.flip_gif_path,
                     'flip_video_path': d.flip_video_path,
+                    'flip_sprite_path': d.flip_sprite_path,
                     'display_order': d.display_order,
                     'is_zero': d.is_zero,
                     'is_active': d.is_active,
@@ -1436,6 +1437,7 @@ def settings_view(request):
             d.flip_sequence_frames = dd.get('flip_sequence_frames', 31)
             d.flip_gif_path = dd.get('flip_gif_path', '')
             d.flip_video_path = dd.get('flip_video_path', '')
+            d.flip_sprite_path = dd.get('flip_sprite_path', '')
             d.display_order = dd.get('display_order', 0)
             d.is_zero = dd.get('is_zero', False)
             d.is_active = dd.get('is_active', True)
