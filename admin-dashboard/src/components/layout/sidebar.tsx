@@ -3,7 +3,7 @@ import { useAuth } from '@/lib/auth'
 import {
   LayoutDashboard, Users, Gamepad2, ArrowLeftRight,
   Wallet, Building2, Settings, Shield, LogOut,
-  ChevronLeft, ChevronRight, TrendingUp, Activity,
+  ChevronLeft, ChevronRight, TrendingUp, Activity, Ticket,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useState } from 'react'
@@ -18,6 +18,7 @@ const navItems = [
   { to: '/partners', label: 'Partners', icon: Building2, perm: 'view_partners' },
   { to: '/analytics', label: 'Analytics', icon: TrendingUp, perm: 'view_analytics' },
   { to: '/roles', label: 'Roles & Access', icon: Shield, perm: 'manage_roles' },
+  { to: '/vouchers', label: 'Vouchers', icon: Ticket, perm: 'manage_settings' },
   { to: '/settings', label: 'Settings', icon: Settings, perm: 'manage_settings' },
 ]
 

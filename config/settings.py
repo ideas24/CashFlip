@@ -49,6 +49,7 @@ INSTALLED_APPS = [
     'referrals',
     'analytics',
     'partner',
+    'vouchers',
     'dashboard',
 ]
 

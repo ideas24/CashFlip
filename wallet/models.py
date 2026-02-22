@@ -36,6 +36,7 @@ class WalletTransaction(models.Model):
         ('transfer_in', 'Transfer In'),
         ('admin_credit', 'Admin Credit'),
         ('admin_debit', 'Admin Debit'),
+        ('voucher', 'Voucher Redemption'),
     ]
 
     STATUS_CHOICES = [

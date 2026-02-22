@@ -11,7 +11,7 @@
     {% load static %}
     <link rel="icon" type="image/svg+xml" href="{% static 'images/cashflip-favicon.svg' %}">
     <meta name="theme-color" content="#0D1117">
-    <link rel="stylesheet" href="{% static 'css/game.css' %}?v=20260222d">
+    <link rel="stylesheet" href="{% static 'css/game.css' %}?v=20260222e">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
 <body>
@@ -444,6 +444,7 @@
                 <div class="tab-group">
                     <button class="tab-btn active" data-tab="momo-tab">Mobile Money</button>
                     <button class="tab-btn" data-tab="card-tab">Card</button>
+                    <button class="tab-btn" data-tab="voucher-tab">Voucher</button>
                 </div>
                 <div id="momo-tab" class="tab-content active">
                     <div class="input-group">
@@ -481,6 +482,14 @@
                         <input type="number" id="dep-card-amount" min="1" step="0.5" placeholder="Enter amount">
                     </div>
                     <button id="dep-card-btn" class="btn-primary">Pay with Card</button>
+                </div>
+                <div id="voucher-tab" class="tab-content">
+                    <div class="input-group">
+                        <label>Voucher Code</label>
+                        <input type="text" id="voucher-code-input" placeholder="CF-XXXX-XXXX" maxlength="20" autocomplete="off" style="text-transform:uppercase;font-family:monospace;letter-spacing:0.1em;font-size:1.1rem;">
+                    </div>
+                    <button id="voucher-redeem-btn" class="btn-primary">Redeem Voucher</button>
+                    <div id="voucher-status" class="status-msg" style="margin-top:0.5rem;"></div>
                 </div>
                 <div id="dep-status" class="status-msg"></div>
             </div>
@@ -659,6 +668,14 @@
                 <button id="profile-deposit-btn" class="btn-primary btn-small">💰 Deposit</button>
                 <button id="profile-withdraw-btn" class="btn-outline btn-small">💸 Withdraw</button>
             </div>
+            <div class="profile-section">
+                <h4 class="section-title">🎟️ Redeem Voucher</h4>
+                <div style="display:flex;gap:0.5rem;align-items:center;">
+                    <input type="text" id="profile-voucher-input" placeholder="CF-XXXX-XXXX" maxlength="20" autocomplete="off" style="flex:1;text-transform:uppercase;font-family:monospace;letter-spacing:0.08em;" class="form-input">
+                    <button id="profile-voucher-btn" class="btn-primary btn-small">Redeem</button>
+                </div>
+                <div id="profile-voucher-status" class="status-msg" style="margin-top:0.3rem;font-size:0.8rem;"></div>
+            </div>
             <div class="profile-section" id="momo-accounts-section">
                 <h4 class="section-title">Payment Accounts</h4>
                 <div id="momo-accounts-list" class="momo-accounts-list">
@@ -821,6 +838,6 @@
         <span id="toast-message"></span>
     </div>
 
-    <script src="{% static 'js/game.js' %}?v=20260222d"></script>
+    <script src="{% static 'js/game.js' %}?v=20260222e"></script>
 </body>
 </html>

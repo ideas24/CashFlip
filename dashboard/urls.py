@@ -1,4 +1,4 @@
-from django.urls import path
+from django.urls import path, include
 from dashboard import views
 
 app_name = 'dashboard'
@@ -65,4 +65,7 @@ urlpatterns = [
 
     # Math Validation
     path('game/validate-edge/', views.validate_house_edge, name='validate_house_edge'),
+
+    # Vouchers (admin)
+    path('vouchers/', include('vouchers.admin_urls')),
 ]

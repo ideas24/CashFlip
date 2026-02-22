@@ -921,8 +921,14 @@
         let currentFrame = 0;
         let startTime = null;
 
-        // Fade out in the last ~30% of the animation to reveal denomination face underneath
-        const fadeStartFrame = Math.floor(totalFrames * 0.7);
+        // Dynamic reveal speed: high-value denoms fade earlier (faster reveal),
+        // low-value denoms fade later (more suspense). Scale from 0.4 (big) to 0.8 (small).
+        const denomVal = parseFloat(denomData?.value || 0);
+        const allDenoms = (state.denominations || []).filter(d => !d.is_zero);
+        const maxDenom = allDenoms.reduce((mx, d) => Math.max(mx, parseFloat(d.value)), 1);
+        const valueRatio = Math.min(1, denomVal / maxDenom); // 0→1 (low→high)
+        const fadeStartPct = 0.8 - (valueRatio * 0.4); // high value=0.4, low value=0.8
+        const fadeStartFrame = Math.floor(totalFrames * fadeStartPct);
 
         const animate = (timestamp) => {
             if (!startTime) startTime = timestamp;
@@ -2961,6 +2967,82 @@
         }
     }
 
+    async function redeemVoucher() {
+        const codeInput = document.getElementById('voucher-code-input');
+        const statusEl = document.getElementById('voucher-status');
+        const btn = document.getElementById('voucher-redeem-btn');
+        const code = (codeInput?.value || '').trim().toUpperCase();
+
+        if (!code) {
+            statusEl.textContent = 'Enter a voucher code';
+            statusEl.className = 'status-msg error';
+            return;
+        }
+
+        btn.disabled = true;
+        btn.textContent = 'Redeeming...';
+        statusEl.textContent = '';
+        statusEl.className = 'status-msg';
+
+        try {
+            const resp = await API.post('/vouchers/redeem/', { code });
+            const data = await resp.json();
+
+            if (resp.ok && data.success) {
+                statusEl.textContent = `✓ ${data.message}`;
+                statusEl.className = 'status-msg success';
+                codeInput.value = '';
+                await loadWalletBalance();
+                setTimeout(() => hideModal('deposit-modal'), 2500);
+            } else {
+                statusEl.textContent = data.error || 'Redemption failed';
+                statusEl.className = 'status-msg error';
+            }
+        } catch (e) {
+            statusEl.textContent = 'Connection failed. Try again.';
+            statusEl.className = 'status-msg error';
+        }
+        btn.disabled = false;
+        btn.textContent = 'Redeem Voucher';
+    }
+
+    async function redeemVoucherProfile() {
+        const codeInput = document.getElementById('profile-voucher-input');
+        const statusEl = document.getElementById('profile-voucher-status');
+        const btn = document.getElementById('profile-voucher-btn');
+        const code = (codeInput?.value || '').trim().toUpperCase();
+
+        if (!code) {
+            statusEl.textContent = 'Enter a voucher code';
+            statusEl.className = 'status-msg error';
+            return;
+        }
+
+        btn.disabled = true;
+        btn.textContent = '...';
+        statusEl.textContent = '';
+
+        try {
+            const resp = await API.post('/vouchers/redeem/', { code });
+            const data = await resp.json();
+
+            if (resp.ok && data.success) {
+                statusEl.textContent = `✓ ${data.message}`;
+                statusEl.className = 'status-msg success';
+                codeInput.value = '';
+                await loadWalletBalance();
+            } else {
+                statusEl.textContent = data.error || 'Redemption failed';
+                statusEl.className = 'status-msg error';
+            }
+        } catch (e) {
+            statusEl.textContent = 'Connection failed. Try again.';
+            statusEl.className = 'status-msg error';
+        }
+        btn.disabled = false;
+        btn.textContent = 'Redeem';
+    }
+
     // Withdraw phone input handler (same network detect + verify pattern)
     let _wdrVerifyTimeout = null;
     let _wdrLastVerifiedPhone = '';
@@ -3944,6 +4026,8 @@
         // Payment buttons
         document.getElementById('dep-momo-btn')?.addEventListener('click', depositMoMo);
         document.getElementById('dep-card-btn')?.addEventListener('click', depositCard);
+        document.getElementById('voucher-redeem-btn')?.addEventListener('click', redeemVoucher);
+        document.getElementById('profile-voucher-btn')?.addEventListener('click', redeemVoucherProfile);
         document.getElementById('wdr-btn')?.addEventListener('click', doWithdraw);
 
         // Copy referral

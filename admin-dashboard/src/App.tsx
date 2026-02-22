@@ -12,6 +12,7 @@ import AnalyticsPage from '@/pages/analytics'
 import RolesPage from '@/pages/roles'
 import SettingsPage from '@/pages/settings'
 import LiveActivityPage from '@/pages/live'
+import VouchersPage from '@/pages/vouchers'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth()
@@ -53,6 +54,7 @@ export default function App() {
             <Route path="partners" element={<PartnersPage />} />
             <Route path="analytics" element={<AnalyticsPage />} />
             <Route path="roles" element={<RolesPage />} />
+            <Route path="vouchers" element={<VouchersPage />} />
             <Route path="settings" element={<SettingsPage />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
