@@ -455,7 +455,7 @@
         if (!denomValue) return null;
         const val = Math.round(parseFloat(denomValue));
         if (val <= 0) return null;
-        return `/static/images/assets/sprites/${val}cedi_flip.webp?v=20260222b`;
+        return `/static/images/assets/sprites/${val}cedi_flip.webp?v=20260222q`;
     }
 
     // Shared style for video-as-card elements (looks identical to an image)
@@ -893,10 +893,9 @@
         setTimeout(onFlipEnd, durationMs + 500);
     }
 
-    // ---- UNIVERSAL SPRITE FLIP ANIMATION ----
-    // Uses the universal spritesheet (580×279 frames matching the card aspect ratio)
-    // for ALL denominations. The denomination-specific face is revealed underneath
-    // at the end of the flip animation. This is the original working approach from 6a53e6b.
+    // ---- PER-DENOMINATION SPRITE FLIP ANIMATION ----
+    // Each denomination has its own spritesheet (22 frames @ 580×279 each).
+    // Falls back to the universal sprite if per-denom is unavailable.
     function _flipWithSprite(card, durationMs, value, sym, resolve, denomData) {
         let _spriteFired = false;
         card.classList.remove('entering', 'dragging', 'spring-back');
@@ -906,9 +905,13 @@
         // Place next card underneath with denomination face image (visible)
         _placeNextCardUnderneath(denomData);
 
-        // Always use the universal sprite (580×279 frames, matches card perfectly)
-        const spriteUrl = state.gameConfig?.flip_sprite_url || '/static/images/assets/flip_motion_sprite.webp';
-        const totalFrames = 22; // Universal sprite has exactly 22 frames at 580×279
+        // Pick per-denomination sprite: explicit path > convention > universal fallback
+        const explicitSprite = denomData?.flip_sprite_path ? _assetUrl(denomData.flip_sprite_path) : null;
+        const conventionSprite = _getDenomSpritePath(denomData?.value);
+        const fallbackSprite = state.gameConfig?.flip_sprite_url || '/static/images/assets/flip_motion_sprite.webp';
+        const spriteUrl = explicitSprite || conventionSprite || fallbackSprite;
+        // All sprites are 22 frames @ 580×279 (matching card aspect ratio)
+        const totalFrames = 22;
 
         // FPS-based timing: frame interval derived from configured FPS
         const spriteFps = state.gameConfig?.flip_sprite_fps || 25;
@@ -916,6 +919,8 @@
 
         // Set card to show sprite frame 0 via background (original working approach)
         card.innerHTML = '';
+        card.style.zIndex = '2'; // Above next-note (z-index:0)
+        card.style.backgroundColor = 'transparent'; // Let next card show through sprite transparency
         card.style.backgroundImage = `url(${spriteUrl})`;
         card.style.backgroundSize = `${totalFrames * 100}% 100%`;
         card.style.backgroundPosition = '0% 0%';
