@@ -894,8 +894,9 @@
     }
 
     // ---- UNIVERSAL SPRITE FLIP ANIMATION ----
-    // Uses Canvas to render individual frames from a horizontal spritesheet.
-    // Each frame is drawn pixel-perfect (cover-fit) regardless of card aspect ratio.
+    // Uses the same CSS background-position approach as the original working flip.
+    // For sprites with square frames (different aspect ratio from the 2:1 card),
+    // a correctly-sized inner div is created to match the frame proportions.
     function _flipWithSprite(card, durationMs, value, sym, resolve, denomData) {
         let _spriteFired = false;
         card.classList.remove('entering', 'dragging', 'spring-back');
@@ -917,47 +918,33 @@
         const spriteFps = state.gameConfig?.flip_sprite_fps || 25;
         const frameInterval = Math.max(16, Math.round(1000 / spriteFps));
 
-        // Get preloaded sprite image
+        // Determine if sprite frames are square (different from card's 2:1 ratio)
+        // Original universal sprite: 580×279 frames (matches card) → use card directly
+        // New per-denom sprites: ~278×279 frames (square) → need inner div
         const cachedImg = _denomFaceCache[spriteUrl];
-        if (!cachedImg || !cachedImg.complete || !cachedImg.naturalWidth) {
-            // Image not ready — skip animation, just reveal next card
-            card.style.opacity = '0';
-            _noteFlipCount++;
-            updateRunningTotal();
-            card.removeAttribute('id'); if (card.parentNode) card.remove();
-            const next = document.getElementById('next-note');
-            if (next) { next.id = 'active-note'; }
-            _startAutoFlipTimer(); state.isFlipping = false; resolve();
-            return;
+        const frameAspect = (cachedImg && cachedImg.naturalWidth && cachedImg.naturalHeight)
+            ? (cachedImg.naturalWidth / totalFrames) / cachedImg.naturalHeight : 1;
+        const cardAspect = 580 / 279; // ~2.08
+        const needsInner = frameAspect < cardAspect * 0.8; // square frames need inner div
+
+        card.innerHTML = '';
+        let spriteEl; // The element that receives the background sprite
+
+        if (needsInner) {
+            // Square frames: create centered inner div matching frame proportions
+            card.style.background = '#0d0d1a';
+            spriteEl = document.createElement('div');
+            spriteEl.style.cssText = `position:absolute;top:0;bottom:0;left:50%;transform:translateX(-50%);height:100%;aspect-ratio:${frameAspect};background-repeat:no-repeat;border-radius:inherit;`;
+            card.appendChild(spriteEl);
+        } else {
+            // Wide frames (match card): apply directly like the original
+            spriteEl = card;
         }
 
-        // Sprite frame dimensions (source)
-        const srcFrameW = cachedImg.naturalWidth / totalFrames;
-        const srcFrameH = cachedImg.naturalHeight;
-
-        // Create canvas sized to card element (with device pixel ratio for sharpness)
-        const dpr = window.devicePixelRatio || 1;
-        const cardW = card.offsetWidth || 580;
-        const cardH = card.offsetHeight || 279;
-        const canvas = document.createElement('canvas');
-        canvas.width = cardW * dpr;
-        canvas.height = cardH * dpr;
-        canvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;border-radius:inherit;';
-        card.innerHTML = '';
-        card.style.background = '#0d0d1a';
-        card.appendChild(canvas);
-        const ctx = canvas.getContext('2d');
-        ctx.scale(dpr, dpr);
-
-        // Contain-fit: scale frame to fit entirely within card (like object-fit:contain)
-        const scale = Math.min(cardW / srcFrameW, cardH / srcFrameH);
-        const drawW = srcFrameW * scale;
-        const drawH = srcFrameH * scale;
-        const offX = (cardW - drawW) / 2;
-        const offY = (cardH - drawH) / 2;
-
-        // Draw frame 0
-        ctx.drawImage(cachedImg, 0, 0, srcFrameW, srcFrameH, offX, offY, drawW, drawH);
+        spriteEl.style.backgroundImage = `url(${spriteUrl})`;
+        spriteEl.style.backgroundSize = `${totalFrames * 100}% 100%`;
+        spriteEl.style.backgroundPosition = '0% 0%';
+        spriteEl.style.backgroundRepeat = 'no-repeat';
 
         let currentFrame = 0;
         let startTime = null;
@@ -978,9 +965,8 @@
 
             if (targetFrame > currentFrame) {
                 currentFrame = targetFrame;
-                // Draw current frame from spritesheet
-                ctx.clearRect(0, 0, cardW, cardH);
-                ctx.drawImage(cachedImg, currentFrame * srcFrameW, 0, srcFrameW, srcFrameH, offX, offY, drawW, drawH);
+                const pct = (currentFrame / (totalFrames - 1)) * 100;
+                spriteEl.style.backgroundPosition = `${pct}% 0%`;
 
                 // Fade out in the last portion to reveal face underneath
                 if (currentFrame >= fadeStartFrame) {
@@ -1006,6 +992,11 @@
             const pileCount = document.getElementById('pile-count');
             if (pile) pile.classList.add('visible');
             if (pileCount) pileCount.textContent = _noteFlipCount;
+
+            // Clean up sprite styles
+            spriteEl.style.backgroundImage = '';
+            spriteEl.style.backgroundSize = '';
+            spriteEl.style.backgroundPosition = '';
 
             // Remove current card — next card underneath already shows denomination
             card.removeAttribute('id');
