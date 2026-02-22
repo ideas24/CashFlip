@@ -917,14 +917,31 @@
         const spriteFps = state.gameConfig?.flip_sprite_fps || 25;
         const frameInterval = Math.max(16, Math.round(1000 / spriteFps));
 
-        // Set card to show sprite frame 0 via background (original working approach)
-        card.innerHTML = '';
-        card.style.zIndex = '2'; // Above next-note (z-index:0)
-        card.style.backgroundColor = 'transparent'; // Let next card show through sprite transparency
-        card.style.backgroundImage = `url(${spriteUrl})`;
-        card.style.backgroundSize = `${totalFrames * 100}% 100%`;
-        card.style.backgroundPosition = '0% 0%';
-        card.style.backgroundRepeat = 'no-repeat';
+        // Ensure sprite is loaded before clearing card (prevents flash on slow connections)
+        const startSpriteAnimation = () => {
+            card.innerHTML = '';
+            card.style.zIndex = '2'; // Above next-note (z-index:0)
+            card.style.backgroundColor = 'transparent'; // Let next card show through sprite transparency
+            card.style.backgroundImage = `url(${spriteUrl})`;
+            card.style.backgroundSize = `${totalFrames * 100}% 100%`;
+            card.style.backgroundPosition = '0% 0%';
+            card.style.backgroundRepeat = 'no-repeat';
+            requestAnimationFrame(animate);
+        };
+
+        // Check if sprite is already cached/loaded (from _preloadSpriteSheet)
+        const cached = _denomFaceCache[spriteUrl];
+        if (cached && cached.complete && cached.naturalWidth > 0) {
+            startSpriteAnimation();
+        } else {
+            // Load on demand — wait for it, then start
+            const loader = new Image();
+            loader.onload = () => { startSpriteAnimation(); };
+            loader.onerror = () => { startSpriteAnimation(); }; // fallback: start anyway
+            loader.src = spriteUrl;
+            // Safety: if load takes too long, start after 150ms regardless
+            setTimeout(() => { if (!startTime) startSpriteAnimation(); }, 150);
+        }
 
         let currentFrame = 0;
         let startTime = null;
@@ -990,14 +1007,13 @@
             resolve();
         };
 
-        // Start animation
-        requestAnimationFrame(animate);
+        // Animation is started by startSpriteAnimation() once sprite is loaded
 
-        // Safety timeout based on FPS-derived total duration
+        // Safety timeout based on FPS-derived total duration + sprite load buffer
         const totalDurationMs = totalFrames * frameInterval;
         setTimeout(() => {
             if (!_spriteFired) onSpriteEnd();
-        }, totalDurationMs + 500);
+        }, totalDurationMs + 1000);
     }
 
     // ---- GIF FLIP ANIMATION ----
