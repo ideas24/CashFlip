@@ -404,6 +404,7 @@
     // ==================== UNIVERSAL SPRITE ANIMATION ====================
     let _spriteImg = null; // Preloaded sprite Image element
     const _denomFaceCache = {}; // Preloaded face Image elements
+    const _spriteFrameCount = {}; // Detected frame counts per sprite URL
 
     function _preloadSpriteSheet() {
         // Preload per-denomination sprites + face WebPs
@@ -417,6 +418,11 @@
             if (spritePath && !_denomFaceCache[spritePath]) {
                 const sImg = new Image();
                 sImg.crossOrigin = 'anonymous';
+                sImg.onload = () => {
+                    if (sImg.naturalWidth && sImg.naturalHeight) {
+                        _spriteFrameCount[spritePath] = Math.round(sImg.naturalWidth / sImg.naturalHeight);
+                    }
+                };
                 sImg.src = spritePath;
                 _denomFaceCache[spritePath] = sImg;
             }
@@ -905,12 +911,8 @@
         const conventionSprite = _getDenomSpritePath(denomData?.value);
         const fallbackSprite = state.gameConfig?.flip_sprite_url || '/static/images/assets/flip_motion_sprite.webp';
         const spriteUrl = explicitSprite || conventionSprite || fallbackSprite;
-        // Auto-detect frame count from preloaded image dimensions (horizontal strip)
-        const cachedImg = _denomFaceCache[spriteUrl];
-        let totalFrames = state.gameConfig?.flip_sprite_frames || 22;
-        if (cachedImg && cachedImg.naturalWidth && cachedImg.naturalHeight) {
-            totalFrames = Math.round(cachedImg.naturalWidth / cachedImg.naturalHeight);
-        }
+        // Use preloaded frame count (detected on image load), fallback to config
+        const totalFrames = _spriteFrameCount[spriteUrl] || state.gameConfig?.flip_sprite_frames || 48;
 
         // FPS-based timing: frame interval derived from configured FPS
         const spriteFps = state.gameConfig?.flip_sprite_fps || 25;

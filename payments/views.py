@@ -44,7 +44,7 @@ class DepositThrottle(UserRateThrottle):
 
 
 class WithdrawThrottle(UserRateThrottle):
-    rate = '5/min'
+    rate = '10/min'
 
 
 class AddAccountThrottle(UserRateThrottle):
