@@ -212,7 +212,6 @@ class CashoutThrottle(UserRateThrottle):
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
-@throttle_classes([FlipThrottle])
 def flip(request):
     """Execute a flip in the active game session."""
     player = request.user
@@ -275,7 +274,6 @@ def flip(request):
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
-@throttle_classes([CashoutThrottle])
 def cashout(request):
     """Cash out the current game session."""
     player = request.user
