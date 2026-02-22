@@ -24,7 +24,7 @@ def redeem_voucher(request):
         return Response({'error': 'Voucher code is required.'}, status=status.HTTP_400_BAD_REQUEST)
 
     try:
-        voucher = Voucher.objects.select_for_update().get(code=code)
+        voucher = Voucher.objects.get(code=code)
     except Voucher.DoesNotExist:
         return Response({'error': 'Invalid voucher code.'}, status=status.HTTP_404_NOT_FOUND)
 
@@ -40,6 +40,11 @@ def redeem_voucher(request):
         return Response({'error': 'This voucher cannot be redeemed.'}, status=status.HTTP_400_BAD_REQUEST)
 
     with transaction.atomic():
+        # Re-fetch with lock inside transaction
+        voucher = Voucher.objects.select_for_update().get(pk=voucher.pk)
+        if voucher.status != 'active':
+            return Response({'error': 'This voucher has already been redeemed.'}, status=status.HTTP_400_BAD_REQUEST)
+
         # Credit wallet
         wallet, _ = Wallet.objects.select_for_update().get_or_create(
             player=request.user,
@@ -108,8 +113,8 @@ def admin_voucher_list(request):
             'status': v.status,
             'batch_id': str(v.batch_id) if v.batch_id else None,
             'batch_name': v.batch.name if v.batch else None,
-            'created_by': v.created_by.phone_number if v.created_by else None,
-            'redeemed_by': v.redeemed_by.phone_number if v.redeemed_by else None,
+            'created_by': v.created_by.phone if v.created_by else None,
+            'redeemed_by': v.redeemed_by.phone if v.redeemed_by else None,
             'redeemed_at': v.redeemed_at.isoformat() if v.redeemed_at else None,
             'expires_at': v.expires_at.isoformat() if v.expires_at else None,
             'created_at': v.created_at.isoformat(),
@@ -181,7 +186,7 @@ def admin_batch_list(request):
             'total_vouchers': b.total_vouchers,
             'redeemed': b.redeemed,
             'active': b.active,
-            'created_by': b.created_by.phone_number if b.created_by else None,
+            'created_by': b.created_by.phone if b.created_by else None,
             'expires_at': b.expires_at.isoformat() if b.expires_at else None,
             'created_at': b.created_at.isoformat(),
             'notes': b.notes,
