@@ -11,7 +11,7 @@
     {% load static %}
     <link rel="icon" type="image/svg+xml" href="{% static 'images/cashflip-favicon.svg' %}">
     <meta name="theme-color" content="#0D1117">
-    <link rel="stylesheet" href="{% static 'css/game.css' %}?v=20260222y">
+    <link rel="stylesheet" href="{% static 'css/game.css' %}?v=20260222z">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
 <body>
@@ -353,6 +353,7 @@
                     <button class="modal-close" data-modal="game-stake-modal">✕</button>
                 </div>
                 <div class="modal-body">
+                    <p id="game-stake-balance" style="text-align:center;color:#ffd700;font-weight:600;margin-bottom:10px;font-size:1.1rem;"></p>
                     <div class="input-group">
                         <label>Stake Amount (GH₵)</label>
                         <input type="number" id="game-stake-input" min="0.5" max="500" step="0.5" placeholder="Enter amount" autocomplete="off">
@@ -842,6 +843,6 @@
         <span id="toast-message"></span>
     </div>
 
-    <script src="{% static 'js/game.js' %}?v=20260222y"></script>
+    <script src="{% static 'js/game.js' %}?v=20260222z"></script>
 </body>
 </html>

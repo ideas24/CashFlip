@@ -2237,6 +2237,9 @@
                 const balance = parseFloat(data.balance);
                 document.getElementById('lobby-balance').textContent =
                     `${data.currency_symbol}${balance.toFixed(2)}`;
+                // Also update balance in game-stake modal (Play Again)
+                const gsBal = document.getElementById('game-stake-balance');
+                if (gsBal) gsBal.textContent = `Balance: ${data.currency_symbol}${balance.toFixed(2)}`;
 
                 // Show/hide deposit CTA overlay
                 const ctaOverlay = document.getElementById('deposit-cta-overlay');
@@ -2482,6 +2485,8 @@
                 document.getElementById('cashout-overlay').classList.remove('hidden');
                 bigCashoutCelebration();
                 triggerCashoutShimmer();
+                // Update wallet balance display so player sees credited amount
+                loadWalletBalance();
                 if (data.new_badges) {
                     data.new_badges.forEach((b, i) => setTimeout(() => showBadgeNotification(b), 2000 + i * 1500));
                 }
@@ -2678,6 +2683,8 @@
         document.getElementById('loss-overlay')?.classList.add('hidden');
         document.getElementById('cashout-overlay')?.classList.add('hidden');
         document.getElementById('flip-result-overlay')?.classList.add('hidden');
+        // Refresh wallet balance so stake modal reflects current funds
+        loadWalletBalance();
         
         // Show stake modal in game room
         const modal = document.getElementById('game-stake-modal');
